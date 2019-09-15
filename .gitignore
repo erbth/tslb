@@ -1,0 +1,7 @@
+# VIM's files
+*.swp
+*.swo
+mysession.vim
+
+# cPython cache
+__pycache__
