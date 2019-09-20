@@ -70,4 +70,16 @@ class settings_internal(types.ModuleType):
 
         return options[key]
 
+    def __contains__(self, key):
+        if key == 'config_file_path':
+            return True
+
+        return key in options
+
+    def get(self, key):
+        if key == 'config_file_path':
+            return config_file_path
+
+        return options.get(key)
+
 sys.modules[__name__] = settings_internal(__name__)
