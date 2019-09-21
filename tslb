@@ -1,0 +1,43 @@
+#!/usr/bin/python3
+
+"""
+A General-purpose UI to perform simple tasks.
+"""
+
+import argparse
+import utils
+from SourcePackage import SourcePackageList
+
+def initially_create_locks(args):
+    print ("Creating locks ...")
+    utils.initially_create_all_locks()
+    print ("done.")
+
+def list_source_packages(args):
+    print ("Source packages:")
+    print ("----------------------------------------------------------------")
+    
+    for name in SourcePackageList().get_source_packages():
+        print ("%s" % name)
+
+def main():
+    parser = argparse.ArgumentParser(description=
+            "A General-purpose UI to perform simple tasks."
+            )
+
+    subparsers = parser.add_subparsers(dest='command', required=True)
+
+    # Different commands
+    parser_icl = subparsers.add_parser('initially-create-locks', help='Initially create locks at the tclm.')
+    parser_lsps = subparsers.add_parser('list-source-packages', help='List all source packages.')
+
+    args = parser.parse_args()
+
+    # Different commands
+    if args.command == 'initially-create-locks':
+        initially_create_locks(args)
+    elif args.command == 'list-source-packages':
+        list_source_packages(args)
+
+if __name__ == '__main__':
+    main()

@@ -23,8 +23,11 @@ class CannotReadConfigFile(Exception):
     """
     To be raised when reading the config file does not work.
     """
-    def __init__(self):
-        super().__init__('Cannot read the config file %s.' % config_file_path)
+    def __init__(self, attr = None):
+        if attr is not None:
+            super().__init__('Cannot read the config file %s: %s' % (config_file_path, repr(attr)))
+        else:
+            super().__init__('Cannot read the config file %s.' % config_file_path)
 
 # Some globals
 config_file_path = None
@@ -55,6 +58,8 @@ def parse_config_file():
             for k in config[s]:
                 options[s][k] = config[s][k]
 
+    except Exception as e:
+        raise CannotReadConfigFile(e)
     except:
         raise CannotReadConfigFile
 
