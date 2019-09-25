@@ -1,7 +1,9 @@
 from VersionNumber import VersionNumber
 import tclm
+from tclm import lock_S, lock_Splus, lock_X
 import database
 import database.SourcePackage
+import database.SourcePackage as dbspkg
 
 class SourcePackageList(object):
     def __init__(self, create_locks = False):
@@ -175,7 +177,7 @@ class SourcePackage(object):
             spkg = spkgs[0]
             s.expunge(spkg)
 
-            self.db_spkg = spkg
+            self.dbo = spkg
         except:
             # Release locks
             if write_intent:
@@ -186,15 +188,31 @@ class SourcePackage(object):
                 self.db_root_lock.release_S()
 
 
-    # Dealing with different versions
-    def get_version_numbers(self):
-        pass
+    # Attributes
+    # General
+    def get_creation_time(self):
+        return self.dbo.creation_time
+
+    # Different versions
+    def list_version_numbers(self):
+        s = database.conn.get_session()
+        vns = s.query(dbspkg.SourcePackageVersion.version_number)\
+                .filter(dbspkg.SourcePackageVersion.source_package == self.name)\
+                .all()
+
+        return [ vn[0] for vn in vns ]
 
     def get_version(self, version_number):
-        pass
+        return SourcePackageVersion(self, version_number)
 
     def get_latest_version(self):
-        pass
+        # Get latest version number
+        s = database.conn.get_session()
+        vns = s.query(dbspkg.SourcePackageVersion.version_number)\
+                .filter(dbspkg.SourcePackageVersion.source_package == self.name &&
+                        dbspkg.SourcePackageVersion.version_number >=
+                        dbspkg.SourcePackageVersion.version_number.max())\
+                .all()
 
     def add_version(self, version_number):
         pass
@@ -205,8 +223,66 @@ class SourcePackageVersion(object):
         self.source_package = source_package
         self.version_number = VersionNumber(version_number)
 
+        # Bind a DB object
+        try:
+            s = database.conn.get_session()
+            dbos = s.query(database.SourcePackage.SourcePackageVersion)\
+                    .filter_by(source_package = source_package.get_name(),
+                            version_number = version_number).all()
+
+            if len(dbos) != 1:
+                raise NoSuchSourcePackageVersion(name, version_number)
+
+            dbo = dbos[0]
+            s.expunge(dbo)
+
+            self.dbo = dbo
+
+        except:
+            raise
+
+
+    # Attributes
+    # General
+    def get_creation_time(self):
+        return self.dbo.creation_time
+
+    # Installed files
+
+    # Shared libraries
+
+    # Binary packages
+    def list_binary_packages(self):
+        pass
+
+    def get_binary_package(self):
+        pass
+
+    def add_binary_package(self):
+        pass
+
+    def remove_binary_package(self):
+        pass
+
+    # Key-Value-Store like attributes
+    def list_attributes(self):
+        pass
+
+    def get_attribute(self, key):
+        pass
+
+    def set_attribute(self, key):
+        pass
+
+    def unset_attribute(self, key):
+        pass
+
 
 # Some exceptions for our pleasure.
 class NoSuchSourcePackage(Exception):
     def __init__(self, name):
         super().__init__("No such source package: `%s'" % name)
+
+class NoSuchSourcePackageVersion(Exception):
+    def __init__(self, name, version_number):
+        super().__init__("No such source package version: `%s@%s'" % (name, version_number))

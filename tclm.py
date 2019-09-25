@@ -72,9 +72,43 @@ class lock(object):
 
         return self.l.release_X(p)
 
+    def get_path(self):
+        return self.l.get_path()
+
 # Wrap a tclmc's methods
 def define_lock(path):
     return lock(path)
 
 def register_process():
     return tclmc.register_process()
+
+# Context managers for scoped locking
+class lock_S(object):
+    def __init__(self, lk):
+        self.lk = lk
+
+    def __enter__(self):
+        self.lk.acquire_S()
+
+    def __exit__(self, *args):
+        self.lk.release_S()
+
+class lock_Splus(object):
+    def __init__(self, lk):
+        self.lk = lk
+
+    def __enter__(self):
+        self.lk.acquire_Splus()
+
+    def __exit__(self, *args):
+        self.lk.release_Splus()
+
+class lock_X(object):
+    def __init__(self, lk):
+        self.lk = lk
+
+    def __enter__(self):
+        self.lk.acquire_X()
+
+    def __exit__(self, *args):
+        self.lk.release_X()

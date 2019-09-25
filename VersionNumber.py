@@ -1,5 +1,5 @@
 """
-Version numbers that are composed of multiple str or positive int components.
+Version numbers that are composed of multiple positive int components.
 Mixed component types are also supported.
 """
 
@@ -7,7 +7,7 @@ from sqlalchemy import types
 
 class VersionNumber(object):
     """
-    Version numbers that are composed of multiple str or positive int components.
+    Version numbers that are composed of multiple positive int components.
     Mixed component types are also supported.
     """
 

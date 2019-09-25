@@ -11,6 +11,10 @@ class SourcePackage(Base):
 
     name = Column(types.String, primary_key = True)
 
+    # Attributes
+    # General
+    creation_time = Column(types.DateTime(timezone=True), nullable = False)
+
     # List of versions in an attribute-like style.
     versions_modified_time = Column(types.DateTime(timezone=True), nullable = False)
     versions_reassured_time = Column(types.DateTime(timezone=True), nullable = False)
@@ -38,12 +42,13 @@ class SourcePackage(Base):
 
         self.versions_reassured_time = time
 
-    # Inititalize a brand dnew package before storing it in the db.
+    # Inititalize a brand new package before storing it in the db.
     def initialize_fields(self, name, time = None):
         if not time:
             time = timezone.now()
 
         self.name = name
+        self.creation_time = time
         self.versions_modified_time = time
         self.versions_reassured_time = time
         self.versions_manual_hold_time = None
@@ -54,9 +59,13 @@ class SourcePackageVersion(Base):
     source_package = Column(types.String,
             ForeignKey('SourcePackage.name', ondelete = 'CASCADE', onupdate = 'CASCADE'),
             primary_key = True)
-    version = Column(VersionNumberColumn, primary_key = True)
+    version_number = Column(VersionNumberColumn, primary_key = True)
 
-    # Lists of attributes of different types
+    # Attributes
+    # General
+    creation_time = Column(types.DateTime(timezone=True), nullable = False)
+
+    # Lists of attributes
     def get_attribute (self, name):
         """
         :returns: The attribute's value.
@@ -82,7 +91,17 @@ class SourcePackageVersion(Base):
 
         pass
 
-class SourcePackackage_StringAttributes(Attribute.StringAttribute):
+    def initialize_fields(self, time = None):
+        """
+        Initialize a new object before storing it in the db.
+        """
+        if not time:
+            time = timezone.now()
+
+        creation_time = time
+
+
+class SourcePackackageVersion_StringAttributes(Attribute.StringAttribute):
     __tablename__ = 'source_package__string_attribute'
 
     source_package = Column(types.String,
