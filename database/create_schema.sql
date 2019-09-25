@@ -11,7 +11,7 @@ create table source_packages (
 
 create table source_package_version (
 	"source_package" varchar primary key,
-	"version_number" varchar[],
+	"version_number" integer[],
 	"creation_time" timestamp with time zone not null
 );
 

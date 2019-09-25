@@ -22,6 +22,14 @@ class VersionNumber(object):
                 c = c.strip()
                 if c == '':
                     raise ValueError('The individual components may not be empty.')
+                try:
+                    c = int(c)
+                    if c < 0:
+                        raise Exception
+
+                except:
+                    raise ValueError('The individual components must be positive integers (including 0).')
+
                 self.components.append(c)
 
         elif isinstance(argument, int):
@@ -35,6 +43,15 @@ class VersionNumber(object):
                     c = c.strip()
                     if c.find('.') >= 0:
                         raise ValueError('The individual components may not contain dots.')
+
+                    try:
+                        c = int(c)
+                        if c < 0:
+                            raise Exception
+
+                    except:
+                        raise ValueError('The individual components must be positive integers (including 0).')
+
                     self.components.append(c)
 
                 elif isinstance(c, int):
@@ -56,7 +73,7 @@ class VersionNumber(object):
     def __str__(self):
         s = ''
         for c in self.components:
-            if c != self.components[0]:
+            if len(s) > 0:
                 s += '.'
             s += str(c)
 
@@ -67,7 +84,10 @@ class VersionNumber(object):
 
 
     def __lt__(self, other):
-        for i in range(min(len(self.components), len(other.components))):
+        l1 = len(self.components)
+        l2 = len(other.components)
+
+        for i in range(min(l1,l2)):
             cs = self.components[i]
             co = other.components[i]
             if cs.__class__ != co.__class__:
@@ -78,18 +98,22 @@ class VersionNumber(object):
             elif cs > co:
                 return False
 
-        if len(other.components) > len(self.components):
-            co = other.componentsp[i+1]
-            if isinstance(co, int) and co > 0:
-                return True
-            else:
-                # A string component is more than nothing.
-                return True
+        if l2 > l1:
+            for co in other.components[l1:]:
+                if isinstance(co, int):
+                    if co > 0:
+                        return True
+                else:
+                    # A string component is more than nothing.
+                    return True
 
         return False
 
     def __le__(self, other):
-        for i in range(min(len(self.components), len(other.components))):
+        l1 = len(self.components)
+        l2 = len(other.components)
+
+        for i in range(min(l1,l2)):
             cs = self.components[i]
             co = other.components[i]
             if cs.__class__ != co.__class__:
@@ -100,10 +124,34 @@ class VersionNumber(object):
             elif cs > co:
                 return False
 
+        if l1 > l2:
+            for cs in self.components[l2:]:
+                if isinstance(cs, int):
+                    if cs > 0:
+                        return False
+                else:
+                    # A string component is more than nothing.
+                    return False
+
         return True
 
     def __eq__(self, other):
-        return self.components == other.components
+        l1 = len(self.components)
+        l2 = len(other.components)
+
+        for i in range(min(l1,l2)):
+            if self.components[i] != other.components[i]:
+                return False
+
+        if l1 != l2:
+            if l1 > l2:
+                if any([ c != 0 for c in self.components[l2:] ]):
+                    return False
+            else:
+                if any([ c != 0 for c in other.components[l1:] ]):
+                    return False
+
+        return True
 
     def __ne__(self, other):
         return self.components != other.components
@@ -115,28 +163,16 @@ class VersionNumber(object):
         return other <= self
 
     def __hash__(self):
-        return hash(self.components)
+        return hash(tuple(self.components))
 
 class VersionNumberColumn(types.TypeDecorator):
     """
     Represents VersionNumbers in object relational databases
     """
-    impl = types.ARRAY(types.String)
+    impl = types.ARRAY(types.Integer)
 
     def process_bind_param(self, value, dialect):
-        def anotate(c):
-            if isinstance(c, int):
-                return 'i%s' % c
-            else:
-                return 's' + c
-
-        return [ annotate(c) for c in value.components ]
+        return value.components
 
     def process_result_value(self, value, dialect):
-        def unanotate(c):
-            if c[0] == 'i':
-                return int(c[1:])
-            else:
-                return c[1:]
-
-        return VersionNumber([ unannotate(c) for c in value ])
+        return VersionNumber(value)
