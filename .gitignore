@@ -5,3 +5,4 @@ mysession.vim
 
 # cPython cache
 __pycache__
+*.pyc

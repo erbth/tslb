@@ -1,6 +1,13 @@
 """
 Version numbers that are composed of multiple positive int components.
 Mixed component types are also supported.
+
+And, 2.0 != 2.0.0. This is because Postgresql's integer array comparision is
+like that and I want to use it for comparing version numbers, and moreover
+it because it makes a difference if you say `Version 2' or `Version 2.0' (the
+last one tends to sound more like a big `thing').
+And 1.0 < 1.0.0 because a) Postgresql does that and b) it's nice to have a
+strict order (You'd said that, too, wouldn't you? ;-)).
 """
 
 from sqlalchemy import types
@@ -99,13 +106,7 @@ class VersionNumber(object):
                 return False
 
         if l2 > l1:
-            for co in other.components[l1:]:
-                if isinstance(co, int):
-                    if co > 0:
-                        return True
-                else:
-                    # A string component is more than nothing.
-                    return True
+            return True
 
         return False
 
@@ -125,13 +126,7 @@ class VersionNumber(object):
                 return False
 
         if l1 > l2:
-            for cs in self.components[l2:]:
-                if isinstance(cs, int):
-                    if cs > 0:
-                        return False
-                else:
-                    # A string component is more than nothing.
-                    return False
+            return False
 
         return True
 
@@ -144,12 +139,7 @@ class VersionNumber(object):
                 return False
 
         if l1 != l2:
-            if l1 > l2:
-                if any([ c != 0 for c in self.components[l2:] ]):
-                    return False
-            else:
-                if any([ c != 0 for c in other.components[l1:] ]):
-                    return False
+            return False
 
         return True
 
