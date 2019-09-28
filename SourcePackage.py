@@ -2,8 +2,10 @@ from VersionNumber import VersionNumber
 import tclm
 from tclm import lock_S, lock_Splus, lock_X
 import database
+from sqlalchemy.orm import aliased
 import database.SourcePackage
 import database.SourcePackage as dbspkg
+from time import sleep
 
 class SourcePackageList(object):
     def __init__(self, create_locks = False):
@@ -16,89 +18,61 @@ class SourcePackageList(object):
 
         # Create locks if desired
         if create_locks:
-            self.db_root_lock.create()
-            self.fs_root_lock.create()
+            self.fs_root_lock.create(True)
+            self.db_root_lock.create(True)
 
-            self.fs_root_lock.release_X()
             self.db_root_lock.release_X()
+            self.fs_root_lock.release_X()
 
-    def get_source_packages(self):
+    def list_source_packages(self):
         """
         Returns an ordered list of the source packages' names.
         """
-        self.db_root_lock.acquire_S()
-
-        try:
-            sps = database.conn.get_session().query(database.SourcePackage.SourcePackage)\
+        with lock_S(self.db_root_lock):
+            sps = database.conn.get_session().query(database.SourcePackage.SourcePackage.name)\
                         .order_by(database.SourcePackage.SourcePackage.name).all()
 
-            names = [ sp.name for sp in sps ]
-        except:
-            self.db_root_lock.release_S()
-            raise
-
-        self.db_root_lock.release_S()
-        return names
+            names = [ sp[0] for sp in sps ]
+            return names
 
 
-    def create_source_package(self, name, write_intent = False):
+    def create_source_package(self, name):
         # Lock the source package list and the fs
-        self.fs_root_lock.acquire_X()
-        self.db_root_lock.acquire_X()
+        with lock_X(self.fs_root_lock):
+            with lock_X(self.db_root_lock):
+                # Create the db tuple
+                s = database.conn.get_session()
 
-        try:
-            # Create the db tuple
-            spkg = database.SourcePackage.SourcePackage()
-            spkg.initialize_fields(name)
+                p = aliased(dbspkg.SourcePackage)
+                if s.query(p).filter(p.name == name).first():
+                    raise SourcePackageExists(name)
 
-            s = database.conn.get_session()
-            s.add(spkg)
-            s.commit()
-            del spkg
-        except:
-            # Unlock the list(s)
-            self.db_root_lock.release_X()
-            self.fs_root_lock.release_X()
-            raise
+                spkg = database.SourcePackage.SourcePackage()
+                spkg.initialize_fields(name)
 
-        self.db_root_lock.release_X()
+                s.add(spkg)
+                s.commit()
+                del spkg
 
-        try:
-            # Create fs location
-            pass
-        except:
-            # Unlock the list(s)
-            self.fs_root_lock.release_X()
-            raise
+                # Create fs location
 
-        self.fs_root_lock.release_X()
-
-        # Create locks
-        spkg = SourcePackage(name, write_intent = write_intent, create_locks = True)
-        return spkg
+                # Create locks
+                spkg = SourcePackage(name, write_intent = True, create_locks = True)
+                return spkg
 
     def destroy_source_package(self, name):
         # Lock the source package list and the fs
-        self.fs_root_lock.acquire_X()
-        self.db_root_lock.acquire_X()
+        with lock_X(self.fs_root_lock):
+            with lock_X(self.db_root_lock):
+                # Remove the db tuple(s)
+                s = database.conn.get_session()
+                spkg = s.query(database.SourcePackage.SourcePackage).filter_by(name=name).first()
 
-        try:
-            # Remove the db tuple
-            s = database.conn.get_session()
-            spkg = s.query(database.SourcePackage.SourcePackage).filter_by(name=name).all()
+                if spkg:
+                    s.delete(spkg)
+                    s.commit()
 
-            if len(spkg) > 0:
-                s.delete(spkg[0])
-                s.commit()
-            else:
-                raise NoSuchSourcePackage(name)
-
-            # Remove the fs location(s)
-
-        finally:
-            # Unlock the list(s)
-            self.db_root_lock.release_X()
-            self.fs_root_lock.release_X()
+                # Remove the fs location(s)
 
 class SourcePackage(object):
     def __init__(self, name, write_intent = False, create_locks = False):
@@ -110,56 +84,26 @@ class SourcePackage(object):
         self.write_intent = write_intent
 
         # Define a few required locks
-        dbrlp = 'tslb_db.source_packages.%s' % self.name
-        fsrlp = 'tslb_fs.packaging.%s' % self.name
+        self.dbrlp = 'tslb_db.source_packages.%s' % self.name
+        self.fsrlp = 'tslb_fs.packaging.%s' % self.name
 
-        self.db_root_lock = tclm.define_lock(dbrlp)
+        self.db_root_lock = tclm.define_lock(self.dbrlp)
 
-        self.fs_root_lock = tclm.define_lock(fsrlp)
-        self.fs_source_location_lock = tclm.define_lock(fsrlp + '.source_location')
-        self.fs_build_location_lock = tclm.define_lock(fsrlp + '.build_location')
-        self.fs_install_location_lock = tclm.define_lock(fsrlp + '.install_location')
-        self.fs_packaging_location_lock = tclm.define_lock(fsrlp + '.packaging_location')
+        self.fs_root_lock = tclm.define_lock(self.fsrlp)
 
         # Create locks if desired
         if create_locks:
-            self.fs_root_lock.create()
+            self.fs_root_lock.create(False)
+            self.db_root_lock.create(False)
+
+        # Acquire locks in the requested mode
+        if write_intent:
+            # Deadlock free locking protocol: First fs, then db.
             self.fs_root_lock.acquire_Splus()
-            self.fs_root_lock.release_X()
-
-            self.fs_source_location_lock.create()
-            self.fs_source_location_lock.release_X()
-
-            self.fs_build_location_lock.create()
-            self.fs_build_location_lock.release_X()
-
-            self.fs_install_location_lock.create()
-            self.fs_install_location_lock.release_X()
-
-            self.fs_packaging_location_lock.create()
-            self.fs_packaging_location_lock.release_X()
-
-            self.db_root_lock.create()
             self.db_root_lock.acquire_Splus()
-            self.db_root_lock.release_X()
-
-            if not write_intent:
-                # Downgrade further to S mode
-                self.fs_root_lock.acquire_S()
-                self.fs_root_lock.release_Splus()
-
-                self.db_root_lock.acquire_S()
-                self.db_root_lock.release_Splus()
-
         else:
-            # Acquire locks in the requested mode
-            if write_intent:
-                # Deadlock free locking protocol: First fs, then db.
-                self.fs_root_lock.acquire_Splus()
-                self.db_root_lock.acquire_Splus()
-            else:
-                self.fs_root_lock.acquire_S()
-                self.db_root_lock.acquire_S()
+            self.fs_root_lock.acquire_S()
+            self.db_root_lock.acquire_S()
 
         # Download information from the DB. This is like an opaque class, hence
         # I can implement the db information by linking this pure-memory object,
@@ -168,24 +112,48 @@ class SourcePackage(object):
         # to a db object.
         try:
             s = database.conn.get_session()
-            spkgs = s.query(database.SourcePackage.SourcePackage)\
-                    .filter_by(name=name)
+            dbo = s.query(database.SourcePackage.SourcePackage)\
+                    .filter_by(name=name)\
+                    .first()
 
-            if len(spkgs) != 1:
+            if dbo is None:
                 raise NoSuchSourcePackage(name)
 
-            spkg = spkgs[0]
-            s.expunge(spkg)
+            s.expunge(dbo)
+            self.dbo = dbo
 
-            self.dbo = spkg
         except:
             # Release locks
             if write_intent:
-                self.fs_root_lock.release_Splus()
                 self.db_root_lock.release_Splus()
+                self.fs_root_lock.release_Splus()
             else:
-                self.fs_root_lock.release_S()
                 self.db_root_lock.release_S()
+                self.fs_root_lock.release_S()
+
+            raise
+
+    def __del__(self):
+        if self.write_intent:
+            self.db_root_lock.release_Splus()
+            self.fs_root_lock.release_Splus()
+        else:
+            self.db_root_lock.release_S()
+            self.fs_root_lock.release_S()
+
+
+    # Peripheral methods and functions ...
+    def ensure_write_intent(self):
+        if not self.write_intent:
+            # Abort to avoid deadlocks
+            raise MissingWriteIntent('create client version')
+            # self.write_intent = True
+
+            # self.fs_root_lock.acquire_Splus()
+            # self.fs_root_lock.release_S()
+
+            # self.db_root_lock.acquire_Splus()
+            # self.db_root_lock.release_S()
 
 
     # Attributes
@@ -193,7 +161,7 @@ class SourcePackage(object):
     def get_creation_time(self):
         return self.dbo.creation_time
 
-    # Different versions
+    # Versions
     def list_version_numbers(self):
         s = database.conn.get_session()
         vns = s.query(dbspkg.SourcePackageVersion.version_number)\
@@ -206,35 +174,183 @@ class SourcePackage(object):
         return SourcePackageVersion(self, version_number)
 
     def get_latest_version(self):
-        # Get latest version number
-        s = database.conn.get_session()
-        vns = s.query(dbspkg.SourcePackageVersion.version_number)\
-                .filter(dbspkg.SourcePackageVersion.source_package == self.name &&
-                        dbspkg.SourcePackageVersion.version_number >=
-                        dbspkg.SourcePackageVersion.version_number.max())\
-                .all()
+        """
+        Get the latest version.
+        """
+        pv1 = aliased(dbspkg.SourcePackageVersion)
+        pv2 = aliased(dbspkg.SourcePackageVersion)
+
+        s = database.get_session()
+        v = s.query(pv1.version_number)\
+                .filter(pv1.source_package == self.name,
+                        ~s.query(pv2)\
+                                .filter(pv2.source_package == pv1.source_package,
+                                    pv2.version_number > pv1.version_number)\
+                                .exists())\
+                .first()
+
+        if not v:
+            raise NoSuchSourcePackageVersion(self.name, "latest")
+
+        return SourcePackageVersion(self.name, v[0])
+
+    def manually_hold_versions(self, remove=False, time=None):
+        """
+        :param remove: If True, the manual hold flag will be removed.
+        :type remove: bool
+        :param time: The timestamp to assign during the operation, or None to
+                     use timezone.now().
+        :type time: datetime
+        """
+        self.ensure_write_intent()
+
+        if not time:
+            time = timezone.now()
+
+        with lock_X(self.db_root_lock):
+            if remove != (not bool(self.dbo.versions_manual_hold_time)):
+                if remove:
+                    self.dbo.versions_manual_hold_time = None
+                else:
+                    self.dbo.versions_manual_hold_time = time
+
+                s = database.get_session()
+                s.add(self.dbo)
+                s.commit()
+                s.expunge(self.dbo)
+
+    def versions_manually_held(self):
+        """
+        :returns: The date and time when the versions were manually held, or
+                  None if they are not held.
+        :rtype: datetime
+        """
+        return self.dbo.versions_manual_hold_time
 
     def add_version(self, version_number):
-        pass
+        """
+        Add a new version. This may raise an AttributeManuallyHeld.
+
+        :returns: The newly created version
+        :rtype: SourcePackageVersion (throws hence does not return None)
+        """
+        if self.dbo.versions_manual_hold_time:
+            raise AttributeManuallyHeld("versions")
+
+        version_number = VersionNumber(version_number)
+        self.ensure_write_intent()
+
+        with lock_X(self.fs_root_lock):
+            with lock_X(self.db_root_lock):
+                s = database.get_session()
+
+                pvs = aliased(dbspkg.SourcePackageVersion)
+                if s.query(pvs)\
+                        .filter(pvs.source_package == self.name,
+                                pvs.version_number == version_number)\
+                        .first():
+                    raise SourcePackageVersionExists(self.name, version_number)
+
+                # Create the fs locations
+
+                # Add the db tuple
+                pv = dbspkg.SourcePackageVersion()
+                pv.initialize_fields(self.name, version_number)
+                s.add(pv)
+
+                # Create a version object to create locks
+                SourcePackageVersion(
+                        self, version_number, create_locks=True, db_session=s)
+
+                # Transactionality
+                s.commit()
+
+                # Create a new version object because the former one was bound
+                # to the former session (for transactionality).
+                return SourcePackageVersion(self, version_number)
+
+    def delete_version(self, version_number):
+        """
+        Delete a version. This may raise (among others) an AttributeManuallyHeld.
+        """
+        if self.dbo.versions_manual_hold_time:
+            raise AttributeManuallyHeld("versions")
+
+        version_number = VersionNumber(version_number)
+        self.ensure_write_intent()
+
+        with lock_X(self.fs_root_lock):
+            with lock_X(self.db_root_lock):
+                # Delete fs locations
+
+                # Delete the db tuple
+                s = database.get_session()
+
+                pv = aliased(dbspkg.SourcePackageVersion)
+                v = s.query(pv)\
+                        .filter(pv.source_package == self.name,
+                                pv.version_number == version_number)\
+                        .first()
+
+                # Could be that something went wrong when creating this package.
+                # We'd tolerate that.
+                if v is not None:
+                    s.delete(v)
+                    s.commit()
 
 
 class SourcePackageVersion(object):
-    def __init__(self, source_package, version_number):
+    def __init__(self, source_package, version_number, create_locks=False, db_session=None):
+        """
+        Must be called with the source package be X locked.
+
+        :param source_package:
+        :type source_package: SourcePackage
+        :param db_session: Optionally specify a db session for i.e.
+                           transactionality
+        """
         self.source_package = source_package
-        self.version_number = VersionNumber(version_number)
+        version_number = VersionNumber(version_number)
+        self.version_number = version_number
+
+        # Create locks if requested
+        vs = str(self.version_number).replace('.', '_')
+        self.fsrlp = source_package.fsrlp + "." + vs
+        self.dbrlp = source_package.dbrlp + "." + vs
+
+        self.fs_root_lock = tclm.define_lock(self.fsrlp)
+        self.fs_source_location_lock = tclm.define_lock(self.fsrlp + '.source_location')
+        self.fs_build_location_lock = tclm.define_lock(self.fsrlp + '.build_location')
+        self.fs_install_location_lock = tclm.define_lock(self.fsrlp + '.install_location')
+        self.fs_packaging_location_lock = tclm.define_lock(self.fsrlp + '.packaging_location')
+
+        self.db_root_lock = tclm.define_lock(self.dbrlp)
+
+        if create_locks:
+            self.source_package.ensure_write_intent()
+
+            for l in [
+                    self.fs_source_location_lock,
+                    self.fs_build_location_lock,
+                    self.fs_install_location_lock,
+                    self.fs_packaging_location_lock,
+                    self.db_root_lock ]:
+                l.create(False)
 
         # Bind a DB object
         try:
-            s = database.conn.get_session()
+            s = database.conn.get_session() if not db_session else db_session
             dbos = s.query(database.SourcePackage.SourcePackageVersion)\
-                    .filter_by(source_package = source_package.get_name(),
+                    .filter_by(source_package = source_package.name,
                             version_number = version_number).all()
 
             if len(dbos) != 1:
-                raise NoSuchSourcePackageVersion(name, version_number)
+                raise NoSuchSourcePackageVersion(source_package.name, version_number)
 
             dbo = dbos[0]
-            s.expunge(dbo)
+
+            if not db_session:
+                s.expunge(dbo)
 
             self.dbo = dbo
 
@@ -286,3 +402,18 @@ class NoSuchSourcePackage(Exception):
 class NoSuchSourcePackageVersion(Exception):
     def __init__(self, name, version_number):
         super().__init__("No such source package version: `%s@%s'" % (name, version_number))
+
+class MissingWriteIntent(Exception):
+    def __init__(self, reference):
+        super().__init__("A write was requested but no write intent specified before. I abort to avoid deadlocks.")
+
+class AttributeManuallyHeld(Exception):
+    def __init__(self, attr_name):
+        super().__init__("Attribute %s was manually held." % attr_name)
+
+class SourcePackageExists(Exception):
+    def __init__(self, name):
+        super().__init__("Source package `%s' exists already." % name)
+class SourcePackageVersionExists(Exception):
+    def __init__(self, name, version_number):
+        super().__init__("Source package version: `%s@%s'" % (name, version_number))

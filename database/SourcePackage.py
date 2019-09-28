@@ -20,28 +20,6 @@ class SourcePackage(Base):
     versions_reassured_time = Column(types.DateTime(timezone=True), nullable = False)
     versions_manual_hold_time = Column(types.DateTime(timezone=True), nullable = True)
 
-    def hold_versions_manually(self, time = None):
-        if not time:
-            time = timezone.now()
-
-        self.versions_manual_hold_time = time
-
-    def versions_manually_held(self):
-        return bool(versions_manual_hold_time)
-
-    def set_versions_modified(self, time = None):
-        if not time:
-            time = timezone.now()
-
-        self.versions_modified_time = time
-        self.versions_reassured_time = time
-
-    def set_versions_reassured(self, time = None):
-        if not time:
-            time = timezone.now()
-
-        self.versions_reassured_time = time
-
     # Inititalize a brand new package before storing it in the db.
     def initialize_fields(self, name, time = None):
         if not time:
@@ -57,7 +35,7 @@ class SourcePackageVersion(Base):
     __tablename__ = 'source_package_versions'
 
     source_package = Column(types.String,
-            ForeignKey('SourcePackage.name', ondelete = 'CASCADE', onupdate = 'CASCADE'),
+            ForeignKey(SourcePackage.name, ondelete = 'CASCADE', onupdate = 'CASCADE'),
             primary_key = True)
     version_number = Column(VersionNumberColumn, primary_key = True)
 
@@ -65,40 +43,16 @@ class SourcePackageVersion(Base):
     # General
     creation_time = Column(types.DateTime(timezone=True), nullable = False)
 
-    # Lists of attributes
-    def get_attribute (self, name):
-        """
-        :returns: The attribute's value.
-        :except:  A Attribute.NoSuchAttribute if no such attribute exists
-                  (required since the value can be None)
-        """
-        pass
-
-    def get_attribute_meta (self, name):
-        """
-        :returns: An instance of Attribute.AttributeMeta.
-        :except:  A Attribute.NoSuchAttribute if no such attribute exists
-                  (required since the value can be None)
-        """
-        pass
-
-    def set_attribute (self, value, change_time=None):
-        """
-        Updates or initially sets an attribute.
-        """
-        if change_time is None:
-            change_time = timezone.now()
-
-        pass
-
-    def initialize_fields(self, time = None):
+    def initialize_fields(self, source_package, version_number, time = None):
         """
         Initialize a new object before storing it in the db.
         """
         if not time:
             time = timezone.now()
 
-        creation_time = time
+        self.source_package = source_package
+        self.version_number = version_number
+        self.creation_time = time
 
 
 class SourcePackackageVersion_StringAttributes(Attribute.StringAttribute):

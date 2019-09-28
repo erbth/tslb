@@ -33,3 +33,6 @@ class conn(object):
             thlocal.db_sessionmaker = sqlalchemy.orm.sessionmaker(bind=engine)
 
         return thlocal.db_sessionmaker()
+
+def get_session():
+    return conn.get_session()

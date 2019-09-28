@@ -13,7 +13,7 @@ from SourcePackage import SourcePackageList
 def initially_create_locks(args):
     print (Color.YELLOW + "Creating locks ..." + Color.NORMAL)
     utils.initially_create_all_locks()
-    print (Color.Green + "done." + Color.NORMAL)
+    print (Color.GREEN + "done." + Color.NORMAL)
 
 def list_source_packages(args):
     print ("Source packages:")
