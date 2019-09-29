@@ -67,14 +67,45 @@ class SourcePackageVersionFile(Base):
     source_package = Column(types.String, primary_key = True)
     source_package_version_number = Column(VersionNumberColumn, primary_key = True)
     path = Column(types.String, primary_key = True)
-    sha512sum = Column(types.String, primary_key = True)
+    sha512sum = Column(types.String)
 
     __table_args__ = (ForeignKeyConstraint(
         (source_package, source_package_version_number),
-        (SourcePackageVersion.source_package, SourcePackageVersion.version_number)), )
+        (SourcePackageVersion.source_package, SourcePackageVersion.version_number),
+        onupdate='CASCADE', ondelete = 'CASCADE'), )
 
     def __init__(self, source_package, version_number, path, sha512sum):
         self.source_package = source_package
         self.source_package_version_number = version_number
         self.path = path
         self.sha512sum = sha512sum
+
+# KV-like attributes
+class SourcePackageVersionAttribute(Base):
+    __tablename__ = 'source_package_version_attributes'
+
+    source_package = Column(types.String, primary_key = True)
+    version_number = Column(VersionNumberColumn, primary_key = True)
+
+    modified_time = Column(types.DateTime(timezone=True), nullable = False)
+    reassured_time = Column(types.DateTime(timezone=True), nullable = False)
+    manual_hold_time = Column(types.DateTime(timezone=True))
+
+    key = Column(types.String, primary_key = True)
+    value = Column(types.String)
+
+    __table_args__ = (ForeignKeyConstraint(
+        (source_package, version_number),
+        (SourcePackageVersion.source_package, SourcePackageVersion.version_number),
+        onupdate='CASCADE', ondelete='CASCADE'), )
+
+    def __init__(self, source_package, version_number, key, value, time):
+        self.source_package = source_package
+        self.version_number = version_number
+
+        self.modified_time = time
+        self.reassured_time = time
+        self.manual_hold_time = None
+
+        self.key = key
+        self.value = value

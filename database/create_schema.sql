@@ -30,7 +30,24 @@ create table source_package_version_files (
 	"path" varchar not null,
 	"sha512sum" varchar not null,
 
-	primary key(source_package, source_package_version_number, "path", "sha512sum")
+	primary key(source_package, source_package_version_number, "path")
+);
+
+create table source_package_version_attributes (
+	source_package varchar,
+	version_number integer[],
+	foreign key (source_package, version_number)
+		references source_package_versions(source_package, version_number)
+		on update cascade on delete cascade,
+
+	modified_time timestamp with time zone not null,
+	reassured_time timestamp with time zone not null,
+	manual_hold_time timestamp with time zone,
+
+	"key" varchar,
+	"value" varchar,
+
+	primary key (source_package, version_number, "key")
 );
 
 COMMIT;

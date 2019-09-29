@@ -1,12 +1,14 @@
-import timezone
 from VersionNumber import VersionNumber
-import tclm
-from tclm import lock_S, lock_Splus, lock_X
-import database
 from sqlalchemy.orm import aliased
+from tclm import lock_S, lock_Splus, lock_X
+from time import sleep
+import base64
+import database
 import database.SourcePackage
 import database.SourcePackage as dbspkg
-from time import sleep
+import pickle
+import tclm
+import timezone
 
 class SourcePackageList(object):
     def __init__(self, create_locks = False):
@@ -324,10 +326,11 @@ class SourcePackage(object):
 
     def get_versions_meta(self):
         """
-        :returns: tuple(modified_time, reassured_time)
-        :rtype: tuple(datetime, datetime)
+        :returns: tuple(modified_time, reassured_time, manual_hold_time or None)
+        :rtype: tuple(datetime, datetime, datetime or None)
         """
-        return (self.dbo.versions_modified_time, self.dbo.versions_reassured_time)
+        return (self.dbo.versions_modified_time, self.dbo.versions_reassured_time,
+                self.dbo.versions_manual_hold_time)
 
 
 class SourcePackageVersion(object):
@@ -436,7 +439,8 @@ class SourcePackageVersion(object):
             if different:
                 s.query(dbspkg.SourcePackageVersionFile)\
                         .filter(dbspkg.SourcePackageVersionFile.source_package == self.source_package.name,
-                                dbspkg.SourcePackageVersionFile.source_package_version_number == self.version_number)\
+                                dbspkg.SourcePackageVersionFile.source_package_version_number ==
+                                    self.version_number)\
                         .delete()
 
 
@@ -497,16 +501,212 @@ class SourcePackageVersion(object):
 
     # Key-Value-Store like attributes
     def list_attributes(self):
-        pass
+        """
+        :returns: A list of all keys
+        """
+        s = database.get_session()
+        
+        pa = aliased(dbspkg.SourcePackageVersionAttribute)
+        l = s.query(pa.key)\
+                .filter(pa.source_package == self.source_package.name,
+                        pa.version_number == self.version_number)\
+                .all()
+
+        return [ e[0] for e in l]
+
+    def has_attribute(self, key):
+        """
+        :returns: True or False
+        :rtype: bool
+        """
+        s = database.get_session()
+
+        pa = aliased(dbspkg.SourcePackageVersionAttribute)
+        return len(s.query(pa.key)\
+                .filter(pa.source_package == self.source_package.name,
+                        pa.version_number == self.version_number,
+                        pa.key == key)\
+                .all()) != 0
 
     def get_attribute(self, key):
-        pass
+        """
+        :param key: The attribute's key
+        :type key: str
+        :returns: The stored string or object in its appropriate type
+        :rtype: str or virtually anything else
+        """
+        s = database.get_session()
 
-    def set_attribute(self, key):
-        pass
+        pa = aliased(dbspkg.SourcePackageVersionAttribute)
+        v = s.query(pa.value)\
+                .filter(pa.source_package == self.source_package.name,
+                        pa.version_number == self.version_number,
+                        pa.key == key)\
+                .all()
+
+        if len(v) == 0:
+            raise NoSuchAttribute("Source package version `%s@%s'" %
+                    (self.source_package.name, self.version_number), key)
+
+        v = v[0][0]
+
+        if v is None or len(v) == 0:
+            return None
+        elif v[0] == 's':
+            return v[1:]
+        elif v[0] == 'p':
+            return pickle.loads(base64.b64decode(v[1:].encode('ascii')))
+        else:
+            return None
+
+    def get_attribute_meta(self, key):
+        """
+        :param key: The attribute's key
+        :type key: str
+        :returns: tuple(modified_time, reassured_time, manual_hold_time or None)
+        :rtype: tuple(datetime, datetime, datetime or None)
+        """
+        s = database.get_session()
+
+        pa = aliased(dbspkg.SourcePackageVersionAttribute)
+        v = s.query(pa.modified_time, pa.reassured_time, pa.manual_hold_time)\
+                .filter(pa.source_package == self.source_package.name,
+                        pa.version_number == self.version_number,
+                        pa.key == key)\
+                .all()
+
+        if len(v) == 0:
+            raise NoSuchAttribute("Source package version `%s@%s'" %
+                    (self.source_package.name, self.version_number), key)
+
+        return v[0]
+
+    def manually_hold_attribute(self, key, remove=False, time=None):
+        self.source_package.ensure_write_intent()
+
+        with lock_X(self.db_root_lock):
+            s = database.get_session()
+
+            pa = aliased(dbspkg.SourcePackageVersionAttribute)
+            v = s.query(pa)\
+                    .filter(pa.source_package == self.source_package.name,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()
+
+            if len(v) == 0:
+                raise NoSuchAttribute("Source package version `%s@%s'" %
+                        (self.source_package.name, self.version_number), key)
+
+            v = v[0]
+
+            if not time:
+                time = timezone.now()
+
+            if remove:
+                v.manual_hold_time = None
+            else:
+                v.manual_hold_time = time
+
+            s.commit()
+
+    def attribute_manually_held(self, key):
+        """
+        :returns: The time the attribute was manually held or None
+        :rtype: datetime or None
+        """
+        s = database.get_session()
+
+        pa = aliased(dbspkg.SourcePackageVersionAttribute)
+        v = s.query(pa.manual_hold_time)\
+                .filter(pa.source_package == self.source_package.name,
+                        pa.version_number == self.version_number,
+                        pa.key == key)\
+                .all()
+
+        if len(v) == 0:
+            raise NoSuchAttribute("Source package version `%s@%s'" %
+                    (self.source_package.name, self.version_number), key)
+
+        return v[0][0]
+
+    def set_attribute(self, key, value, time = None):
+        """
+        :param key: The attribute's key
+        :type key: str
+        :param value: The string or object to be assigned as value
+        :type value: str or virtually any type
+        :param time: If not None, this will be used for the timestamps
+        :type time: datetime or None
+        """
+        self.source_package.ensure_write_intent()
+
+        if not time:
+            time = timezone.now()
+
+        # Serialize object
+        if value.__class__ == str:
+            o = "s" + value
+        else:
+            o = "p" + base64.b64encode(pickle.dumps(value)).decode('ascii')
+
+        # Eventually update the attribute
+        with lock_X(self.db_root_lock):
+            s = database.get_session()
+
+            pa = aliased(dbspkg.SourcePackageVersionAttribute)
+            a = s.query(pa)\
+                    .filter(pa.source_package == self.source_package.name,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()
+
+            if len(a) == 0:
+                # Create a new attribute tuple
+                s.add(dbspkg.SourcePackageVersionAttribute(
+                        self.source_package.name,
+                        self.version_number,
+                        key, o, time))
+            else:
+                a = a[0]
+
+                # This attribute manually locked?
+                if a.manual_hold_time is not None:
+                    raise AttributeManuallyHeld(key)
+
+                if a.value != o:
+                    a.value = o;
+                    a.modified_time = time
+
+                a.reassured_time = time
+
+            s.commit()
 
     def unset_attribute(self, key):
-        pass
+        self.source_package.ensure_write_intent()
+
+        with lock_X(self.db_root_lock):
+            s = database.get_session()
+
+            pa = aliased(dbspkg.SourcePackageVersionAttribute)
+            a = s.query(pa)\
+                    .filter(pa.source_package == self.source_package.name,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()
+
+            if len(a) == 0:
+                raise NoSuchAttribute("Source package version `%s@%s'" %
+                        (self.source_package.name, self.version_number), key)
+
+            a = a[0]
+
+            # Manually held?
+            if a.manual_hold_time is not None:
+                raise AttributeManuallyHeld(key)
+
+            s.delete(a)
+            s.commit()
 
 
 # Some exceptions for our pleasure.
@@ -529,6 +729,11 @@ class AttributeManuallyHeld(Exception):
 class SourcePackageExists(Exception):
     def __init__(self, name):
         super().__init__("Source package `%s' exists already." % name)
+
 class SourcePackageVersionExists(Exception):
     def __init__(self, name, version_number):
         super().__init__("Source package version: `%s@%s'" % (name, version_number))
+
+class NoSuchAttribute(Exception):
+    def __init__(self, obj, key):
+        super().__init__("%s has no attribute `%s'." % (obj, key))
