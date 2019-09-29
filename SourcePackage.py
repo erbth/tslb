@@ -1,3 +1,4 @@
+import timezone
 from VersionNumber import VersionNumber
 import tclm
 from tclm import lock_S, lock_Splus, lock_X
@@ -111,16 +112,7 @@ class SourcePackage(object):
         # spread across different modules (DB, locking, fs) into one interface,
         # to a db object.
         try:
-            s = database.conn.get_session()
-            dbo = s.query(database.SourcePackage.SourcePackage)\
-                    .filter_by(name=name)\
-                    .first()
-
-            if dbo is None:
-                raise NoSuchSourcePackage(name)
-
-            s.expunge(dbo)
-            self.dbo = dbo
+            self.read_from_db()
 
         except:
             # Release locks
@@ -154,6 +146,18 @@ class SourcePackage(object):
 
             # self.db_root_lock.acquire_Splus()
             # self.db_root_lock.release_S()
+
+    def read_from_db(self):
+        s = database.conn.get_session()
+        dbo = s.query(database.SourcePackage.SourcePackage)\
+                .filter_by(name=self.name)\
+                .first()
+
+        if dbo is None:
+            raise NoSuchSourcePackage(self.name)
+
+        s.expunge(dbo)
+        self.dbo = dbo
 
 
     # Attributes
@@ -217,7 +221,8 @@ class SourcePackage(object):
                 s = database.get_session()
                 s.add(self.dbo)
                 s.commit()
-                s.expunge(self.dbo)
+
+                self.read_from_db()
 
     def versions_manually_held(self):
         """
@@ -227,7 +232,7 @@ class SourcePackage(object):
         """
         return self.dbo.versions_manual_hold_time
 
-    def add_version(self, version_number):
+    def add_version(self, version_number, time = None):
         """
         Add a new version. This may raise an AttributeManuallyHeld.
 
@@ -239,6 +244,9 @@ class SourcePackage(object):
 
         version_number = VersionNumber(version_number)
         self.ensure_write_intent()
+
+        if not time:
+            time = timezone.now()
 
         with lock_X(self.fs_root_lock):
             with lock_X(self.db_root_lock):
@@ -262,14 +270,20 @@ class SourcePackage(object):
                 SourcePackageVersion(
                         self, version_number, create_locks=True, db_session=s)
 
+                self.dbo.versions_modified_time = time
+                self.dbo.versions_reassured_time = time
+                s.add(self.dbo)
+
                 # Transactionality
                 s.commit()
+
+                self.read_from_db()
 
                 # Create a new version object because the former one was bound
                 # to the former session (for transactionality).
                 return SourcePackageVersion(self, version_number)
 
-    def delete_version(self, version_number):
+    def delete_version(self, version_number, time = None):
         """
         Delete a version. This may raise (among others) an AttributeManuallyHeld.
         """
@@ -278,6 +292,9 @@ class SourcePackage(object):
 
         version_number = VersionNumber(version_number)
         self.ensure_write_intent()
+
+        if not time:
+            time = timezone.now()
 
         with lock_X(self.fs_root_lock):
             with lock_X(self.db_root_lock):
@@ -296,7 +313,21 @@ class SourcePackage(object):
                 # We'd tolerate that.
                 if v is not None:
                     s.delete(v)
+
+                    self.dbo.versions_modified_time = time
+                    self.dbo.versions_reassured_time = time
+                    s.add(self.dbo)
+
                     s.commit()
+
+                    self.read_from_db()
+
+    def get_versions_meta(self):
+        """
+        :returns: tuple(modified_time, reassured_time)
+        :rtype: tuple(datetime, datetime)
+        """
+        return (self.dbo.versions_modified_time, self.dbo.versions_reassured_time)
 
 
 class SourcePackageVersion(object):
@@ -339,23 +370,28 @@ class SourcePackageVersion(object):
 
         # Bind a DB object
         try:
-            s = database.conn.get_session() if not db_session else db_session
-            dbos = s.query(database.SourcePackage.SourcePackageVersion)\
-                    .filter_by(source_package = source_package.name,
-                            version_number = version_number).all()
-
-            if len(dbos) != 1:
-                raise NoSuchSourcePackageVersion(source_package.name, version_number)
-
-            dbo = dbos[0]
-
-            if not db_session:
-                s.expunge(dbo)
-
-            self.dbo = dbo
+            self.read_from_db(db_session)
 
         except:
             raise
+
+
+    # Peripheral methods
+    def read_from_db(self, db_session = None):
+        s = database.conn.get_session() if not db_session else db_session
+        dbos = s.query(database.SourcePackage.SourcePackageVersion)\
+                .filter_by(source_package = self.source_package.name,
+                        version_number = self.version_number).all()
+
+        if len(dbos) != 1:
+            raise NoSuchSourcePackageVersion(self.source_package.name, self.version_number)
+
+        dbo = dbos[0]
+
+        if not db_session:
+            s.expunge(dbo)
+
+        self.dbo = dbo
 
 
     # Attributes
@@ -364,6 +400,85 @@ class SourcePackageVersion(object):
         return self.dbo.creation_time
 
     # Installed files
+    def set_installed_files(self, files, time=None):
+        """
+        :param files: list(tuple(path, sha512sum)), where path is relative to the
+            install location but written as absolute path.
+        :type files: list(tuple(str, str))
+        """
+        self.source_package.ensure_write_intent()
+
+        if time is None:
+            time = timezone.now()
+
+        files = sorted(files)
+
+        with lock_X(self.db_root_lock):
+            s = database.get_session()
+
+            # Check for differences
+            fs = aliased(dbspkg.SourcePackageVersionFile)
+            dbfiles = s.query(fs.path, fs.sha512sum)\
+                    .filter(fs.source_package == self.source_package.name,
+                            fs.source_package_version_number == self.version_number)\
+                    .order_by(fs.path, fs.sha512sum)\
+                    .all()
+
+            different = len(files) != len(dbfiles)
+
+            if not different:
+                for i in range(len(files)):
+                    if files[i] != dbfiles[i]:
+                        different = True
+                        break
+
+            # Eventually update files
+            if different:
+                s.query(dbspkg.SourcePackageVersionFile)\
+                        .filter(dbspkg.SourcePackageVersionFile.source_package == self.source_package.name,
+                                dbspkg.SourcePackageVersionFile.source_package_version_number == self.version_number)\
+                        .delete()
+
+
+                for (p, sha512) in files:
+                    s.add(dbspkg.SourcePackageVersionFile(
+                        self.source_package.name,
+                        self.version_number,
+                        p,
+                        sha512))
+
+            # Update the reassured time
+            self.dbo.files_reassured_time = time
+
+            if different:
+                self.dbo.files_modified_time = time
+
+            s.add(self.dbo)
+            s.commit()
+
+            self.read_from_db()
+
+    def get_installed_files(self):
+        """
+        :returns: list(tuple(path, sha512sum))
+        :rtype: list(tuple(str, str))
+        """
+        s = database.get_session()
+
+        fs = aliased(dbspkg.SourcePackageVersionFile)
+        l = s.query(fs.path, fs.sha512sum)\
+                .filter(fs.source_package == self.source_package.name,
+                        fs.source_package_version_number == self.version_number)\
+                .all()
+
+        return l
+
+    def get_installed_files_meta(self):
+        """
+        :returns: tuple(modified_time, reassured_time)
+        :rtype: tuple(datetime, datetime)
+        """
+        return (self.dbo.files_modified_time, self.dbo.files_reassured_time)
 
     # Shared libraries
 

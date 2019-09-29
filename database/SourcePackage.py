@@ -1,4 +1,4 @@
-from sqlalchemy import Column, types, ForeignKey
+from sqlalchemy import Column, types, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.ext.declarative import declarative_base
 import timezone
 from VersionNumber import VersionNumberColumn
@@ -43,6 +43,10 @@ class SourcePackageVersion(Base):
     # General
     creation_time = Column(types.DateTime(timezone=True), nullable = False)
 
+    # Files
+    files_modified_time = Column(types.DateTime(timezone=True), nullable = False)
+    files_reassured_time = Column(types.DateTime(timezone=True), nullable = False)
+
     def initialize_fields(self, source_package, version_number, time = None):
         """
         Initialize a new object before storing it in the db.
@@ -54,13 +58,23 @@ class SourcePackageVersion(Base):
         self.version_number = version_number
         self.creation_time = time
 
+        self.files_modified_time = time
+        self.files_reassured_time = time
 
-class SourcePackackageVersion_StringAttributes(Attribute.StringAttribute):
-    __tablename__ = 'source_package__string_attribute'
+class SourcePackageVersionFile(Base):
+    __tablename__ = 'source_package_version_files'
 
-    source_package = Column(types.String,
-            ForeignKey('SourcePackage.name', ondelete = 'CASCADE', onupdate = 'CASCADE'),
-            primary_key = True)
-    version = Column(VersionNumberColumn,
-            ForeignKey('SourcePackage.version', ondelete = 'CASCADE', onupdate = 'CASCADE'),
-            primary_key = True)
+    source_package = Column(types.String, primary_key = True)
+    source_package_version_number = Column(VersionNumberColumn, primary_key = True)
+    path = Column(types.String, primary_key = True)
+    sha512sum = Column(types.String, primary_key = True)
+
+    __table_args__ = (ForeignKeyConstraint(
+        (source_package, source_package_version_number),
+        (SourcePackageVersion.source_package, SourcePackageVersion.version_number)), )
+
+    def __init__(self, source_package, version_number, path, sha512sum):
+        self.source_package = source_package
+        self.source_package_version_number = version_number
+        self.path = path
+        self.sha512sum = sha512sum
