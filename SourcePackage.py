@@ -1,4 +1,6 @@
+from Architecture import architectures
 from VersionNumber import VersionNumber
+from SharedLibraryTools import SharedLibrary
 from sqlalchemy.orm import aliased
 from tclm import lock_S, lock_Splus, lock_X
 from time import sleep
@@ -11,10 +13,13 @@ import tclm
 import timezone
 
 class SourcePackageList(object):
-    def __init__(self, create_locks = False):
+    def __init__(self, architecture, create_locks = False):
+        if architecture not in architectures.keys():
+            raise ValueError('Invalid architecture')
+
         # Define a few required locks
-        self.dbrlp = 'tslb_db.source_packages'
-        self.fsrlp = 'tslb_fs.packaging'
+        self.dbrlp = 'tslb_db.%s.source_packages' % architectures[architecture]
+        self.fsrlp = 'tslb_fs.%s.packaging' % architectures[architecture]
 
         self.db_root_lock = tclm.define_lock(self.dbrlp)
         self.fs_root_lock = tclm.define_lock(self.fsrlp)
@@ -27,31 +32,50 @@ class SourcePackageList(object):
             self.db_root_lock.release_X()
             self.fs_root_lock.release_X()
 
-    def list_source_packages(self):
+    def list_source_packages(self, architecture=None):
         """
         Returns an ordered list of the source packages' names.
+
+        :param architecture: If not None, the list of packages will be filtered
+            by the supplied architecture.
+        :type architecture: int or None
+        :returns: list(tuple(name, architecture))
+        :rtype: list(tuple(str, int))
         """
         with lock_S(self.db_root_lock):
-            sps = database.conn.get_session().query(database.SourcePackage.SourcePackage.name)\
-                        .order_by(database.SourcePackage.SourcePackage.name).all()
+            s = database.get_session()
+            sp = aliased(dbspkg.SourcePackage)
 
-            names = [ sp[0] for sp in sps ]
-            return names
+            if architecture:
+                if architecture not in architectures.keys():
+                    raise ValueError("Invalid architecture")
 
+                return s.query(sp.name, sp.architecture).order_by(sp.name, sp.architecture).all()
+            else:
+                return s.query(sp.name, sp.architecture)\
+                        .filter(sp.architecture == architecture)\
+                        .order_by(sp.name, sp.architecture).all()
 
-    def create_source_package(self, name):
+    def create_source_package(self, name, architecture):
+        """
+        :param architecture: One out of Architecture.architectures
+        :type architecture: int
+        """
+        if architecture not in architectures.keys():
+            raise ValueError("Invalid architecture")
+
         # Lock the source package list and the fs
         with lock_X(self.fs_root_lock):
             with lock_X(self.db_root_lock):
                 # Create the db tuple
-                s = database.conn.get_session()
+                s = database.get_session()
 
                 p = aliased(dbspkg.SourcePackage)
-                if s.query(p).filter(p.name == name).first():
-                    raise SourcePackageExists(name)
+                if s.query(p).filter(p.name == name, p.architecture == architecture).first():
+                    raise SourcePackageExists(name, architecture)
 
                 spkg = database.SourcePackage.SourcePackage()
-                spkg.initialize_fields(name)
+                spkg.initialize_fields(name, architecture)
 
                 s.add(spkg)
                 s.commit()
@@ -60,7 +84,7 @@ class SourcePackageList(object):
                 # Create fs location
 
                 # Create locks
-                spkg = SourcePackage(name, write_intent = True, create_locks = True)
+                spkg = SourcePackage(name, architecture, write_intent = True, create_locks = True)
                 return spkg
 
     def destroy_source_package(self, name):
@@ -68,8 +92,9 @@ class SourcePackageList(object):
         with lock_X(self.fs_root_lock):
             with lock_X(self.db_root_lock):
                 # Remove the db tuple(s)
-                s = database.conn.get_session()
-                spkg = s.query(database.SourcePackage.SourcePackage).filter_by(name=name).first()
+                s = database.get_session()
+                spkg = s.query(dbspkg.SourcePackage).\
+                        filter_by(name=name, architecture=architecture).first()
 
                 if spkg:
                     s.delete(spkg)
@@ -78,17 +103,18 @@ class SourcePackageList(object):
                 # Remove the fs location(s)
 
 class SourcePackage(object):
-    def __init__(self, name, write_intent = False, create_locks = False):
+    def __init__(self, name, architecture, write_intent = False, create_locks = False):
         """
         Initially, create_locks must be true for the first time the package was
         used. If write_intent is True, S+ locks are acquired initially.
         """
         self.name = name
+        self.architecture = architecture
         self.write_intent = write_intent
 
         # Define a few required locks
-        self.dbrlp = 'tslb_db.source_packages.%s' % self.name
-        self.fsrlp = 'tslb_fs.packaging.%s' % self.name
+        self.dbrlp = 'tslb_db.%s.source_packages.%s' % (architectures[self.architecture], self.name)
+        self.fsrlp = 'tslb_fs.%s.packaging.%s' % (architectures[self.architecture], self.name)
 
         self.db_root_lock = tclm.define_lock(self.dbrlp)
 
@@ -140,7 +166,7 @@ class SourcePackage(object):
     def ensure_write_intent(self):
         if not self.write_intent:
             # Abort to avoid deadlocks
-            raise MissingWriteIntent('create client version')
+            raise MissingWriteIntent
             # self.write_intent = True
 
             # self.fs_root_lock.acquire_Splus()
@@ -152,11 +178,11 @@ class SourcePackage(object):
     def read_from_db(self):
         s = database.conn.get_session()
         dbo = s.query(database.SourcePackage.SourcePackage)\
-                .filter_by(name=self.name)\
+                .filter_by(name=self.name, architecture=self.architecture)\
                 .first()
 
         if dbo is None:
-            raise NoSuchSourcePackage(self.name)
+            raise NoSuchSourcePackage(self.name, self.architecture)
 
         s.expunge(dbo)
         self.dbo = dbo
@@ -171,7 +197,8 @@ class SourcePackage(object):
     def list_version_numbers(self):
         s = database.conn.get_session()
         vns = s.query(dbspkg.SourcePackageVersion.version_number)\
-                .filter(dbspkg.SourcePackageVersion.source_package == self.name)\
+                .filter(dbspkg.SourcePackageVersion.source_package == self.name,
+                        dbspkg.SourcePackageVersion.architecture == self.architecture)\
                 .all()
 
         return [ vn[0] for vn in vns ]
@@ -189,14 +216,16 @@ class SourcePackage(object):
         s = database.get_session()
         v = s.query(pv1.version_number)\
                 .filter(pv1.source_package == self.name,
+                        pv1.architecture == self.architecture,
                         ~s.query(pv2)\
                                 .filter(pv2.source_package == pv1.source_package,
+                                    pv2.architecture == pv1.architecture,
                                     pv2.version_number > pv1.version_number)\
                                 .exists())\
                 .first()
 
         if not v:
-            raise NoSuchSourcePackageVersion(self.name, "latest")
+            raise NoSuchSourcePackageVersion(self.name, self.architecture, "latest")
 
         return SourcePackageVersion(self.name, v[0])
 
@@ -257,15 +286,16 @@ class SourcePackage(object):
                 pvs = aliased(dbspkg.SourcePackageVersion)
                 if s.query(pvs)\
                         .filter(pvs.source_package == self.name,
+                                pvs.architecture == self.architecture,
                                 pvs.version_number == version_number)\
                         .first():
-                    raise SourcePackageVersionExists(self.name, version_number)
+                    raise SourcePackageVersionExists(self.name, self.architecture, version_number)
 
                 # Create the fs locations
 
                 # Add the db tuple
                 pv = dbspkg.SourcePackageVersion()
-                pv.initialize_fields(self.name, version_number)
+                pv.initialize_fields(self.name, self.architecture, version_number)
                 s.add(pv)
 
                 # Create a version object to create locks
@@ -308,6 +338,7 @@ class SourcePackage(object):
                 pv = aliased(dbspkg.SourcePackageVersion)
                 v = s.query(pv)\
                         .filter(pv.source_package == self.name,
+                                pv.architecture == self.architecture,
                                 pv.version_number == version_number)\
                         .first()
 
@@ -384,10 +415,12 @@ class SourcePackageVersion(object):
         s = database.conn.get_session() if not db_session else db_session
         dbos = s.query(database.SourcePackage.SourcePackageVersion)\
                 .filter_by(source_package = self.source_package.name,
+                        architectures = self.source_package.architecture,
                         version_number = self.version_number).all()
 
         if len(dbos) != 1:
-            raise NoSuchSourcePackageVersion(self.source_package.name, self.version_number)
+            raise NoSuchSourcePackageVersion(self.source_package.name,
+                    self.source_package.architecture, self.version_number)
 
         dbo = dbos[0]
 
@@ -420,10 +453,11 @@ class SourcePackageVersion(object):
             s = database.get_session()
 
             # Check for differences
-            fs = aliased(dbspkg.SourcePackageVersionFile)
+            fs = aliased(dbspkg.SourcePackageVersionInstalledFile)
             dbfiles = s.query(fs.path, fs.sha512sum)\
                     .filter(fs.source_package == self.source_package.name,
-                            fs.source_package_version_number == self.version_number)\
+                            fs.architecture == self.source_package.architecture,
+                            fs.version_number == self.version_number)\
                     .order_by(fs.path, fs.sha512sum)\
                     .all()
 
@@ -437,16 +471,20 @@ class SourcePackageVersion(object):
 
             # Eventually update files
             if different:
-                s.query(dbspkg.SourcePackageVersionFile)\
-                        .filter(dbspkg.SourcePackageVersionFile.source_package == self.source_package.name,
-                                dbspkg.SourcePackageVersionFile.source_package_version_number ==
+                s.query(dbspkg.SourcePackageVersionInstalledFile)\
+                        .filter(dbspkg.SourcePackageVersionInstalledFile.source_package ==
+                                    self.source_package.name,
+                                dbspkg.SourcePackageVersionInstalledFile.architecture ==
+                                    self.source_package.architecture,
+                                dbspkg.SourcePackageVersionInstalledFile.version_number ==
                                     self.version_number)\
                         .delete()
 
 
                 for (p, sha512) in files:
-                    s.add(dbspkg.SourcePackageVersionFile(
+                    s.add(dbspkg.SourcePackageVersionInstalledFile(
                         self.source_package.name,
+                        self.source_package.architecture,
                         self.version_number,
                         p,
                         sha512))
@@ -469,10 +507,11 @@ class SourcePackageVersion(object):
         """
         s = database.get_session()
 
-        fs = aliased(dbspkg.SourcePackageVersionFile)
+        fs = aliased(dbspkg.SourcePackageVersionInstalledFile)
         l = s.query(fs.path, fs.sha512sum)\
                 .filter(fs.source_package == self.source_package.name,
-                        fs.source_package_version_number == self.version_number)\
+                        fs.architecture == self.source_package.architecture,
+                        fs.version_number == self.version_number)\
                 .all()
 
         return l
@@ -485,6 +524,72 @@ class SourcePackageVersion(object):
         return (self.dbo.files_modified_time, self.dbo.files_reassured_time)
 
     # Shared libraries
+    def get_shared_libraries(self):
+        """
+        :returns: list(shared libraries)
+        :rtype: list(SharedLibraryTools.SharedLibrary)
+        """
+        libs = []
+
+        s = database.get_session()
+
+        ls = aliased(dbspkg.SourcePackageSharedLibrary)
+        dblibs = s.query(ls)\
+                .filter(ls.source_package == self.source_package.name,
+                        ls.architecture == self.source_package.architecture,
+                        ls.source_package_version_number == self.version_number)\
+                .all()
+
+        for dblib in dblibs:
+            fs = aliased(dbspkg.SourcePackageSharedLibraryFile)
+            files = s.query(fs.name)\
+                    .filter(fs.id == dblib.id)\
+                    .all()
+
+            files = [ e[0] for e in files ]
+
+            libs.append(SharedLibrary(dblib, files))
+
+        return libs
+
+    def set_shared_libraries(self, libs):
+        """
+        :param libs: list(shared libraries)
+        :rtype: list(SharedLibraryTools.SharedLibrary)
+        """
+        with lock_X(self.db_root_lock):
+            s = database.get_session()
+            s.begin()
+
+            # Delete all currently stored shared libraries
+            sl = aliased(dbspkg.SourcePackageSharedLibrary)
+            s.query(sl)\
+                    .filter(sl.source_package == self.source_package.name,
+                            sl.architecture == self.source_package.architecture,
+                            sl.source_package_version_number == self.version_number)\
+                    .delete()
+
+            # Store the new ones
+            for l in libs:
+                lib = dbspkg.SourcePackageSharedLibrary(
+                    self.source_package.name,
+                    self.source_package.architecture,
+                    self.version_number,
+                    l)
+
+                s.add(lib)
+
+                # Make sure we have an id
+                s.flush()
+                id = s.id
+
+                # Insert files
+                s.execute(dbspkg.SourcePackageSharedLibraryFile.__table__.insert(
+                    [
+                        { 'id': id, 'path': f } for f in l.files
+                    ]))
+
+            s.commit()
 
     # Binary packages
     def list_binary_packages(self):
@@ -509,6 +614,7 @@ class SourcePackageVersion(object):
         pa = aliased(dbspkg.SourcePackageVersionAttribute)
         l = s.query(pa.key)\
                 .filter(pa.source_package == self.source_package.name,
+                        pa.architecture == self.source_package.architecture,
                         pa.version_number == self.version_number)\
                 .all()
 
@@ -524,6 +630,7 @@ class SourcePackageVersion(object):
         pa = aliased(dbspkg.SourcePackageVersionAttribute)
         return len(s.query(pa.key)\
                 .filter(pa.source_package == self.source_package.name,
+                        pa.architecture == self.source_package.architecture,
                         pa.version_number == self.version_number,
                         pa.key == key)\
                 .all()) != 0
@@ -540,13 +647,15 @@ class SourcePackageVersion(object):
         pa = aliased(dbspkg.SourcePackageVersionAttribute)
         v = s.query(pa.value)\
                 .filter(pa.source_package == self.source_package.name,
+                        pa.architecture == self.source_package.architecture,
                         pa.version_number == self.version_number,
                         pa.key == key)\
                 .all()
 
         if len(v) == 0:
-            raise NoSuchAttribute("Source package version `%s@%s'" %
-                    (self.source_package.name, self.version_number), key)
+            raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                    (self.source_package.name, self.source_package.architecture,
+                        self.version_number), key)
 
         v = v[0][0]
 
@@ -571,13 +680,15 @@ class SourcePackageVersion(object):
         pa = aliased(dbspkg.SourcePackageVersionAttribute)
         v = s.query(pa.modified_time, pa.reassured_time, pa.manual_hold_time)\
                 .filter(pa.source_package == self.source_package.name,
+                        pa.architecture == self.arouce_package.architecture,
                         pa.version_number == self.version_number,
                         pa.key == key)\
                 .all()
 
         if len(v) == 0:
-            raise NoSuchAttribute("Source package version `%s@%s'" %
-                    (self.source_package.name, self.version_number), key)
+            raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                    (self.source_package.name, self.soure_package.architecture,
+                        self.version_number), key)
 
         return v[0]
 
@@ -590,13 +701,15 @@ class SourcePackageVersion(object):
             pa = aliased(dbspkg.SourcePackageVersionAttribute)
             v = s.query(pa)\
                     .filter(pa.source_package == self.source_package.name,
+                            pa.architecture == self.source_package.architecture,
                             pa.version_number == self.version_number,
                             pa.key == key)\
                     .all()
 
             if len(v) == 0:
-                raise NoSuchAttribute("Source package version `%s@%s'" %
-                        (self.source_package.name, self.version_number), key)
+                raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                        (self.source_package.name, self.source_package.architecture,
+                            self.version_number), key)
 
             v = v[0]
 
@@ -620,13 +733,15 @@ class SourcePackageVersion(object):
         pa = aliased(dbspkg.SourcePackageVersionAttribute)
         v = s.query(pa.manual_hold_time)\
                 .filter(pa.source_package == self.source_package.name,
+                        pa.architecture == self.source_package.architecture,
                         pa.version_number == self.version_number,
                         pa.key == key)\
                 .all()
 
         if len(v) == 0:
-            raise NoSuchAttribute("Source package version `%s@%s'" %
-                    (self.source_package.name, self.version_number), key)
+            raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                    (self.source_package.name, self.source_package.architecture,
+                        self.version_number), key)
 
         return v[0][0]
 
@@ -657,6 +772,7 @@ class SourcePackageVersion(object):
             pa = aliased(dbspkg.SourcePackageVersionAttribute)
             a = s.query(pa)\
                     .filter(pa.source_package == self.source_package.name,
+                            pa.architecture == self.source_package.architecture,
                             pa.version_number == self.version_number,
                             pa.key == key)\
                     .all()
@@ -665,6 +781,7 @@ class SourcePackageVersion(object):
                 # Create a new attribute tuple
                 s.add(dbspkg.SourcePackageVersionAttribute(
                         self.source_package.name,
+                        self.source_package.architecture,
                         self.version_number,
                         key, o, time))
             else:
@@ -691,13 +808,15 @@ class SourcePackageVersion(object):
             pa = aliased(dbspkg.SourcePackageVersionAttribute)
             a = s.query(pa)\
                     .filter(pa.source_package == self.source_package.name,
+                            pa.architecture == self.source_package.architecture,
                             pa.version_number == self.version_number,
                             pa.key == key)\
                     .all()
 
             if len(a) == 0:
-                raise NoSuchAttribute("Source package version `%s@%s'" %
-                        (self.source_package.name, self.version_number), key)
+                raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                        (self.source_package.name, self.source_package.architecture,
+                            self.version_number), key)
 
             a = a[0]
 
@@ -711,28 +830,34 @@ class SourcePackageVersion(object):
 
 # Some exceptions for our pleasure.
 class NoSuchSourcePackage(Exception):
-    def __init__(self, name):
-        super().__init__("No such source package: `%s'" % name)
+    def __init__(self, name, architecture):
+        super().__init__("No such source package: `%s@%s'" % (name, architecture))
 
 class NoSuchSourcePackageVersion(Exception):
-    def __init__(self, name, version_number):
-        super().__init__("No such source package version: `%s@%s'" % (name, version_number))
+    def __init__(self, name, architecture, version_number):
+        super().__init__("No such source package version: `%s@%s'" % (name, architecture, version_number))
 
 class MissingWriteIntent(Exception):
     def __init__(self, reference):
-        super().__init__("A write was requested but no write intent specified before. I abort to avoid deadlocks.")
+        if reference:
+            super().__init__(
+                    "A write was requested but no write intent specified before. I abort to avoid deadlocks. (%s)" %
+                    reference)
+        else:
+            super().__init__(
+                    "A write was requested but no write intent specified before. I abort to avoid deadlocks.")
 
 class AttributeManuallyHeld(Exception):
     def __init__(self, attr_name):
         super().__init__("Attribute %s was manually held." % attr_name)
 
 class SourcePackageExists(Exception):
-    def __init__(self, name):
-        super().__init__("Source package `%s' exists already." % name)
+    def __init__(self, name, architecture):
+        super().__init__("Source package `%s@%s' exists already." % (name, architecture))
 
 class SourcePackageVersionExists(Exception):
-    def __init__(self, name, version_number):
-        super().__init__("Source package version: `%s@%s'" % (name, version_number))
+    def __init__(self, name, architecture, version_number):
+        super().__init__("Source package version: `%s@%s:%s' exists already." % (name, architecture, version_number))
 
 class NoSuchAttribute(Exception):
     def __init__(self, obj, key):

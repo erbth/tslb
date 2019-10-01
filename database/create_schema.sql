@@ -2,7 +2,10 @@ BEGIN;
 
 -- Tables
 create table source_packages (
-	"name" varchar primary key,
+	"name" varchar,
+	"architecture" integer,
+	primary key ("name", "architecture"),
+
 	"creation_time" timestamp with time zone not null,
 	"versions_modified_time" timestamp with time zone not null,
 	"versions_reassured_time" timestamp with time zone not null,
@@ -10,9 +13,12 @@ create table source_packages (
 );
 
 create table source_package_versions (
-	"source_package" varchar references source_packages on update cascade on delete cascade,
+	"source_package" varchar,
+	"architecture" integer,
+	foreign key ("source_package", "architecture") references source_packages("name", "architecture")
+
 	"version_number" integer[],
-	primary key("source_package", "version_number"),
+	primary key("source_package", "architecture", "version_number"),
 
 	"creation_time" timestamp with time zone not null,
 
@@ -20,24 +26,52 @@ create table source_package_versions (
 	files_reassured_time timestamp with time zone not null
 );
 
-create table source_package_version_files (
+create table source_package_version_installed_files (
 	source_package varchar,
-	source_package_version_number integer[],
-	foreign key (source_package, source_package_version_number)
-		references source_package_versions(source_package, version_number)
+	"architecture" integer,
+	version_number integer[],
+	foreign key (source_package, "architecture", version_number)
+		references source_package_versions(source_package, "architecture", version_number)
 		on update cascade on delete cascade,
 
 	"path" varchar not null,
 	"sha512sum" varchar not null,
 
-	primary key(source_package, source_package_version_number, "path")
+	primary key(source_package, "architecture", version_number, "path")
+);
+
+create table source_package_shared_libraries (
+	source_package varchar,
+	"architecture" integer,
+	source_package_version_number integer[],
+	name varchar,
+	version_number integer[] not null,
+	abi_version_number integer[],
+	soname varchar,
+	"id" bigserial not null unique,
+
+	foreign key (source_package, "architecture", source_package_version_number)
+		references source_package_versions(source_package, "architecture", version_number)
+		on update cascade on delete cascade,
+
+	primary key (source_package, "architecture", source_package_version_number,
+		name, abi_version_number)
+);
+
+create table source_package_shared_library_files (
+	source_package_id = biginteger
+		references source_package_shared_libraries("id") on update cascade on delete cascade,
+	"path" = varchar,
+
+	primary key(source_package_id, "path")
 );
 
 create table source_package_version_attributes (
 	source_package varchar,
+	architecture integer,
 	version_number integer[],
-	foreign key (source_package, version_number)
-		references source_package_versions(source_package, version_number)
+	foreign key (source_package, architecture, version_number)
+		references source_package_versions(source_package, architecture, version_number)
 		on update cascade on delete cascade,
 
 	modified_time timestamp with time zone not null,
@@ -47,7 +81,7 @@ create table source_package_version_attributes (
 	"key" varchar,
 	"value" varchar,
 
-	primary key (source_package, version_number, "key")
+	primary key (source_package, architecture, version_number, "key")
 );
 
 COMMIT;
