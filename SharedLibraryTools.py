@@ -1,7 +1,7 @@
 import re
 import os
 from VersionNumber import VersionNumber
-import Exceptions as es
+import CommonExceptions as ces
 import subprocess
 from database import SourcePackage as dbspkg
 
@@ -85,7 +85,7 @@ class SharedLibrary(object):
                 break
 
         if not so_named_file:
-            raise es.AnalyzeError ("Shared library %s seems to have no SONAME'd file." % self.name)
+            raise ces.AnalyzeError ("Shared library %s seems to have no SONAME'd file." % self.name)
 
         # Link chain from SONAME'd file to a regular file
         link_chain = set()
@@ -149,12 +149,12 @@ class SharedLibrary(object):
             out, err = p.communicate()
 
             if p.returncode != 0:
-                raise es.CommandFailed(' '.join(cmd))
+                raise ces.CommandFailed(' '.join(cmd))
 
             match = re.search(r'SONAME\s+(' + self.name + '\.so(\.(\d+(\.\d+)*))?)', str(out))
 
             if not match:
-                raise es.AnalyzeError("'%s' has no SONAME" % self.name)
+                raise ces.AnalyzeError("'%s' has no SONAME" % self.name)
 
             self.soname = match.group(1)
             self.abi_version_number = VersionNumber(match.group(3)) if match.group(3) != '' else None

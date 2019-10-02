@@ -17,13 +17,20 @@ if not host:
 
 trace_enabled = parse_utils.is_yes(settings['TCLM'].get('trace'))
 
-tclmc = tclm_python_client.create_tclmc(host)
+tclmc = None
+
+def ensure_connection():
+    global tclmc
+
+    if tclmc is None:
+        tclmc = tclm_python_client.create_tclmc(host)
 
 # A thread local process
 thlocal = threading.local()
 
 def get_local_p():
     if not getattr(thlocal, 'p', None):
+        ensure_connection()
         thlocal.p = tclmc.register_process()
 
     return thlocal.p
@@ -31,6 +38,7 @@ def get_local_p():
 # A wrapper around the locks to use the thread local process
 class lock(object):
     def __init__(self, path):
+        ensure_connection()
         self.l = tclmc.define_lock(path)
 
     def create(self, acquire_X, p=None):
@@ -104,6 +112,7 @@ def define_lock(path):
     return lock(path)
 
 def register_process():
+    ensure_connection()
     return tclmc.register_process()
 
 # Context managers for scoped locking

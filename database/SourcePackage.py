@@ -38,7 +38,7 @@ class SourcePackageVersion(Base):
     __tablename__ = 'source_package_versions'
 
     source_package = Column(types.String, primary_key = True)
-    architecture = Column(types.Integer, primar_key=True)
+    architecture = Column(types.Integer, primary_key=True)
     __table_args__ = (ForeignKeyConstraint(
         (source_package, architecture),
         (SourcePackage.name, SourcePackage.architecture),
@@ -50,9 +50,13 @@ class SourcePackageVersion(Base):
     # General
     creation_time = Column(types.DateTime(timezone=True), nullable = False)
 
-    # Files
-    files_modified_time = Column(types.DateTime(timezone=True), nullable = False)
-    files_reassured_time = Column(types.DateTime(timezone=True), nullable = False)
+    # Installed files
+    installed_files_modified_time = Column(types.DateTime(timezone=True), nullable = False)
+    installed_files_reassured_time = Column(types.DateTime(timezone=True), nullable = False)
+
+    # Current binary packages
+    current_binary_packages_modified_time = Column(types.DateTime(timezone=True), nullable=False)
+    current_binary_packages_reassured_time = Column(types.DateTime(timezone=True), nullable=False)
 
     def initialize_fields(self, source_package, architecture, version_number, time = None):
         """
@@ -66,8 +70,11 @@ class SourcePackageVersion(Base):
         self.version_number = version_number
         self.creation_time = time
 
-        self.files_modified_time = time
-        self.files_reassured_time = time
+        self.installed_files_modified_time = time
+        self.installed_files_reassured_time = time
+
+        self.current_binary_packages_modified_time = time
+        self.current_binary_packages_reassured_time = time
 
 class SourcePackageVersionInstalledFile(Base):
     __tablename__ = 'source_package_version_installed_files'
@@ -107,7 +114,7 @@ class SourcePackageSharedLibrary(Base):
     # I don't want too large foreign keys ...
     id = Column(types.BigInteger, unique=True, nullable = False)
 
-    __table_args__ = (ForeignKeyConstrains(
+    __table_args__ = (ForeignKeyConstraint(
         (source_package, architecture, source_package_version_number),
         (SourcePackageVersion.source_package, SourcePackageVersion.architecture,
             SourcePackageVersion.version_number),
@@ -133,11 +140,33 @@ class SourcePackageSharedLibaryFile(Base):
         ForeignKey(SourcePackageSharedLibrary.id, onupdate='CASCADE', ondelete='CASCADE'),
         primary_key = True)
 
-    path = Column(types.String, primary_key)
+    path = Column(types.String, primary_key=True)
 
     def __init__(self, source_package_id, path):
         self.source_package_id = source_package_id
         self.path = path
+
+# Current binary packages
+class SourcePackageVersionCurrentBinaryPackage(Base):
+    __tablename__ = 'source_package_version_current_binary_packages'
+
+    source_package = Column(types.String, primary_key = True)
+    architecture = Column(types.Integer, primary_key = True)
+    version_number = Column(VersionNumberColumn, primary_key = True)
+
+    name = Column(types.String, primary_key = True)
+
+    __table_args__ = (ForeignKeyConstraint(
+        (source_package, architecture, version_number),
+        (SourcePackageVersion.source_package, SourcePackageVersion.architecture,
+            SourcePackageVersion.version_number),
+        onupdate='CASCADE', ondelete='CASCADE'), )
+
+    def __init__(self, source_package, architecture, version_number, name):
+        self.source_package = source_package
+        self.architecture = architecture
+        self.version_number = version_number
+        self.name = name
 
 # KV-like attributes
 class SourcePackageVersionAttribute(Base):
@@ -160,7 +189,10 @@ class SourcePackageVersionAttribute(Base):
             SourcePackageVersion.version_number),
         onupdate='CASCADE', ondelete='CASCADE'), )
 
-    def __init__(self, source_package, architecture, version_number, key, value, time):
+    def __init__(self, source_package, architecture, version_number, key, value, time=None):
+        if time is None:
+            time = timezone.now()
+
         self.source_package = source_package
         self.architecture = architecture
         self.version_number = version_number
