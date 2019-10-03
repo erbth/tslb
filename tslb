@@ -1,14 +1,16 @@
 #!/usr/bin/python3
 
-from Console import Color
-
 """
 A General-purpose UI to perform simple tasks.
 """
 
+from Architecture import architectures_reverse
+from Console import Color
 import argparse
 import utils
-from SourcePackage import SourcePackageList
+from SourcePackage import SourcePackageList, SourcePackage
+from BuildPipeline import BuildPipeline
+import BuildPipeline as bpp
 
 def initially_create_locks(args):
     print (Color.YELLOW + "Creating locks ..." + Color.NORMAL)
@@ -22,6 +24,19 @@ def list_source_packages(args):
     for name in SourcePackageList().get_source_packages():
         print ("%s" % name)
 
+def build_single_package(spname, sparch, spversion):
+    sp = SourcePackage(spname, sparch, write_intent=True)
+    spv = sp.get_version(spversion)
+    bp = BuildPipeline()
+
+    if bp.build_source_package_version(spv):
+        print(Color.GREEN + "Completed successfully." + Color.NORMAL)
+    else:
+        print(Color.RED + "FAILED." + Color.NORMAL)
+
+def sync_buildpipeline_stages(args):
+    bpp.sync_stages_with_db()
+
 def main():
     parser = argparse.ArgumentParser(description=
             "A General-purpose UI to perform simple tasks."
@@ -33,6 +48,13 @@ def main():
     parser_icl = subparsers.add_parser('initially-create-locks', help='Initially create locks at the tclm.')
     parser_lsps = subparsers.add_parser('list-source-packages', help='List all source packages.')
 
+    parser_bsp = subparsers.add_parser('build-single-package', help='Build a single source package\'s version.')
+    parser_bsp.add_argument('spname')
+    parser_bsp.add_argument('sparch')
+    parser_bsp.add_argument('spversion')
+
+    parser_sbps = subparsers.add_parser('sync-buildpipeline-stages', help='Sync the buildpipeline stages with the db.')
+
     args = parser.parse_args()
 
     # Different commands
@@ -40,6 +62,10 @@ def main():
         initially_create_locks(args)
     elif args.command == 'list-source-packages':
         list_source_packages(args)
+    elif args.command == 'build-single-package':
+        build_single_package(args.spname, architectures_reverse[args.sparch], args.spversion)
+    elif args.command == 'sync-buildpipeline-stages':
+        sync_buildpipeline_stages(args)
 
 if __name__ == '__main__':
     main()

@@ -40,28 +40,28 @@ class Color(object):
         return Color.print_color(Color.WHITE, s, **kwargs)
 
 
-def print_status_box(text=""):
-    sys.stdout.write(Color.CYAN + "[      ] " + Color.NORMAL + text)
-    sys.stdout.flush()
+def print_status_box(text="", file=sys.stdout):
+    file.write(Color.CYAN + "[      ] " + Color.NORMAL + text)
+    file.flush()
 
-def update_status_box(ok):
-    sys.stdout.write('\r' + Color.CYAN + '[')
+def update_status_box(ok, file=sys.stdout):
+    file.write('\r' + Color.CYAN + '[')
     
     if ok:
-        print(Color.GREEN + '  OK  ' + Color.NORMAL)
+        print(Color.GREEN + '  OK  ' + Color.NORMAL, file=file)
     else:
-        print(Color.RED + 'failed' + Color.NORMAL)
+        print(Color.RED + 'failed' + Color.NORMAL, file=file)
 
-def update_status_box_percent(v, ref):
+def update_status_box_percent(v, ref, file=sys.stdout):
     p = int(float(v) / float(ref) * 100.)
     p = 0 if p < 0 else p
     p = 100 if p > 100 else p
 
-    sys.stdout.write('\r' + Color.CYAN + '[' +
+    file.write('\r' + Color.CYAN + '[' +
             Color.MAGENTA + '{:4d}%'.format(p) + Color.NORMAL)
 
-    sys.stdout.flush()
+    file.flush()
 
-def print_horizontal_bar():
+def print_horizontal_bar(file=sys.stdout):
     c, r = shutil.get_terminal_size((80, 25))
-    print(c * '-')
+    print(c * '-', file=sys.stdout)

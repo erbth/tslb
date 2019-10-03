@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import threading
 import sqlalchemy
 import sqlalchemy.orm
@@ -36,3 +37,15 @@ class conn(object):
 
 def get_session():
     return conn.get_session()
+
+@contextmanager
+def session_scope():
+    s = get_session()
+    try:
+        yield s
+        s.commit()
+    except:
+        s.rollback()
+        raise
+    finally:
+        s.close()

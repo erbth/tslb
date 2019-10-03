@@ -9,6 +9,7 @@ import base64
 import database as db
 import database.BinaryPackage as dbbpkg
 import database.SourcePackage as dbspkg
+import os
 import pickle
 import pytz
 import tclm
@@ -67,6 +68,10 @@ class BinaryPackage(object):
 
         # Bind to the corresponding db tuple
         self.read_from_db(db_session)
+
+        # Fs location
+        self.fs_base = os.path.join(self.source_package_version.fs_binary_packages,
+                str(self.version_number))
 
     # Peripheral methods
     def read_from_db(self, db_session = None):

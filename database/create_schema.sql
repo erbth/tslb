@@ -153,4 +153,29 @@ create table binary_package_attributes (
 	primary key (binary_package, "architecture", version_number, "key")
 );
 
+-- The build pipeline
+create table build_pipeline_stages (
+	name varchar primary key
+);
+
+create table build_pipeline_stage_events (
+	stage varchar references build_pipeline_stages,
+	time timestamp with time zone,
+
+	source_package varchar,
+	"architecture" integer,
+	version_number integer[],
+	foreign key (source_package, "architecture", version_number) references
+		source_package_versions (source_package, "architecture", version_number)
+		on update cascade on delete cascade,
+
+	status integer not null,
+	output varchar,
+
+	snapshot_path varchar,
+	snapshot_name varchar,
+
+	primary key (stage, time, source_package, "architecture", version_number)
+);
+
 COMMIT;

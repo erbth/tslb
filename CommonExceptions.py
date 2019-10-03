@@ -45,8 +45,11 @@ class SourceArchiveMissing(Exception):
         super().__init__("Source archive '%s' of package '%s' missing." % (pkg_name, archive_name))
 
 class CommandFailed(Exception):
-    def __init__(self, command):
-        super().__init__("Command '%s' failed" % command)
+    def __init__(self, command, code=None):
+        if code is not None:
+            super().__init__("Command `%s' failed with exit code %s." % (command, code))
+        else:
+            super().__init__("Command `%s' failed." % command)
 
 class InvalidParameter(Exception):
     def __init__(self, function, parameter):
