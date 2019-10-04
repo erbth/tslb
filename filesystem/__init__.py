@@ -5,6 +5,12 @@ easier. It also creates an abstraction layer for i.e. snapshot management.
 
 import settings
 
+# Some exceptions - They must be ontop to be importable by modules imported
+# down this module (package).
+class NoSuchSnapshot(Exception):
+    def __init__(self, path, name):
+        super().__init__("No such snapshot: `%s' of `%s'" % (name, path))
+
 # Check settings
 if 'Filesystem' not in settings:
     raise Exception('Filesystems section missing in TSLB config file.')
@@ -79,8 +85,8 @@ def mount():
     """
     fs.mount()
 
-def umount():
+def unmount():
     """
     Unmount the filesystem if applicable, otherwise do nothing.
     """
-    fs.umount()
+    fs.unmount()

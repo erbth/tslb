@@ -5,12 +5,14 @@ A General-purpose UI to perform simple tasks.
 """
 
 from Architecture import architectures_reverse
-from Console import Color
-import argparse
-import utils
-from SourcePackage import SourcePackageList, SourcePackage
 from BuildPipeline import BuildPipeline
+from Console import Color
+import Console
+from SourcePackage import SourcePackageList, SourcePackage
 import BuildPipeline as bpp
+import argparse
+import filesystem as fs
+import utils
 
 def initially_create_locks(args):
     print (Color.YELLOW + "Creating locks ..." + Color.NORMAL)
@@ -37,6 +39,28 @@ def build_single_package(spname, sparch, spversion):
 def sync_buildpipeline_stages(args):
     bpp.sync_stages_with_db()
 
+def mount(args):
+    Console.print_status_box('Mounting filesystem')
+
+    try:
+        fs.mount()
+    except:
+        Console.update_status_box(False)
+        raise
+    else:
+        Console.update_status_box(True)
+
+def unmount(args):
+    Console.print_status_box('Unmounting filesystem')
+
+    try:
+        fs.unmount()
+    except:
+        Console.update_status_box(False)
+        raise
+    else:
+        Console.update_status_box(True)
+
 def main():
     parser = argparse.ArgumentParser(description=
             "A General-purpose UI to perform simple tasks."
@@ -54,6 +78,8 @@ def main():
     parser_bsp.add_argument('spversion')
 
     parser_sbps = subparsers.add_parser('sync-buildpipeline-stages', help='Sync the buildpipeline stages with the db.')
+    parser_mount = subparsers.add_parser('mount', help='Mount the filesystem.')
+    parser_unmount = subparsers.add_parser('unmount', help='Unmount the filesystem.')
 
     args = parser.parse_args()
 
@@ -66,6 +92,10 @@ def main():
         build_single_package(args.spname, architectures_reverse[args.sparch], args.spversion)
     elif args.command == 'sync-buildpipeline-stages':
         sync_buildpipeline_stages(args)
+    elif args.command == 'mount':
+        mount(args)
+    elif args.command == 'unmount':
+        unmount(args)
 
 if __name__ == '__main__':
     main()

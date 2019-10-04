@@ -5,6 +5,13 @@ import CommonExceptions as es
 from . import fs
 
 def copy_from_base(base_dir, src_path, dst_dir):
+    """
+    Copies base_dir/src_path to dst_dir/src_path
+
+    :param base_dir:
+    :param src_path:
+    :param dst_dir:
+    """
     path_components = []
 
     while src_path and src_path != base_dir:
@@ -100,13 +107,21 @@ def mkdir_p(path, mode, base="/"):
 def rm_r(path):
     """
     Delete a directory and all its content. If it does not exist, raise an
-    exception.
+    exception. If the directory lies on cephfs and has snapshots, these are
+    deleted, too.
     """
     if os.path.isdir(path):
         # Delete content
         for e in os.listdir(path):
             if e != '.' and e != '..':
                 rm_r(os.path.join(path, e))
+
+        # Delete cephfs snapshots
+        snappath = os.path.join(path, '.snap')
+        if os.path.isdir(snappath):
+            for r in os.listdir(snappath):
+                if r != '.' and r != '..' and r[0] != '_':
+                    os.rmdir(os.path.join(snappath, r))
 
         # Delete directory
         os.rmdir(path)
@@ -129,7 +144,9 @@ def clean_directory(path):
     """
     Remove the given directory's content, but not the directory itself. Hence
     it's like rm_r but without removing the base directory and throwing an
-    exception if path is not a directory.
+    exception if path is not a directory. If the directory lies on cephfs and
+    has snapshots, these won't be deleted (that's different to what rm_r does).
+    However the snapshots of children are deleted.
     """
     for e in os.listdir(path):
         if e != '.' and e != '..':
@@ -227,14 +244,14 @@ class LinkChunk(object):
     def __str__(self):
         return str(self.links)
 
-def make_snapshot(self, path, name):
+def make_snapshot(path, name):
     return fs.make_snapshot(path, name)
 
-def delete_snapshot(self, path, name):
+def delete_snapshot(path, name):
     return fs.delete_snapshot(path, name)
 
-def list_snapshots(self, path):
+def list_snapshots(path):
     return fs.list_snapshots(path)
 
-def restore_snapshot(self, path, name):
+def restore_snapshot(path, name):
     return fs.restore_snapshot(path, name)

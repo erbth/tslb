@@ -12,6 +12,7 @@ import base64
 import database
 import database.BinaryPackage as dbbpkg
 import database.SourcePackage as dbspkg
+import filesystem as fs
 import os
 import pickle
 import tclm
@@ -21,6 +22,8 @@ class SourcePackageList(object):
     def __init__(self, architecture, create_locks = False):
         if architecture not in architectures.keys():
             raise ValueError('Invalid architecture')
+
+        self.architecture = architecture
 
         # Define a few required locks
         self.dbrlp = 'tslb_db.%s.source_packages' % architectures[architecture]
@@ -82,8 +85,7 @@ class SourcePackageList(object):
                     del spkg
 
                     # Create fs location
-                    root = os.path.join(fs.root, architectures[self.architecture])
-                    fs_base = os.path.join(root, 'packaging', name)
+                    fs_base = os.path.join(fs.root, 'packaging', name)
 
                     # Transactionality
                     try:
@@ -121,7 +123,7 @@ class SourcePackageList(object):
                     s.commit()
 
                 # Remove the fs location(s)
-                fops.rm_rf (os.path.join(root, 'packaging', name), 0o755)
+                fops.rm_rf (os.path.join(fs.root, 'packaging', name))
 
 class SourcePackage(object):
     def __init__(self, name, architecture, write_intent = False, create_locks = False, db_session=None):
@@ -164,7 +166,7 @@ class SourcePackage(object):
             self.read_from_db(db_session)
 
             # The fs location for this source package:
-            self.fs_base = os.path.join(root, 'packaging', name)
+            self.fs_base = os.path.join(fs.root, 'packaging', name)
 
         except:
             # Release locks
@@ -199,7 +201,7 @@ class SourcePackage(object):
             # self.db_root_lock.acquire_Splus()
             # self.db_root_lock.release_S()
 
-    def read_from_db(self, db_session):
+    def read_from_db(self, db_session=None):
         s = db_session if db_session else database.conn.get_session()
         dbo = s.query(dbspkg.SourcePackage)\
                 .filter_by(name=self.name, architecture=self.architecture)\
@@ -317,7 +319,7 @@ class SourcePackage(object):
                         raise SourcePackageVersionExists(self.name, self.architecture, version_number)
 
                     # Create the fs locations
-                    fs_base = os.path.join(self.fs_base, str(self.version_number))
+                    fs_base = os.path.join(self.fs_base, str(version_number))
 
                     try:
                         os.mkdir (fs_base, 0o755)

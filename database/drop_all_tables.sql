@@ -10,7 +10,7 @@ drop table if exists source_package_version_attributes cascade;
 drop table if exists binary_packages cascade;
 drop table if exists binary_package_files cascade;
 drop table if exists binary_package_attributes cascade;
-drop table if exists build_pipeline_stages;
-drop table if exists build_pipeline_stage_events;
+drop table if exists build_pipeline_stages cascade;
+drop table if exists build_pipeline_stage_events cascade;
 
 commit;

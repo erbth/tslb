@@ -112,7 +112,7 @@ class BuildPipeline(object):
                     # Restore snapshot if there is one
                     if last_successful_event.snapshot_name:
                         Console.print_status_box("Restoring snapshot `%s' at `%s'" %
-                                (last_successfule_event.snapshot_name, last_successful_event.snapshot_path),
+                                (last_successful_event.snapshot_name, last_successful_event.snapshot_path),
                                 file=self.out)
 
                         fops.restore_snapshot(last_successful_event.snapshot_path,
@@ -139,13 +139,25 @@ class BuildPipeline(object):
                     dbbp.BuildPipelineStageEvent.status_values.begin))
 
             # Walk through stage
+            Console.print_status_box('Flowing through stage %s' % stage.name, file=self.out)
+
             success, output = stage.flow_through(spv)
 
-            # Make a snapshot
-            snapshot_path = spv.fs_base
-            snapshot_name = "%s-%s" % (stage.name, timezone.now())
+            Console.update_status_box(success, file=self.out)
 
-            fops.make_snapshot(snapshot_path, snapshot_name)
+            if output:
+                print(output, file=self.out)
+
+            # Make a snapshot
+            if success:
+                snapshot_path = spv.fs_base
+                snapshot_name = "%s-%s" % (stage.name, timezone.now())
+
+                fops.make_snapshot(snapshot_path, snapshot_name)
+
+            else:
+                snapshot_path = None
+                snapshot_name = None
 
             try:
                 # Log result
@@ -161,5 +173,13 @@ class BuildPipeline(object):
                         output,
                         snapshot_path,
                         snapshot_name))
+
+            except:
+                if success:
+                    fops.remove_snapshot(snapshot_path, snapshot_name)
+                raise
+
+            if not success:
+                return False
 
         return True

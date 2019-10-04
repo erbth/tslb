@@ -1,6 +1,7 @@
-from . import Fsbase
+from . import Fsbase, NoSuchSnapshot
 from CommonExceptions import CommandFailed, SavedYourLife
 import os
+import shutil
 import subprocess
 
 class cephfs(Fsbase):
@@ -20,16 +21,16 @@ class cephfs(Fsbase):
                 cmd.append('-oname=%s' % self.name)
 
             if self.secret is not None:
-                cmd.append('-osecret=%s' % self.name)
+                cmd.append('-osecret=%s' % self.secret)
 
-            ret = subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ret = subprocess.call(cmd)
             if ret != 0:
                 raise CommandFailed(' '.join(cmd), ret)
 
     def unmount(self):
         cmd = [ 'umount', self.root ]
 
-        ret = subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ret = subprocess.call(cmd)
         if ret != 0:
             raise CommandFailed(' '.join(cmd), ret)
 
@@ -42,21 +43,60 @@ class cephfs(Fsbase):
             return True
 
         # If not, check if something else is mounted
-        cmd = [ 'findmnt', '--target', self.root ]
+        cmd = [ 'findmnt', self.root ]
 
         ret = subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if ret == 0:
-            raise SavedYourLife('Something else appears to be mounted on out root (`%s\').' %
+            raise SavedYourLife('Something else appears to be mounted on our root (`%s\').' %
                     self.root)
 
     def make_snapshot(self, path, name):
-        os.mkdir(os.path.join(self.root, path, '.snap', name))
+        if name[0] == '_':
+            raise Exception("Snapshot names must not start with a _.")
+
+        os.mkdir(os.path.join(path, '.snap', name))
 
     def delete_snapshot(self, path, name):
-        os.rmdir(os.path.join(self.root, path, '.snap', name))
+        os.rmdir(os.path.join(path, '.snap', name))
 
     def list_snapshots(self, path):
-        return os.listdir(os.path.join(self.root, path))
+        return os.listdir(os.path.join(path, '.snap'))
 
     def restore_snapshot(self, path, name):
-        raise NotImplementedError('restore_snapshot')
+        if name not in self.list_snapshots(path):
+            raise NoSuchSnapshot(path, name)
+
+        # Delete all content in this directory
+        def special_rm(p):
+            if os.path.isdir(p):
+                for e in os.listdir(p):
+                    # Commodity files
+                    if e != '.' and e != '..':
+                        special_rm (os.path.join(p, e))
+
+                # Snapshots
+                snapdir = os.path.join(p, '.snap')
+                for s in os.listdir(snapdir):
+                    if s != '.' and s != '..' and s[0] != '_':
+                        os.rmdir(os.path.join(snapdir, s))
+
+                os.rmdir(p)
+            else:
+                os.unlink(p)
+
+        for e in os.listdir(path):
+            if e != '.' and e != '..':
+                special_rm (os.path.join(path, e))
+
+        # Copy content back
+        snappath = os.path.join(path, '.snap', name)
+
+        for e in os.listdir(snappath):
+            if e != '.' and e != '..':
+                src = os.path.join(snappath, e)
+                dst = os.path.join(path, e)
+
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst, symlinks=True, ignore_dangling_symlinks=True)
+                else:
+                    shutil.copy2(src, dst, follow_symlinks=False)

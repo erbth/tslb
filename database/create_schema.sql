@@ -16,7 +16,9 @@ create table source_packages (
 create table source_package_versions (
 	"source_package" varchar,
 	"architecture" integer,
-	foreign key ("source_package", "architecture") references source_packages("name", "architecture"),
+	foreign key ("source_package", "architecture")
+		references source_packages("name", "architecture")
+		on update cascade on delete cascade,
 
 	"version_number" integer[],
 	primary key("source_package", "architecture", "version_number"),
