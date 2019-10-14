@@ -76,7 +76,7 @@ class VersionConstraint(object):
             return vn > self.version_number
         elif self.constraint_type == CONSTRAINT_TYPE_GTE:
             return vn >= self.version_number
-        elif self.contraint_type == CONSTRAINT_TYPE_LT:
+        elif self.constraint_type == CONSTRAINT_TYPE_LT:
             return vn < self.version_number
         elif self.constraint_type == CONSTRAINT_TYPE_LTE:
             return vn <= self.version_number
@@ -106,7 +106,7 @@ class VersionConstraint(object):
                 return ovc.version_number != self.version_number
             elif ovc.constraint_type == CONSTRAINT_TYPE_GT:
                 return ovc.version_number < self.version_number
-            elif ovc.contraint_type == CONSTRAINT_TYPE_GTE:
+            elif ovc.constraint_type == CONSTRAINT_TYPE_GTE:
                 return ovc.version_number <= self.version_number
             elif ovc.constraint_type == CONSTRAINT_TYPE_LT:
                 return ovc.version_number > self.version_number
@@ -184,6 +184,12 @@ class VersionConstraint(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        return "%s %s" % (constraint_type_string[self.constraint_type], self.version_number)
+
 
 class DependencyList(object):
     """
@@ -212,7 +218,7 @@ class DependencyList(object):
         :param o: Any object that is hashable.
         :except: May rise a ConstraintContradiction
         """
-        if o in self.l and len(self.l[0]) > 0:
+        if o in self.l and len(self.l[o]) > 0:
             # In the list might be: a < or <=, a > or >=, multiple !=, or only
             # one = as well as only one ''.
 
@@ -264,20 +270,20 @@ class DependencyList(object):
                         self.l[o].append(vc)
                         self.l[o] = list(filter(lambda ovc:\
                                 ovc.constraint_type != CONSTRAINT_TYPE_NONE and\
-                                vc.fulfilled(ovc.version_number), self.l[o]))
+                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number)), self.l[o]))
 
                 # (-inf, x)]
-                elif lt is None:
+                elif gt is None:
                     if vc.constraint_type == CONSTRAINT_TYPE_NONE:
                         pass
                     elif vc.constraint_type == CONSTRAINT_TYPE_EQ:
                         # It is compatible hence not in a hole and inside the range.
                         self.l[o] = [vc]
-                    elif vc.constraint_type == CONSTRAINT_TYPE_NEQ
+                    elif vc.constraint_type == CONSTRAINT_TYPE_NEQ:
                         # Is it at the border? (It can only be at a closed border ...)
                         if lt.constraint_type == CONSTRAINT_TYPE_LTE and\
                                 vc.version_number == lt.version_number:
-                            self.l[o][lt_index].constraint_type == CONSTRAINT_TYPE_LT
+                            self.l[o][lt_index].constraint_type = CONSTRAINT_TYPE_LT
                         else:
                             # The list has a not-None element already, hence no
                             # filtering is required.
@@ -289,7 +295,7 @@ class DependencyList(object):
 
                         # Remove now useless neqs
                         self.l[o] = list(filter(lambda ovc:\
-                                vc.fulfilled(ovc.version_number), self.l[o]))
+                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number)), self.l[o]))
 
                     elif vc.constraint_type == CONSTRAINT_TYPE_GT or\
                             vc.constraint_type == CONSTRAINT_TYPE_GTE:
@@ -303,20 +309,20 @@ class DependencyList(object):
                             self.l[o].append(vc)
                             # Remove now useless neqs
                             self.l[o] = list(filter(lambda ovc:\
-                                vc.fulfilled(ovc.version_number), self.l[o]))
+                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number)), self.l[o]))
 
                 # [(x, +inf)
-                elif gt is None:
+                elif lt is None:
                     if vc.constraint_type == CONSTRAINT_TYPE_NONE:
                         pass
                     elif vc.constraint_type == CONSTRAINT_TYPE_EQ:
                         # It is compatible hence not in a hole and inside the range.
                         self.l[o] = [vc]
-                    elif vc.constraint_type == CONSTRAINT_TYPE_NEQ
+                    elif vc.constraint_type == CONSTRAINT_TYPE_NEQ:
                         # Is it at the border? (It can only be at a closed border ...)
                         if gt.constraint_type == CONSTRAINT_TYPE_GTE and\
                                 vc.version_number == gt.version_number:
-                            self.l[o][gt_index].constraint_type == CONSTRAINT_TYPE_GT
+                            self.l[o][gt_index].constraint_type = CONSTRAINT_TYPE_GT
                         else:
                             # The list has a not-None element already, hence no
                             # filtering is required.
@@ -328,7 +334,7 @@ class DependencyList(object):
 
                         # Remove now useless neqs
                         self.l[o] = list(filter(lambda ovc:\
-                                vc.fulfilled(ovc.version_number), self.l[o]))
+                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number)), self.l[o]))
 
                     elif vc.constraint_type == CONSTRAINT_TYPE_LT or\
                             vc.constraint_type == CONSTRAINT_TYPE_LTE:
@@ -342,7 +348,7 @@ class DependencyList(object):
                             self.l[o].append(vc)
                             # Remove now useless neqs
                             self.l[o] = list(filter(lambda ovc:\
-                                vc.fulfilled(ovc.version_number), self.l[o]))
+                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number)), self.l[o]))
 
                 # [(x, y)]
                 else:
@@ -361,36 +367,35 @@ class DependencyList(object):
                             # No? - simply add it.
                             self.l[o].append(vc)
 
-                        elif vc.constraint_type == CONSTRAINT_TYPE_LT or\
-                                vc.constraint_type == CONSTRAINT_TYPE_LTE:
-                            # The interval can only be one element wide if both borders
-                            # are closed and equal. If they are equal, the interval
-                            # must be closed (because it would be of size 0 otherwise,
-                            # which would be a contradiction).
-                            if vc.version_number == gt.version_number:
-                                self.l[o] = [VersionConstraint(CONSTRAINT_TYPE_EQ, vc.version_number)]
-                            else:
-                                self.l[o][lt_index] = vc
+                    elif vc.constraint_type == CONSTRAINT_TYPE_LT or\
+                            vc.constraint_type == CONSTRAINT_TYPE_LTE:
+                        # The interval can only be one element wide if both borders
+                        # are closed and equal. If they are equal, the interval
+                        # must be closed (because it would be of size 0 otherwise,
+                        # which would be a contradiction).
+                        if vc.version_number == gt.version_number:
+                            self.l[o] = [VersionConstraint(CONSTRAINT_TYPE_EQ, vc.version_number)]
+                        else:
+                            self.l[o][lt_index] = vc
 
-                                # Remove now useless neqs
-                                self.l[o] = list(filter(lambda ovc:\
-                                    vc.fulfilled(ovc.version_number), self.l[o]))
+                            # Remove now useless neqs
+                            self.l[o] = list(filter(lambda ovc:\
+                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number)), self.l[o]))
 
-                        elif vc.constraint_type == CONSTRAINT_TYPE_GT or\
-                                vc.constraint_type == CONSTRAINT_TYPE_GTE:
-                            # The interval can only be one element wide if both borders
-                            # are closed and equal. If they are equal, the interval
-                            # must be closed (because it would be of size 0 otherwise,
-                            # which would be a contradiction).
-                            if vc.version_number == lt.version_number:
-                                self.l[o] = [VersionConstraint(CONSTRAINT_TYPE_EQ, vc.version_number)]
-                            else:
-                                self.l[o][gt_index] = vc
+                    elif vc.constraint_type == CONSTRAINT_TYPE_GT or\
+                            vc.constraint_type == CONSTRAINT_TYPE_GTE:
+                        # The interval can only be one element wide if both borders
+                        # are closed and equal. If they are equal, the interval
+                        # must be closed (because it would be of size 0 otherwise,
+                        # which would be a contradiction).
+                        if vc.version_number == lt.version_number:
+                            self.l[o] = [VersionConstraint(CONSTRAINT_TYPE_EQ, vc.version_number)]
+                        else:
+                            self.l[o][gt_index] = vc
 
-                                # Remove now useless neqs
-                                self.l[o] = list(filter(lambda ovc:\
-                                    vc.fulfilled(ovc.version_number), self.l[o]))
-
+                            # Remove now useless neqs
+                            self.l[o] = list(filter(lambda ovc:\
+                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number)), self.l[o]))
 
         else:
             self.l[o] = [vc]
@@ -399,7 +404,7 @@ class DependencyList(object):
         """
         Objects that are required, hence those I want.
         """
-        return self.l.keys()
+        return list(self.l.keys())
 
     def __contains__(self, t):
         """
