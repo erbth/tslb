@@ -425,6 +425,9 @@ class DependencyList(object):
         else:
             return True
 
+    def get_constraint_list(self, o):
+        return self.l.get(o, [])
+
 
 # Exceptions for useful error messages
 class InvalidConstraintType(Exception):

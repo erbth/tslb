@@ -2,7 +2,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from SourcePackageProperties import SourcePackageProperties, SourcePackageVersionProperties
+from SourcePackageProperties import SourcePackageProperties, SourcePackageVersionAttributes
+from Constraint import DependencyList
 
 from VersionNumber import VersionNumber
 from SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
@@ -143,6 +144,10 @@ class MainWindow(object):
                 bt_edit.connect("clicked", lambda bt, n, a: SourcePackageProperties(n, a), s, amd64)
 
             elif not b and not bv:
+                # Source package version tab
+                sp = SourcePackage(s, amd64, write_intent=True)
+                spv = sp.get_version(sv)
+
                 vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
                 self.pkg_ovr_frame.add(vbox)
 
@@ -150,12 +155,53 @@ class MainWindow(object):
                 vbox.pack_start(fr_hbox, False, True, 5)
 
                 fr_hbox.pack_start(Gtk.Label(label="Source package version `%s:%s'" % (s, sv)), True, True, 5)
-                bt_edit = Gtk.Button(label="edit")
-                fr_hbox.pack_start(bt_edit, False, True, 5)
+                bt_attributes = Gtk.Button(label="Attributes")
+                fr_hbox.pack_start(bt_attributes, False, True, 5)
 
-                bt_edit.connect("clicked", lambda bt, n, a, sv: SourcePackageVersionProperties(n, a, sv), s, amd64, sv)
+                bt_attributes.connect("clicked", lambda bt, n, a, sv: SourcePackageVersionAttributes(n, a, sv), s, amd64, sv)
+
+                # More tabs inside the tab.
+                nb = Gtk.Notebook()
+                vbox.pack_start(nb, True, True, 5)
+
+                # Build procedure
+                pbuild = Gtk.Grid()
+                nb.append_page (pbuild, Gtk.Label(label="Build procedure"))
+
+                # Compiletime dependencies
+                box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+                box.pack_start(Gtk.Label(label="Compiletime dependencies"), False, False, 5)
+
+                hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+                box.pack_start(hbox, True, True, 5)
+
+                liststore = Gtk.ListStore(str, str)
+
+                if not spv.has_attribute('cdeps'):
+                    spv.set_attribute('cdeps', DependencyList())
+
+                cdeps = spv.get_attribute('cdeps')
+                for dep in sorted(cdeps.get_required()):
+                    i = liststore.append()
+                    liststore.set(i, 0, dep, 1, cdeps.get_constraint_list(dep))
+
+                c1 = Gtk.TreeViewColumn(title="Source package", cell_renderer=Gtk.CellRendererText(), text=0)
+                c1.set_expand(True)
+                c2 = Gtk.TreeViewColumn(title="Constraints", cell_renderer=Gtk.CellRendererText(), text=1)
+
+                listview = Gtk.TreeView.new_with_model(liststore)
+                listview.append_column(c1)
+                listview.append_column(c2)
+
+                hbox.pack_start(listview, True, True, 0)
+
+                btbox = Gtk.ButtonBox(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+                hbox.pack_start(btbox, False, True, 0)
+
+                pbuild.attach(box, 0, 0, 1, 1)
 
             elif not bv:
+                # Binary package tab
                 self.pkg_ovr_frame.add(Gtk.Label(label="Binary package %s selected." % b))
 
             else:
