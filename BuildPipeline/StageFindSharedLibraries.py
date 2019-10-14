@@ -1,7 +1,7 @@
 from tclm import lock_S, lock_Splus, lock_X
 
-class StagePatch(object):
-    name = 'patch'
+class StageFindSharedLibraries(object):
+    name = 'find_shared_libraries'
 
     def flow_through(spv):
         """

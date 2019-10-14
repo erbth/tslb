@@ -1,0 +1,16 @@
+#!/usr/bin/python3
+
+"""
+A Gtk+ 3 UI for the TSClient LEGACY build system. This is the executable file.
+"""
+
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk
+from MainWindow import MainWindow
+
+mw = MainWindow()
+
+# A main loop
+Gtk.main()
+exit(0)

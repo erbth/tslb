@@ -1,7 +1,7 @@
 from tclm import lock_S, lock_Splus, lock_X
 
-class StagePatch(object):
-    name = 'patch'
+class StageAddREADME(object):
+    name = 'add_readme'
 
     def flow_through(spv):
         """
@@ -11,4 +11,7 @@ class StagePatch(object):
         :returns: tuple(successful, output)
         :rtype: tuple(bool, str)
         """
-        return (True, '')
+        output = ""
+        success = True
+
+        return (success, output)

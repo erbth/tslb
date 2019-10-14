@@ -13,8 +13,29 @@ import timezone
 
 from .StageUnpack import StageUnpack
 from .StagePatch import StagePatch
+from .StageConfigure import StageConfigure
+from .StageBuild import StageBuild
+from .StageInstallToDestdir import StageInstallToDestdir
+from .StageFindSharedLibraries import StageFindSharedLibraries
+from .StageDetectManInfo import StageDetectManInfo
+from .StageSplitIntoBinaryPackages import StageSplitIntoBinaryPackages
+from .StageAddREADME import StageAddREADME
+from .StageAddRdeps import StageAddRdeps
+from .StageCreatePMPackages import StageCreatePMPackages
 
-all_stages = [ StageUnpack, StagePatch ]
+all_stages = [
+        StageUnpack,
+        StagePatch,
+        StageConfigure,
+        StageBuild,
+        StageInstallToDestdir,
+        StageFindSharedLibraries,
+        StageSplitIntoBinaryPackages,
+        StageDetectManInfo,
+        StageAddREADME,
+        StageAddRdeps,
+        StageCreatePMPackages
+        ]
 
 def sync_stages_with_db():
     """

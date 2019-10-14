@@ -2,6 +2,7 @@ import os
 import parse_utils
 import settings
 import subprocess
+from tclm import lock_S, lock_Splus, lock_X
 
 # We need a source location
 if 'TSLB' not in settings:
@@ -74,49 +75,50 @@ class StageUnpack(object):
         # Unpack the package.
         success = False
 
-        try:
-            p = subprocess.Popen(unpack_command, cwd=spv.fs_build_location,
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        with lock_X(spv.fs_build_location_lock):
+            try:
+                p = subprocess.Popen(unpack_command, cwd=spv.fs_build_location,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
 
-            o, e = p.communicate()
-            ret = p.returncode
+                o, e = p.communicate()
+                ret = p.returncode
 
-            output += o.decode() + e.decode()
+                output += o.decode() + e.decode()
 
-            if ret == 0:
-                success = True
+                if ret == 0:
+                    success = True
 
-        except Exception as e:
-            success = False
-            output += str(e) + '\n'
-        except:
-            success = False
-
-        # Check for the expected unpacked directory
-        if spv.has_attribute('unpacked_source_directory'):
-            unpacked_source_directory = spv.get_attribute('unpacked_source_directory')
-            usdp = os.path.join(spv.fs_build_location, unpacked_source_directory)
-
-            if not os.path.exists(usdp):
-                output += "The unpacked source directory `%s' does not exist after unpacking." %\
-                    unpacked_source_directory
-
+            except Exception as e:
+                success = False
+                output += str(e) + '\n'
+            except:
                 success = False
 
-        else:
-            dirs = os.listdir(spv.fs_build_location)
-            l = len(dirs)
+            # Check for the expected unpacked directory
+            if spv.has_attribute('unpacked_source_directory'):
+                unpacked_source_directory = spv.get_attribute('unpacked_source_directory')
+                usdp = os.path.join(spv.fs_build_location, unpacked_source_directory)
 
-            if l == 0:
-                spv.set_attribute('unpacked_source_directory', None)
-                output += "Set unpacked_source_directory to None.\n"
+                if not os.path.exists(usdp):
+                    output += "The unpacked source directory `%s' does not exist after unpacking." %\
+                        unpacked_source_directory
 
-            elif l > 1:
-                spv.set_attribute('unpacked_source_directory', '.')
-                output += "Set unpacked_source_directory to `.'.\n"
+                    success = False
 
             else:
-                spv.set_attribute('unpacked_source_directory', dirs[0])
-                output += "Set unpacked_source_directory to `%s'.\n" % dirs[0]
+                dirs = os.listdir(spv.fs_build_location)
+                l = len(dirs)
+
+                if l == 0:
+                    spv.set_attribute('unpacked_source_directory', None)
+                    output += "Set unpacked_source_directory to None.\n"
+
+                elif l > 1:
+                    spv.set_attribute('unpacked_source_directory', '.')
+                    output += "Set unpacked_source_directory to `.'.\n"
+
+                else:
+                    spv.set_attribute('unpacked_source_directory', dirs[0])
+                    output += "Set unpacked_source_directory to `%s'.\n" % dirs[0]
 
         return (success, output)

@@ -2,6 +2,7 @@ from . import Fsbase, NoSuchSnapshot
 from CommonExceptions import CommandFailed, SavedYourLife
 import os
 import shutil
+import stat
 import subprocess
 
 class cephfs(Fsbase):
@@ -68,7 +69,8 @@ class cephfs(Fsbase):
 
         # Delete all content in this directory
         def special_rm(p):
-            if os.path.isdir(p):
+            if os.path.exists(p) and\
+                    stat.S_ISDIR(os.stat(p, follow_symlinks=False).st_mode):
                 for e in os.listdir(p):
                     # Commodity files
                     if e != '.' and e != '..':
@@ -76,9 +78,12 @@ class cephfs(Fsbase):
 
                 # Snapshots
                 snapdir = os.path.join(p, '.snap')
-                for s in os.listdir(snapdir):
-                    if s != '.' and s != '..' and s[0] != '_':
-                        os.rmdir(os.path.join(snapdir, s))
+                if os.path.exists(snapdir) and\
+                        stat.S_ISDIR(os.stat(snapdir, follow_symlinks=False).st_mode):
+
+                    for s in os.listdir(snapdir):
+                        if s != '.' and s != '..' and s[0] != '_':
+                            os.rmdir(os.path.join(snapdir, s))
 
                 os.rmdir(p)
             else:
@@ -96,7 +101,8 @@ class cephfs(Fsbase):
                 src = os.path.join(snappath, e)
                 dst = os.path.join(path, e)
 
-                if os.path.isdir(src):
+                if os.path.exists(src) and\
+                        stat.S_ISDIR(os.stat(src, follow_symlinks=False).st_mode):
                     shutil.copytree(src, dst, symlinks=True, ignore_dangling_symlinks=True)
                 else:
                     shutil.copy2(src, dst, follow_symlinks=False)

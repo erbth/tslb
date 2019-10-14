@@ -1,7 +1,7 @@
 from tclm import lock_S, lock_Splus, lock_X
 
-class StagePatch(object):
-    name = 'patch'
+class StageDetectManInfo(object):
+    name = 'detect_man_info'
 
     def flow_through(spv):
         """

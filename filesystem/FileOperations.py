@@ -110,7 +110,8 @@ def rm_r(path):
     exception. If the directory lies on cephfs and has snapshots, these are
     deleted, too.
     """
-    if os.path.isdir(path):
+    if os.path.exists(path) and\
+            stat.S_ISDIR(os.stat(path, follow_symlinks=False).st_mode):
         # Delete content
         for e in os.listdir(path):
             if e != '.' and e != '..':
@@ -118,7 +119,9 @@ def rm_r(path):
 
         # Delete cephfs snapshots
         snappath = os.path.join(path, '.snap')
-        if os.path.isdir(snappath):
+        if os.path.exists(snappath) and\
+                stat.S_ISDIR(os.stat(snappath, follow_symlinks=False).st_mode):
+
             for r in os.listdir(snappath):
                 if r != '.' and r != '..' and r[0] != '_':
                     os.rmdir(os.path.join(snappath, r))

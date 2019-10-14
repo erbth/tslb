@@ -41,7 +41,7 @@ create table source_package_version_installed_files (
 		on update cascade on delete cascade,
 
 	"path" varchar not null,
-	"sha512sum" varchar not null,
+	"sha512sum" varchar,
 
 	primary key(source_package, "architecture", version_number, "path")
 );
@@ -132,7 +132,7 @@ create table binary_package_files (
 		on update cascade on delete cascade,
 
 	"path" varchar not null,
-	"sha512sum" varchar not null,
+	"sha512sum" varchar,
 
 	primary key(binary_package, "architecture", version_number, "path")
 );

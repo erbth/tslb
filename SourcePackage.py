@@ -253,7 +253,7 @@ class SourcePackage(object):
         if not v:
             raise NoSuchSourcePackageVersion(self.name, self.architecture, "latest")
 
-        return SourcePackageVersion(self.name, v[0])
+        return SourcePackageVersion(self, v[0])
 
     def manually_hold_versions(self, remove=False, time=None):
         """
@@ -770,6 +770,7 @@ class SourcePackageVersion(object):
                 .filter(bp.source_package == self.source_package.name,
                         bp.architecture == self.architecture,
                         bp.source_package_version_number == self.version_number)\
+                .distinct()\
                 .all()
 
         return [ n[0] for n in names ]
@@ -780,7 +781,7 @@ class SourcePackageVersion(object):
 
         :param name: The binary package's name
         :type name: str
-        :returns: list(version numbers)
+        :returns: ordered list(version numbers)
         :rtype: list(VersionNumber) (may be empty if no such binary package exists)
         """
         s = database.get_session()
@@ -791,6 +792,7 @@ class SourcePackageVersion(object):
                         bp.architecture == self.architecture,
                         bp.source_package_version_number == self.version_number,
                         bp.name == name)\
+                .order_by(bp.version_number)\
                 .all()
 
         return [ v[0] for v in vs ]
@@ -826,10 +828,10 @@ class SourcePackageVersion(object):
 
                 try:
                     # Create fs locations
-                    fs_base = os.path.join(self.fs_binary_packages, str(version_number))
+                    fs_base = os.path.join(self.fs_binary_packages, name, str(version_number))
 
                     try:
-                        os.mkdir (fs_base, 0o755)
+                        fops.mkdir_p (fs_base, 0o755)
 
                         # Create db tuple
                         bp = dbbpkg.BinaryPackage()
@@ -850,6 +852,7 @@ class SourcePackageVersion(object):
 
                     except:
                         fops.rm_rf (fs_base)
+                        raise
 
                     # Create a new binary package object that is not bound to the
                     # former session and can therefore be returned.
@@ -857,6 +860,7 @@ class SourcePackageVersion(object):
 
                 except:
                     s.rollback()
+                    raise
                 finally:
                     s.close()
 
@@ -889,7 +893,7 @@ class SourcePackageVersion(object):
                 s.close()
 
                 # Delete fs location
-                fops.rm_rf(os.path.join(self.fs_binary_packages, str(version_number)))
+                fops.rm_rf(os.path.join(self.fs_binary_packages, name, str(version_number)))
 
     # Key-Value-Store like attributes
     def list_attributes(self):
@@ -941,7 +945,7 @@ class SourcePackageVersion(object):
 
         if len(v) == 0:
             raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                    (self.source_package.name, self.architecture,
+                    (self.source_package.name, architectures[self.architecture],
                         self.version_number), key)
 
         v = v[0][0]
@@ -974,7 +978,7 @@ class SourcePackageVersion(object):
 
         if len(v) == 0:
             raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                    (self.source_package.name, self.architecture,
+                    (self.source_package.name, architectures[self.architecture],
                         self.version_number), key)
 
         return v[0]
@@ -995,7 +999,7 @@ class SourcePackageVersion(object):
 
             if len(v) == 0:
                 raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                        (self.source_package.name, self.architecture,
+                        (self.source_package.name, architectures[self.architecture],
                             self.version_number), key)
 
             v = v[0]
@@ -1027,7 +1031,7 @@ class SourcePackageVersion(object):
 
         if len(v) == 0:
             raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                    (self.source_package.name, self.architecture,
+                    (self.source_package.name, architectures[self.architecture],
                         self.version_number), key)
 
         return v[0][0]
@@ -1102,7 +1106,7 @@ class SourcePackageVersion(object):
 
             if len(a) == 0:
                 raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                        (self.source_package.name, self.architecture,
+                        (self.source_package.name, architectures[self.architecture],
                             self.version_number), key)
 
             a = a[0]

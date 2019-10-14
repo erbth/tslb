@@ -71,7 +71,7 @@ class BinaryPackage(object):
 
         # Fs location
         self.fs_base = os.path.join(self.source_package_version.fs_binary_packages,
-                str(self.version_number))
+                self.name, str(self.version_number))
 
     # Peripheral methods
     def read_from_db(self, db_session = None):
@@ -170,7 +170,7 @@ class BinaryPackage(object):
 
     def get_files(self):
         """
-        :returns: list(tuple(path, sha512sum))
+        :returns: ordered list(tuple(path, sha512sum))
         :rtype: list(tuple(str, str))
         """
         s = db.get_session()
@@ -180,6 +180,7 @@ class BinaryPackage(object):
                 .filter(fs.binary_package == self.name,
                         fs.architecture == self.architecture,
                         fs.version_number == self.version_number)\
+                .order_by(fs.path)\
                 .all()
 
         return l
