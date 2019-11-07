@@ -8,9 +8,18 @@ it because it makes a difference if you say `Version 2' or `Version 2.0' (the
 last one tends to sound more like a big `thing').
 And 1.0 < 1.0.0 because a) Postgresql does that and b) it's nice to have a
 strict order (You'd said that, too, wouldn't you? ;-)).
+
+Appended letters like in 1.1.0h are mapped to an extra component (for OpenSSL).
+All appended letters represent one component, so 'ad' means a * |{a..z}| + d =
+1 * 26 + 4 = 30; like in ieee802.3ad. To distinguish them from ordinary int
+components, 1,000,000,000 is added to them. Case does not matter.
+
+Therefore, each int component must not be greater than 999,999,999
 """
 
 from sqlalchemy import types
+from parse_utils import split_on_number_edge
+import re
 
 class VersionNumber(object):
     """
@@ -21,52 +30,17 @@ class VersionNumber(object):
     def __init__(self, *argument):
         self.components = []
 
-        if len(argument) == 1:
+        if (isinstance(argument, list) or isinstance(argument, tuple)) and len(argument) == 1:
             argument = argument[0]
 
         if isinstance(argument, str):
-            for c in argument.split('.'):
-                c = c.strip()
-                if c == '':
-                    raise ValueError('The individual components may not be empty.')
-                try:
-                    c = int(c)
-                    if c < 0:
-                        raise Exception
-
-                except:
-                    raise ValueError('The individual components must be positive integers (including 0).')
-
-                self.components.append(c)
+            self._init_list(argument.split('.'))
 
         elif isinstance(argument, int):
-            if argument < 0:
-                raise ValueError('int components must be positive.')
-            self.components.append(argument)
+            self._init_list([argument])
 
         elif isinstance(argument, list) or isinstance(argument, tuple):
-            for c in argument:
-                if isinstance(c, str):
-                    c = c.strip()
-                    if c.find('.') >= 0:
-                        raise ValueError('The individual components may not contain dots.')
-
-                    try:
-                        c = int(c)
-                        if c < 0:
-                            raise Exception
-
-                    except:
-                        raise ValueError('The individual components must be positive integers (including 0).')
-
-                    self.components.append(c)
-
-                elif isinstance(c, int):
-                    if c < 0:
-                        raise ValueError('int components must be positive.')
-                    self.components.append(c)
-                else:
-                    raise TypeError('Only str and int are supported for component types.')
+            self._init_list(argument)
 
         elif isinstance(argument, VersionNumber):
             self.components = list(argument.components)
@@ -77,12 +51,72 @@ class VersionNumber(object):
         if len(self.components) == 0:
             raise ValueError('At least one component must be provided.')
 
+    def _init_list(self, argument):
+        for ac in argument:
+            if isinstance(ac, str):
+                ac = ac.strip().casefold()
+                if ac.find('.') >= 0:
+                    raise ValueError('The individual components may not contain dots.')
+
+                l = split_on_number_edge(ac)
+
+                for c in l:
+                    c = c.strip()
+
+                    if re.match('^[a-z]*$', c):
+                        # Character component
+                        c2 = ''
+                        for letter in c:
+                            c2 = letter + c2
+
+                        significance = 1
+                        n = 0
+                        for letter in c2:
+                            n += (ord(letter) - 96) * significance
+                            significance *= 26
+
+                        c = n + 1_000_000_000
+
+                    else:
+                        # Int component
+                        try:
+                            c = int(c)
+                            if c < 0 or c > 999_999_999:
+                                raise Exception
+
+                        except:
+                            raise ValueError('The individual components must be positive integers in the range [0, 999,999,999], or character strings with a-z.')
+
+                    self.components.append(c)
+
+            elif isinstance(ac, int):
+                if ac < 0 or ac > 999_999_999:
+                    raise ValueError('int components must be in the range [0, 999,999,999].')
+                self.components.append(ac)
+            else:
+                raise TypeError('Only str and int are supported for component types.')
+
     def __str__(self):
         s = ''
         for c in self.components:
             if len(s) > 0:
                 s += '.'
-            s += str(c)
+
+            if c > 999_999_999:
+                c -= 1_000_000_000
+                tmp = ''
+
+                while c > 0:
+                    tmp += chr(c % 26 + 96)
+                    c = c // 26
+
+                comp = ''
+                for e in tmp:
+                    comp = e + comp
+
+                s += comp
+            else:
+                s += str(c)
 
         return s
 
@@ -165,4 +199,6 @@ class VersionNumberColumn(types.TypeDecorator):
         return value.components
 
     def process_result_value(self, value, dialect):
-        return VersionNumber(value)
+        v = VersionNumber(0)
+        v.components = value
+        return v

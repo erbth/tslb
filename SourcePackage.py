@@ -18,6 +18,9 @@ import pickle
 import tclm
 import timezone
 
+# For convenience methods
+from Constraint import VersionConstraint, DependencyList
+
 class SourcePackageList(object):
     def __init__(self, architecture, create_locks = False):
         if architecture not in architectures.keys():
@@ -40,33 +43,30 @@ class SourcePackageList(object):
             self.db_root_lock.release_X()
             self.fs_root_lock.release_X()
 
-    def list_source_packages(self, architecture=None):
+    def list_source_packages(self):
         """
-        Returns an ordered list of the source packages' names. By default,
-        packages of all architectures are selected and not only these from this
-        list.
+        Returns an ordered list of the source packages' names.
 
         :param architecture: If not None, the list of packages will be filtered
             by the supplied architecture.
         :type architecture: int or None
-        :returns: list(tuple(name, architecture))
-        :rtype: list(tuple(str, int))
+        :returns: list(name)
+        :rtype: list(str)
         """
         with lock_S(self.db_root_lock):
-            s = database.get_session()
-            sp = aliased(dbspkg.SourcePackage)
+            with database.session_scope() as s:
+                sp = aliased(dbspkg.SourcePackage)
 
-            if architecture:
-                if architecture not in architectures.keys():
-                    raise ValueError("Invalid architecture")
+                q = s.query(sp.name)\
+                        .filter(sp.architecture == self.architecture)\
+                        .order_by(sp.name).all()
 
-                return s.query(sp.name, sp.architecture)\
-                        .filter(sp.architecture == architecture)\
-                        .order_by(sp.name, sp.architecture).all()
-            else:
-                return s.query(sp.name, sp.architecture).order_by(sp.name, sp.architecture).all()
+                return [ e[0] for e in q ]
 
     def create_source_package(self, name):
+        """
+        :returns: A source package with write intent
+        """
         # Lock the source package list and the fs
         with lock_X(self.fs_root_lock):
             with lock_X(self.db_root_lock):
@@ -114,16 +114,15 @@ class SourcePackageList(object):
         with lock_X(self.fs_root_lock):
             with lock_X(self.db_root_lock):
                 # Remove the db tuple(s)
-                s = database.get_session()
-                spkg = s.query(dbspkg.SourcePackage).\
-                        filter_by(name=name, architecture=self.architecture).first()
+                with database.session_scope() as s:
+                    spkg = s.query(dbspkg.SourcePackage).\
+                            filter_by(name=name, architecture=self.architecture).first()
 
-                if spkg:
-                    s.delete(spkg)
-                    s.commit()
+                    if spkg:
+                        s.delete(spkg)
 
-                # Remove the fs location(s)
-                fops.rm_rf (os.path.join(fs.root, 'packaging', name))
+                    # Remove the fs location(s)
+                    fops.rm_rf (os.path.join(fs.root, 'packaging', name))
 
 class SourcePackage(object):
     def __init__(self, name, architecture, write_intent = False, create_locks = False, db_session=None):
@@ -203,15 +202,29 @@ class SourcePackage(object):
 
     def read_from_db(self, db_session=None):
         s = db_session if db_session else database.conn.get_session()
-        dbo = s.query(dbspkg.SourcePackage)\
-                .filter_by(name=self.name, architecture=self.architecture)\
-                .first()
 
-        if dbo is None:
-            raise NoSuchSourcePackage(self.name, self.architecture)
+        try:
+            dbo = s.query(dbspkg.SourcePackage)\
+                    .filter_by(name=self.name, architecture=self.architecture)\
+                    .first()
 
-        s.expunge(dbo)
-        self.dbo = dbo
+            if dbo is None:
+                raise NoSuchSourcePackage(self.name, self.architecture)
+
+            s.expunge(dbo)
+            self.dbo = dbo
+
+            if not db_session:
+                s.commit()
+
+        except:
+            if not db_session:
+                s.rollback()
+            raise
+
+        finally:
+            if not db_session:
+                s.close()
 
 
     # Attributes
@@ -221,13 +234,13 @@ class SourcePackage(object):
 
     # Versions
     def list_version_numbers(self):
-        s = database.conn.get_session()
-        vns = s.query(dbspkg.SourcePackageVersion.version_number)\
-                .filter(dbspkg.SourcePackageVersion.source_package == self.name,
-                        dbspkg.SourcePackageVersion.architecture == self.architecture)\
-                .all()
+        with database.session_scope() as s:
+            vns = s.query(dbspkg.SourcePackageVersion.version_number)\
+                    .filter(dbspkg.SourcePackageVersion.source_package == self.name,
+                            dbspkg.SourcePackageVersion.architecture == self.architecture)\
+                    .all()
 
-        return [ vn[0] for vn in vns ]
+            return [ vn[0] for vn in vns ]
 
     def get_version(self, version_number):
         return SourcePackageVersion(self, version_number)
@@ -239,21 +252,21 @@ class SourcePackage(object):
         pv1 = aliased(dbspkg.SourcePackageVersion)
         pv2 = aliased(dbspkg.SourcePackageVersion)
 
-        s = database.get_session()
-        v = s.query(pv1.version_number)\
-                .filter(pv1.source_package == self.name,
-                        pv1.architecture == self.architecture,
-                        ~s.query(pv2)\
-                                .filter(pv2.source_package == pv1.source_package,
-                                    pv2.architecture == pv1.architecture,
-                                    pv2.version_number > pv1.version_number)\
-                                .exists())\
-                .first()
+        with database.session_scope() as s:
+            v = s.query(pv1.version_number)\
+                    .filter(pv1.source_package == self.name,
+                            pv1.architecture == self.architecture,
+                            ~s.query(pv2)\
+                                    .filter(pv2.source_package == pv1.source_package,
+                                        pv2.architecture == pv1.architecture,
+                                        pv2.version_number > pv1.version_number)\
+                                    .exists())\
+                    .first()
 
-        if not v:
-            raise NoSuchSourcePackageVersion(self.name, self.architecture, "latest")
+            if not v:
+                raise NoSuchSourcePackageVersion(self.name, self.architecture, "latest")
 
-        return SourcePackageVersion(self, v[0])
+            return SourcePackageVersion(self, v[0])
 
     def manually_hold_versions(self, remove=False, time=None):
         """
@@ -275,9 +288,8 @@ class SourcePackage(object):
                 else:
                     self.dbo.versions_manual_hold_time = time
 
-                s = database.get_session()
-                s.add(self.dbo)
-                s.commit()
+                with database.session_scope() as s:
+                    s.add(self.dbo)
 
                 self.read_from_db()
 
@@ -380,26 +392,37 @@ class SourcePackage(object):
                 # Delete the db tuple
                 s = database.get_session()
 
-                pv = aliased(dbspkg.SourcePackageVersion)
-                v = s.query(pv)\
-                        .filter(pv.source_package == self.name,
-                                pv.architecture == self.architecture,
-                                pv.version_number == version_number)\
-                        .first()
+                try:
+                    pv = aliased(dbspkg.SourcePackageVersion)
+                    v = s.query(pv)\
+                            .filter(pv.source_package == self.name,
+                                    pv.architecture == self.architecture,
+                                    pv.version_number == version_number)\
+                            .first()
 
-                # Could be that something went wrong when creating this package.
-                # We'd tolerate that.
-                if v is not None:
-                    s.delete(v)
+                    # Could be that something went wrong when creating this package.
+                    # We'd tolerate that.
+                    if v is not None:
+                        s.delete(v)
 
-                    self.dbo.versions_modified_time = time
-                    self.dbo.versions_reassured_time = time
-                    s.add(self.dbo)
+                        self.dbo.versions_modified_time = time
+                        self.dbo.versions_reassured_time = time
+                        s.add(self.dbo)
 
-                    s.commit()
+                        s.commit()
+                        s.close()
+
+                        self.read_from_db()
+
+                    else:
+                        s.rollback()
+
+                except:
+                    s.rollback()
+                    raise
+
+                finally:
                     s.close()
-
-                    self.read_from_db()
 
     def get_versions_meta(self):
         """
@@ -463,21 +486,33 @@ class SourcePackageVersion(object):
     # Peripheral methods
     def read_from_db(self, db_session = None):
         s = database.conn.get_session() if db_session is None else db_session
-        dbos = s.query(dbspkg.SourcePackageVersion)\
-                .filter_by(source_package = self.source_package.name,
-                        architecture = self.architecture,
-                        version_number = self.version_number).all()
 
-        if len(dbos) != 1:
-            raise NoSuchSourcePackageVersion(self.source_package.name,
-                    self.architecture, self.version_number)
+        try:
+            dbos = s.query(dbspkg.SourcePackageVersion)\
+                    .filter_by(source_package = self.source_package.name,
+                            architecture = self.architecture,
+                            version_number = self.version_number).all()
 
-        dbo = dbos[0]
+            if len(dbos) != 1:
+                raise NoSuchSourcePackageVersion(self.source_package.name,
+                        self.architecture, self.version_number)
 
-        if not db_session:
+            dbo = dbos[0]
+
             s.expunge(dbo)
+            self.dbo = dbo
 
-        self.dbo = dbo
+            if not db_session:
+                s.commit()
+
+        except:
+            if not db_session:
+                s.rollback()
+            raise
+
+        finally:
+            if not db_session:
+                s.close()
 
     def ensure_write_intent(self):
         """
@@ -515,53 +550,51 @@ class SourcePackageVersion(object):
         files = sorted(files)
 
         with lock_X(self.db_root_lock):
-            s = database.get_session()
+            with database.session_scope() as s:
+                # Check for differences
+                fs = aliased(dbspkg.SourcePackageVersionInstalledFile)
+                dbfiles = s.query(fs.path, fs.sha512sum)\
+                        .filter(fs.source_package == self.source_package.name,
+                                fs.architecture == self.architecture,
+                                fs.version_number == self.version_number)\
+                        .order_by(fs.path, fs.sha512sum)\
+                        .all()
 
-            # Check for differences
-            fs = aliased(dbspkg.SourcePackageVersionInstalledFile)
-            dbfiles = s.query(fs.path, fs.sha512sum)\
-                    .filter(fs.source_package == self.source_package.name,
-                            fs.architecture == self.architecture,
-                            fs.version_number == self.version_number)\
-                    .order_by(fs.path, fs.sha512sum)\
-                    .all()
+                different = len(files) != len(dbfiles)
 
-            different = len(files) != len(dbfiles)
+                if not different:
+                    for i in range(len(files)):
+                        if files[i] != dbfiles[i]:
+                            different = True
+                            break
 
-            if not different:
-                for i in range(len(files)):
-                    if files[i] != dbfiles[i]:
-                        different = True
-                        break
-
-            # Eventually update files
-            if different:
-                s.query(dbspkg.SourcePackageVersionInstalledFile)\
-                        .filter(dbspkg.SourcePackageVersionInstalledFile.source_package ==
-                                    self.source_package.name,
-                                dbspkg.SourcePackageVersionInstalledFile.architecture ==
-                                    self.architecture,
-                                dbspkg.SourcePackageVersionInstalledFile.version_number ==
-                                    self.version_number)\
-                        .delete()
+                # Eventually update files
+                if different:
+                    s.query(dbspkg.SourcePackageVersionInstalledFile)\
+                            .filter(dbspkg.SourcePackageVersionInstalledFile.source_package ==
+                                        self.source_package.name,
+                                    dbspkg.SourcePackageVersionInstalledFile.architecture ==
+                                        self.architecture,
+                                    dbspkg.SourcePackageVersionInstalledFile.version_number ==
+                                        self.version_number)\
+                            .delete()
 
 
-                for (p, sha512) in files:
-                    s.add(dbspkg.SourcePackageVersionInstalledFile(
-                        self.source_package.name,
-                        self.architecture,
-                        self.version_number,
-                        p,
-                        sha512))
+                    for (p, sha512) in files:
+                        s.add(dbspkg.SourcePackageVersionInstalledFile(
+                            self.source_package.name,
+                            self.architecture,
+                            self.version_number,
+                            p,
+                            sha512))
 
-            # Update the reassured time
-            self.dbo.installed_files_reassured_time = time
+                # Update the reassured time
+                self.dbo.installed_files_reassured_time = time
 
-            if different:
-                self.dbo.installed_files_modified_time = time
+                if different:
+                    self.dbo.installed_files_modified_time = time
 
-            s.add(self.dbo)
-            s.commit()
+                s.add(self.dbo)
 
             self.read_from_db()
 
@@ -570,16 +603,15 @@ class SourcePackageVersion(object):
         :returns: list(tuple(path, sha512sum))
         :rtype: list(tuple(str, str))
         """
-        s = database.get_session()
+        with database.session_scope() as s:
+            fs = aliased(dbspkg.SourcePackageVersionInstalledFile)
+            l = s.query(fs.path, fs.sha512sum)\
+                    .filter(fs.source_package == self.source_package.name,
+                            fs.architecture == self.architecture,
+                            fs.version_number == self.version_number)\
+                    .all()
 
-        fs = aliased(dbspkg.SourcePackageVersionInstalledFile)
-        l = s.query(fs.path, fs.sha512sum)\
-                .filter(fs.source_package == self.source_package.name,
-                        fs.architecture == self.architecture,
-                        fs.version_number == self.version_number)\
-                .all()
-
-        return l
+            return l
 
     def get_installed_files_meta(self):
         """
@@ -596,26 +628,25 @@ class SourcePackageVersion(object):
         """
         libs = []
 
-        s = database.get_session()
-
-        ls = aliased(dbspkg.SourcePackageSharedLibrary)
-        dblibs = s.query(ls)\
-                .filter(ls.source_package == self.source_package.name,
-                        ls.architecture == self.architecture,
-                        ls.source_package_version_number == self.version_number)\
-                .all()
-
-        for dblib in dblibs:
-            fs = aliased(dbspkg.SourcePackageSharedLibraryFile)
-            files = s.query(fs.name)\
-                    .filter(fs.id == dblib.id)\
+        with database.session_scope() as s:
+            ls = aliased(dbspkg.SourcePackageSharedLibrary)
+            dblibs = s.query(ls)\
+                    .filter(ls.source_package == self.source_package.name,
+                            ls.architecture == self.architecture,
+                            ls.source_package_version_number == self.version_number)\
                     .all()
 
-            files = [ e[0] for e in files ]
+            for dblib in dblibs:
+                fs = aliased(dbspkg.SourcePackageSharedLibraryFile)
+                files = s.query(fs.name)\
+                        .filter(fs.id == dblib.id)\
+                        .all()
 
-            libs.append(SharedLibrary(dblib, files))
+                files = [ e[0] for e in files ]
 
-        return libs
+                libs.append(SharedLibrary(dblib, files))
+
+            return libs
 
     def set_shared_libraries(self, libs):
         """
@@ -623,38 +654,34 @@ class SourcePackageVersion(object):
         :rtype: list(SharedLibraryTools.SharedLibrary)
         """
         with lock_X(self.db_root_lock):
-            s = database.get_session()
-            s.begin()
+            with database.session_scope() as s:
+                # Delete all currently stored shared libraries
+                sl = aliased(dbspkg.SourcePackageSharedLibrary)
+                s.query(sl)\
+                        .filter(sl.source_package == self.source_package.name,
+                                sl.architecture == self.architecture,
+                                sl.source_package_version_number == self.version_number)\
+                        .delete()
 
-            # Delete all currently stored shared libraries
-            sl = aliased(dbspkg.SourcePackageSharedLibrary)
-            s.query(sl)\
-                    .filter(sl.source_package == self.source_package.name,
-                            sl.architecture == self.architecture,
-                            sl.source_package_version_number == self.version_number)\
-                    .delete()
+                # Store the new ones
+                for l in libs:
+                    lib = dbspkg.SourcePackageSharedLibrary(
+                        self.source_package.name,
+                        self.architecture,
+                        self.version_number,
+                        l)
 
-            # Store the new ones
-            for l in libs:
-                lib = dbspkg.SourcePackageSharedLibrary(
-                    self.source_package.name,
-                    self.architecture,
-                    self.version_number,
-                    l)
+                    s.add(lib)
 
-                s.add(lib)
+                    # Make sure we have an id
+                    s.flush()
+                    id = s.id
 
-                # Make sure we have an id
-                s.flush()
-                id = s.id
-
-                # Insert files
-                s.execute(dbspkg.SourcePackageSharedLibraryFile.__table__.insert(
-                    [
-                        { 'id': id, 'path': f } for f in l.files
-                    ]))
-
-            s.commit()
+                    # Insert files
+                    s.execute(dbspkg.SourcePackageSharedLibraryFile.__table__.insert(
+                        [
+                            { 'id': id, 'path': f } for f in l.files
+                        ]))
 
     # Binary packages
     def list_current_binary_packages(self):
@@ -667,16 +694,15 @@ class SourcePackageVersion(object):
         :returns: list(names)
         :rtype: list(str)
         """
-        s = database.get_session()
+        with database.session_scope() as s:
+            cp = aliased(dbspkg.SourcePackageVersionCurrentBinaryPackage)
+            cbps = s.query(cp.name)\
+                    .filter(cp.source_package == self.source_package.name,
+                            cp.architecture == self.architecture,
+                            cp.version_number == self.version_number)\
+                    .all()
 
-        cp = aliased(dbspkg.SourcePackageVersionCurrentBinaryPackage)
-        cbps = s.query(cp.name)\
-                .filter(cp.source_package == self.source_package.name,
-                        cp.architecture == self.architecture,
-                        cp.version_number == self.version_number)\
-                .all()
-
-        return [ e[0] for e in cbps ]
+            return [ e[0] for e in cbps ]
 
     def get_current_binary_packages_meta(self):
         """
@@ -703,56 +729,55 @@ class SourcePackageVersion(object):
             time = timezone.now()
 
         with lock_X(self.db_root_lock):
-            s = database.get_session()
+            with database.session_scope() as s:
+                modified = False
 
-            modified = False
+                # Detect changes
+                cp = aliased(dbspkg.SourcePackageVersionCurrentBinaryPackage)
+                dbnames = s.query(cp.name)\
+                        .filter(cp.source_package == self.source_package.name,
+                                cp.architecture == self.architecture,
+                                cp.version_number == self.version_number)\
+                        .order_by(cp.name)\
+                        .all()
 
-            # Detect changes
-            cp = aliased(dbspkg.SourcePackageVersionCurrentBinaryPackage)
-            dbnames = s.query(cp.name)\
-                    .filter(cp.source_package == self.source_package.name,
-                            cp.architecture == self.architecture,
-                            cp.version_number == self.version_number)\
-                    .order_by(cp.name)\
-                    .all()
+                dbnames = [ e[0] for e in dbnames ]
 
-            dbnames = [ e[0] for e in dbnames ]
+                if len(dbnames) != len(names):
+                    modified = True
+                else:
+                    for i in range(len(names)):
+                        if dbnames[i] != names[i]:
+                            modified = True
+                            break
 
-            if len(dbnames) != len(names):
-                modified = True
-            else:
-                for i in range(len(names)):
-                    if dbnames[i] != names[i]:
-                        modified = True
-                        break
+                # Eventually update package list
+                if modified:
+                    t = dbspkg.SourcePackageVersionCurrentBinaryPackage.__table__
+                    s.execute(t.delete()\
+                            .where(t.c.source_package == self.source_package.name)\
+                            .where(t.c.architecture == self.architecture)\
+                            .where(t.c.version_number == self.version_number))
 
-            # Eventually update package list
-            if modified:
-                t = dbspkg.SourcePackageVersionCurrentBinaryPackage.__table__
-                s.execute(t.delete()\
-                        .where(t.c.source_package == self.source_package.name)\
-                        .where(t.c.architecture == self.architecture)\
-                        .where(t.c.version_number == self.version_number))
+                    s.flush()
+                    s.execute(cp.__table__.insert(
+                        [
+                            {
+                                'source_package': self.source_package.name,
+                                'architecture': self.architecture,
+                                'version_number': self.version_number,
+                                'name': n
+                            } for n in names
+                        ]))
 
-                s.flush()
-                s.execute(cp.__table__.insert(
-                    [
-                        {
-                            'source_package': self.source_package.name,
-                            'architecture': self.architecture,
-                            'version_number': self.version_number,
-                            'name': n
-                        } for n in names
-                    ]))
+                # Update timestamps
+                self.dbo.current_binary_packages_reassured_time = time
 
-            # Update timestamps
-            self.dbo.current_binary_packages_reassured_time = time
+                if modified:
+                    self.dbo.current_binary_packages_modified_time = time
 
-            if modified:
-                self.dbo.current_binary_packages_modified_time = time
+                s.add(self.dbo)
 
-            s.add(self.dbo)
-            s.commit()
             self.read_from_db()
 
     def list_all_binary_packages(self):
@@ -763,17 +788,16 @@ class SourcePackageVersion(object):
         :returns: list(names)
         :rtype: list(str)
         """
-        s = database.get_session()
+        with database.session_scope() as s:
+            bp = aliased(dbbpkg.BinaryPackage)
+            names = s.query(bp.name)\
+                    .filter(bp.source_package == self.source_package.name,
+                            bp.architecture == self.architecture,
+                            bp.source_package_version_number == self.version_number)\
+                    .distinct()\
+                    .all()
 
-        bp = aliased(dbbpkg.BinaryPackage)
-        names = s.query(bp.name)\
-                .filter(bp.source_package == self.source_package.name,
-                        bp.architecture == self.architecture,
-                        bp.source_package_version_number == self.version_number)\
-                .distinct()\
-                .all()
-
-        return [ n[0] for n in names ]
+            return [ n[0] for n in names ]
 
     def list_binary_package_version_numbers(self, name):
         """
@@ -784,18 +808,17 @@ class SourcePackageVersion(object):
         :returns: ordered list(version numbers)
         :rtype: list(VersionNumber) (may be empty if no such binary package exists)
         """
-        s = database.get_session()
+        with database.session_scope() as s:
+            bp = aliased(dbbpkg.BinaryPackage)
+            vs = s.query(bp.version_number)\
+                    .filter(bp.source_package == self.source_package.name,
+                            bp.architecture == self.architecture,
+                            bp.source_package_version_number == self.version_number,
+                            bp.name == name)\
+                    .order_by(bp.version_number)\
+                    .all()
 
-        bp = aliased(dbbpkg.BinaryPackage)
-        vs = s.query(bp.version_number)\
-                .filter(bp.source_package == self.source_package.name,
-                        bp.architecture == self.architecture,
-                        bp.source_package_version_number == self.version_number,
-                        bp.name == name)\
-                .order_by(bp.version_number)\
-                .all()
-
-        return [ v[0] for v in vs ]
+            return [ v[0] for v in vs ]
 
     def get_binary_package(self, name, version_number):
         """
@@ -878,53 +901,47 @@ class SourcePackageVersion(object):
 
         with lock_X(self.fs_binary_packages_lock):
             with lock_X(self.db_root_lock):
-                s = database.get_session()
+                with database.session_scope() as s:
+                    # Delete db tuple
+                    s.query(dbbpkg.BinaryPackage)\
+                            .filter_by(source_package = self.source_package.name,
+                                    architecture = self.architecture,
+                                    source_package_version_number = self.version_number,
+                                    name = name,
+                                    version_number = version_number)\
+                            .delete()
 
-                # Delete db tuple
-                s.query(dbbpkg.BinaryPackage)\
-                        .filter_by(source_package = self.source_package.name,
-                                architecture = self.architecture,
-                                source_package_version_number = self.version_number,
-                                name = name,
-                                version_number = version_number)\
-                        .delete()
-
-                s.commit()
-                s.close()
-
-                # Delete fs location
-                fops.rm_rf(os.path.join(self.fs_binary_packages, name, str(version_number)))
+                    # Delete fs location
+                    fops.rm_rf(os.path.join(self.fs_binary_packages, name, str(version_number)))
 
     # Key-Value-Store like attributes
     def list_attributes(self):
         """
         :returns: A list of all keys
         """
-        s = database.get_session()
-        
-        pa = aliased(dbspkg.SourcePackageVersionAttribute)
-        l = s.query(pa.key)\
-                .filter(pa.source_package == self.source_package.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number)\
-                .all()
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageVersionAttribute)
+            l = s.query(pa.key)\
+                    .filter(pa.source_package == self.source_package.name,
+                            pa.architecture == self.architecture,
+                            pa.version_number == self.version_number)\
+                    .all()
 
-        return [ e[0] for e in l]
+            return [ e[0] for e in l]
 
     def has_attribute(self, key):
         """
         :returns: True or False
         :rtype: bool
         """
-        s = database.get_session()
-
-        pa = aliased(dbspkg.SourcePackageVersionAttribute)
-        return len(s.query(pa.key)\
-                .filter(pa.source_package == self.source_package.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number,
-                        pa.key == key)\
-                .all()) != 0
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageVersionAttribute)
+            return len(s.query(pa.key)\
+                    .filter(pa.source_package == self.source_package.name,
+                            pa.architecture == self.architecture,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()) != 0
 
     def get_attribute(self, key):
         """
@@ -933,64 +950,9 @@ class SourcePackageVersion(object):
         :returns: The stored string or object in its appropriate type
         :rtype: str or virtually anything else
         """
-        s = database.get_session()
-
-        pa = aliased(dbspkg.SourcePackageVersionAttribute)
-        v = s.query(pa.value)\
-                .filter(pa.source_package == self.source_package.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number,
-                        pa.key == key)\
-                .all()
-
-        if len(v) == 0:
-            raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                    (self.source_package.name, architectures[self.architecture],
-                        self.version_number), key)
-
-        v = v[0][0]
-
-        if v is None or len(v) == 0:
-            return None
-        elif v[0] == 's':
-            return v[1:]
-        elif v[0] == 'p':
-            return pickle.loads(base64.b64decode(v[1:].encode('ascii')))
-        else:
-            return None
-
-    def get_attribute_meta(self, key):
-        """
-        :param key: The attribute's key
-        :type key: str
-        :returns: tuple(modified_time, reassured_time, manual_hold_time or None)
-        :rtype: tuple(datetime, datetime, datetime or None)
-        """
-        s = database.get_session()
-
-        pa = aliased(dbspkg.SourcePackageVersionAttribute)
-        v = s.query(pa.modified_time, pa.reassured_time, pa.manual_hold_time)\
-                .filter(pa.source_package == self.source_package.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number,
-                        pa.key == key)\
-                .all()
-
-        if len(v) == 0:
-            raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                    (self.source_package.name, architectures[self.architecture],
-                        self.version_number), key)
-
-        return v[0]
-
-    def manually_hold_attribute(self, key, remove=False, time=None):
-        self.ensure_write_intent()
-
-        with lock_X(self.db_root_lock):
-            s = database.get_session()
-
+        with database.session_scope() as s:
             pa = aliased(dbspkg.SourcePackageVersionAttribute)
-            v = s.query(pa)\
+            v = s.query(pa.value)\
                     .filter(pa.source_package == self.source_package.name,
                             pa.architecture == self.architecture,
                             pa.version_number == self.version_number,
@@ -1002,39 +964,88 @@ class SourcePackageVersion(object):
                         (self.source_package.name, architectures[self.architecture],
                             self.version_number), key)
 
-            v = v[0]
+            v = v[0][0]
 
-            if not time:
-                time = timezone.now()
-
-            if remove:
-                v.manual_hold_time = None
+            if v is None or len(v) == 0:
+                return None
+            elif v[0] == 's':
+                return v[1:]
+            elif v[0] == 'p':
+                return pickle.loads(base64.b64decode(v[1:].encode('ascii')))
             else:
-                v.manual_hold_time = time
+                return None
 
-            s.commit()
+    def get_attribute_meta(self, key):
+        """
+        :param key: The attribute's key
+        :type key: str
+        :returns: tuple(modified_time, reassured_time, manual_hold_time or None)
+        :rtype: tuple(datetime, datetime, datetime or None)
+        """
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageVersionAttribute)
+            v = s.query(pa.modified_time, pa.reassured_time, pa.manual_hold_time)\
+                    .filter(pa.source_package == self.source_package.name,
+                            pa.architecture == self.architecture,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()
+
+            if len(v) == 0:
+                raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                        (self.source_package.name, architectures[self.architecture],
+                            self.version_number), key)
+
+            return v[0]
+
+    def manually_hold_attribute(self, key, remove=False, time=None):
+        self.ensure_write_intent()
+
+        with lock_X(self.db_root_lock):
+            with database.session_scope() as s:
+                pa = aliased(dbspkg.SourcePackageVersionAttribute)
+                v = s.query(pa)\
+                        .filter(pa.source_package == self.source_package.name,
+                                pa.architecture == self.architecture,
+                                pa.version_number == self.version_number,
+                                pa.key == key)\
+                        .all()
+
+                if len(v) == 0:
+                    raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                            (self.source_package.name, architectures[self.architecture],
+                                self.version_number), key)
+
+                v = v[0]
+
+                if not time:
+                    time = timezone.now()
+
+                if remove:
+                    v.manual_hold_time = None
+                else:
+                    v.manual_hold_time = time
 
     def attribute_manually_held(self, key):
         """
         :returns: The time the attribute was manually held or None
         :rtype: datetime or None
         """
-        s = database.get_session()
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageVersionAttribute)
+            v = s.query(pa.manual_hold_time)\
+                    .filter(pa.source_package == self.source_package.name,
+                            pa.architecture == self.architecture,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()
 
-        pa = aliased(dbspkg.SourcePackageVersionAttribute)
-        v = s.query(pa.manual_hold_time)\
-                .filter(pa.source_package == self.source_package.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number,
-                        pa.key == key)\
-                .all()
+            if len(v) == 0:
+                raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                        (self.source_package.name, architectures[self.architecture],
+                            self.version_number), key)
 
-        if len(v) == 0:
-            raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                    (self.source_package.name, architectures[self.architecture],
-                        self.version_number), key)
-
-        return v[0][0]
+            return v[0][0]
 
     def set_attribute(self, key, value, time = None):
         """
@@ -1058,65 +1069,103 @@ class SourcePackageVersion(object):
 
         # Eventually update the attribute
         with lock_X(self.db_root_lock):
-            s = database.get_session()
+            with database.session_scope() as s:
+                pa = aliased(dbspkg.SourcePackageVersionAttribute)
+                a = s.query(pa)\
+                        .filter(pa.source_package == self.source_package.name,
+                                pa.architecture == self.architecture,
+                                pa.version_number == self.version_number,
+                                pa.key == key)\
+                        .all()
 
-            pa = aliased(dbspkg.SourcePackageVersionAttribute)
-            a = s.query(pa)\
-                    .filter(pa.source_package == self.source_package.name,
-                            pa.architecture == self.architecture,
-                            pa.version_number == self.version_number,
-                            pa.key == key)\
-                    .all()
+                if len(a) == 0:
+                    # Create a new attribute tuple
+                    s.add(dbspkg.SourcePackageVersionAttribute(
+                            self.source_package.name,
+                            self.architecture,
+                            self.version_number,
+                            key, o, time))
+                else:
+                    a = a[0]
 
-            if len(a) == 0:
-                # Create a new attribute tuple
-                s.add(dbspkg.SourcePackageVersionAttribute(
-                        self.source_package.name,
-                        self.architecture,
-                        self.version_number,
-                        key, o, time))
-            else:
-                a = a[0]
+                    # This attribute manually locked?
+                    if a.manual_hold_time is not None:
+                        raise AttributeManuallyHeld(key)
 
-                # This attribute manually locked?
-                if a.manual_hold_time is not None:
-                    raise AttributeManuallyHeld(key)
+                    if a.value != o:
+                        a.value = o;
+                        a.modified_time = time
 
-                if a.value != o:
-                    a.value = o;
-                    a.modified_time = time
-
-                a.reassured_time = time
-
-            s.commit()
+                    a.reassured_time = time
 
     def unset_attribute(self, key):
         self.ensure_write_intent()
 
         with lock_X(self.db_root_lock):
-            s = database.get_session()
+            with database.session_scope() as s:
+                pa = aliased(dbspkg.SourcePackageVersionAttribute)
+                a = s.query(pa)\
+                        .filter(pa.source_package == self.source_package.name,
+                                pa.architecture == self.architecture,
+                                pa.version_number == self.version_number,
+                                pa.key == key)\
+                        .all()
 
-            pa = aliased(dbspkg.SourcePackageVersionAttribute)
-            a = s.query(pa)\
-                    .filter(pa.source_package == self.source_package.name,
-                            pa.architecture == self.architecture,
-                            pa.version_number == self.version_number,
-                            pa.key == key)\
-                    .all()
+                if len(a) == 0:
+                    raise NoSuchAttribute("Source package version `%s@%s:%s'" %
+                            (self.source_package.name, architectures[self.architecture],
+                                self.version_number), key)
 
-            if len(a) == 0:
-                raise NoSuchAttribute("Source package version `%s@%s:%s'" %
-                        (self.source_package.name, architectures[self.architecture],
-                            self.version_number), key)
+                a = a[0]
 
-            a = a[0]
+                # Manually held?
+                if a.manual_hold_time is not None:
+                    raise AttributeManuallyHeld(key)
 
-            # Manually held?
-            if a.manual_hold_time is not None:
-                raise AttributeManuallyHeld(key)
+                s.delete(a)
 
-            s.delete(a)
-            s.commit()
+
+    # Some convenience methods for accessing frequently used attributes
+    def get_cdeps(self):
+        """
+        :rtype: DependencyList or None
+        """
+        if self.has_attribute('cdeps'):
+            return self.get_attribute('cdeps')
+        else:
+            return None
+
+    def set_cdeps(self, dl):
+        if not isinstance(dl, DependencyList):
+            raise TypeError
+        else:
+            self.set_attribute('cdeps', dl)
+
+    def add_cdep(self, pkg_name, c='', vn='0'):
+        """
+        e.g. add_cdep('basic_fhs', '>=', '3.0')
+        """
+        if self.has_attribute('cdeps'):
+            dl = self.get_attribute('cdeps')
+            dl.add_constraint(pkg_name, VersionConstraint(c, vn))
+            self.set_attribute('cdeps', dl)
+
+        else:
+            dl = DependencyList()
+            dl.add_constraint(pkg_name, VersionConstraint(c, vn))
+            self.set_attribute('cdeps', dl)
+
+    def remove_cdep(self, pkg_name):
+        if self.has_attribute('cdeps'):
+            dl = self.get_attribute('cdeps')
+            ndl = DependencyList()
+
+            for pn, cs in dl.l.items():
+                if pn != pkg_name:
+                    for c in cs:
+                        ndl.add_constraint(pn, c)
+
+            self.set_attribute('cdeps', ndl)
 
 
 # Some exceptions for our pleasure.

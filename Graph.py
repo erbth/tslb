@@ -35,6 +35,9 @@ class Node(object):
         return nodes
 
 def RenderGraphDot(nodes, name):
+    """
+    :rtype: bytes
+    """
     dot = "digraph %s {\n" % name
 
     nodes_enumerated = {}
@@ -48,8 +51,8 @@ def RenderGraphDot(nodes, name):
         dot = dot + '%s [label="%s"];\n' % (nodes_enumerated[node], str(node.data))
 
         for child in node.children:
-            dot = dot + "%s -> %s;\n" % (nodes_enumerated[child], nodes_enumerated[node])
+            dot = dot + "%s -> %s;\n" % (nodes_enumerated[node], nodes_enumerated[child])
 
     dot = dot + "}\n"
 
-    return dot
+    return dot.encode()

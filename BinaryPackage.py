@@ -77,18 +77,31 @@ class BinaryPackage(object):
     def read_from_db(self, db_session = None):
         s = db.get_session() if db_session is None else db_session
 
-        bp = aliased(dbbpkg.BinaryPackage)
-        dbo = s.query(bp)\
-                .filter(bp.name == self.name,
-                        bp.architecture == self.architecture,
-                        bp.version_number == self.version_number)\
-                .first()
+        try:
+            bp = aliased(dbbpkg.BinaryPackage)
+            dbo = s.query(bp)\
+                    .filter(bp.name == self.name,
+                            bp.architecture == self.architecture,
+                            bp.version_number == self.version_number)\
+                    .first()
 
-        if dbo is None:
-            raise NoSuchBinaryPackage(self.name, self.architecture, self.version_number)
+            if dbo is None:
+                raise NoSuchBinaryPackage(self.name, self.architecture, self.version_number)
 
-        s.expunge(dbo)
-        self.dbo = dbo
+            s.expunge(dbo)
+            self.dbo = dbo
+
+            if not db_session:
+                s.commit()
+
+        except:
+            if not db_session:
+                s.rollback()
+            raise
+
+        finally:
+            if not db_session:
+                s.close()
 
     def ensure_write_intent(self):
         """
@@ -117,54 +130,52 @@ class BinaryPackage(object):
         files = sorted(files)
 
         with lock_X(self.db_root_lock):
-            s = db.get_session()
+            with db.session_scope() as s:
+                # Check for differences
+                fs = aliased(dbbpkg.BinaryPackageFile)
+                dbfiles = s.query(fs.path, fs.sha512sum)\
+                        .filter(fs.binary_package == self.name,
+                                fs.architecture == self.architecture,
+                                fs.version_number == self.version_number)\
+                        .order_by(fs.path, fs.sha512sum)\
+                        .all()
 
-            # Check for differences
-            fs = aliased(dbbpkg.BinaryPackageFile)
-            dbfiles = s.query(fs.path, fs.sha512sum)\
-                    .filter(fs.binary_package == self.name,
-                            fs.architecture == self.architecture,
-                            fs.version_number == self.version_number)\
-                    .order_by(fs.path, fs.sha512sum)\
-                    .all()
+                different = len(files) != len(dbfiles)
 
-            different = len(files) != len(dbfiles)
+                if not different:
+                    for i in range(len(files)):
+                        if files[i] != dbfiles[i]:
+                            different = True
+                            break
 
-            if not different:
-                for i in range(len(files)):
-                    if files[i] != dbfiles[i]:
-                        different = True
-                        break
+                # Eventually update files
+                if different:
+                    t = dbbpkg.BinaryPackageFile.__table__
+                    s.execute(t.delete()\
+                            .where(t.c.binary_package == self.name)\
+                            .where(t.c.architecture == self.architecture)\
+                            .where(t.c.version_number == self.version_number))
 
-            # Eventually update files
-            if different:
-                t = dbbpkg.BinaryPackageFile.__table__
-                s.execute(t.delete()\
-                        .where(t.c.binary_package == self.name)\
-                        .where(t.c.architecture == self.architecture)\
-                        .where(t.c.version_number == self.version_number))
+                    s.flush()
 
-                s.flush()
+                    s.execute(t.insert(
+                        [
+                            {
+                                'binary_package': self.name,
+                                'architecture': self.architecture,
+                                'version_number': self.version_number,
+                                'path': p,
+                                'sha512sum': sha512
+                            } for p, sha512 in files
+                        ]))
 
-                s.execute(t.insert(
-                    [
-                        {
-                            'binary_package': self.name,
-                            'architecture': self.architecture,
-                            'version_number': self.version_number,
-                            'path': p,
-                            'sha512sum': sha512
-                        } for p, sha512 in files
-                    ]))
+                # Update the reassured time
+                self.dbo.files_reassured_time = time
 
-            # Update the reassured time
-            self.dbo.files_reassured_time = time
+                if different:
+                    self.dbo.files_modified_time = time
 
-            if different:
-                self.dbo.files_modified_time = time
-
-            s.add(self.dbo)
-            s.commit()
+                s.add(self.dbo)
 
             self.read_from_db()
 
@@ -173,17 +184,16 @@ class BinaryPackage(object):
         :returns: ordered list(tuple(path, sha512sum))
         :rtype: list(tuple(str, str))
         """
-        s = db.get_session()
+        with db.session_scope() as s:
+            fs = aliased(dbbpkg.BinaryPackageFile)
+            l = s.query(fs.path, fs.sha512sum)\
+                    .filter(fs.binary_package == self.name,
+                            fs.architecture == self.architecture,
+                            fs.version_number == self.version_number)\
+                    .order_by(fs.path)\
+                    .all()
 
-        fs = aliased(dbbpkg.BinaryPackageFile)
-        l = s.query(fs.path, fs.sha512sum)\
-                .filter(fs.binary_package == self.name,
-                        fs.architecture == self.architecture,
-                        fs.version_number == self.version_number)\
-                .order_by(fs.path)\
-                .all()
-
-        return l
+            return l
 
     def get_files_meta(self):
         """
@@ -197,31 +207,29 @@ class BinaryPackage(object):
         """
         :returns: A list of all keys
         """
-        s = db.get_session()
-        
-        pa = aliased(dbbpkg.BinaryPackageAttribute)
-        l = s.query(pa.key)\
-                .filter(pa.binary_package == self.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number)\
-                .all()
+        with db.session_scope() as s:
+            pa = aliased(dbbpkg.BinaryPackageAttribute)
+            l = s.query(pa.key)\
+                    .filter(pa.binary_package == self.name,
+                            pa.architecture == self.architecture,
+                            pa.version_number == self.version_number)\
+                    .all()
 
-        return [ e[0] for e in l]
+            return [ e[0] for e in l]
 
     def has_attribute(self, key):
         """
         :returns: True or False
         :rtype: bool
         """
-        s = db.get_session()
-
-        pa = aliased(dbbpkg.BinaryPackageAttribute)
-        return len(s.query(pa.key)\
-                .filter(pa.binary_package == self.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number,
-                        pa.key == key)\
-                .all()) != 0
+        with db.session_scope() as s:
+            pa = aliased(dbbpkg.BinaryPackageAttribute)
+            return len(s.query(pa.key)\
+                    .filter(pa.binary_package == self.name,
+                            pa.architecture == self.architecture,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()) != 0
 
     def get_attribute(self, key):
         """
@@ -230,64 +238,9 @@ class BinaryPackage(object):
         :returns: The stored string or object in its appropriate type
         :rtype: str or virtually anything else
         """
-        s = db.get_session()
-
-        pa = aliased(dbbpkg.BinaryPackageAttribute)
-        v = s.query(pa.value)\
-                .filter(pa.binary_package == self.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number,
-                        pa.key == key)\
-                .all()
-
-        if len(v) == 0:
-            raise NoSuchAttribute("Binary package `%s@%s:%s'" %
-                    (self.name, self.architecture,
-                        self.version_number), key)
-
-        v = v[0][0]
-
-        if v is None or len(v) == 0:
-            return None
-        elif v[0] == 's':
-            return v[1:]
-        elif v[0] == 'p':
-            return pickle.loads(base64.b64decode(v[1:].encode('ascii')))
-        else:
-            return None
-
-    def get_attribute_meta(self, key):
-        """
-        :param key: The attribute's key
-        :type key: str
-        :returns: tuple(modified_time, reassured_time, manual_hold_time or None)
-        :rtype: tuple(datetime, datetime, datetime or None)
-        """
-        s = db.get_session()
-
-        pa = aliased(dbbpkg.BinaryPackageAttribute)
-        v = s.query(pa.modified_time, pa.reassured_time, pa.manual_hold_time)\
-                .filter(pa.binary_package == self.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number,
-                        pa.key == key)\
-                .all()
-
-        if len(v) == 0:
-            raise NoSuchAttribute("Binary package `%s@%s:%s'" %
-                    (self.name, self.architecture,
-                        self.version_number), key)
-
-        return v[0]
-
-    def manually_hold_attribute(self, key, remove=False, time=None):
-        self.ensure_write_intent()
-
-        with lock_X(self.db_root_lock):
-            s = db.get_session()
-
+        with db.session_scope() as s:
             pa = aliased(dbbpkg.BinaryPackageAttribute)
-            v = s.query(pa)\
+            v = s.query(pa.value)\
                     .filter(pa.binary_package == self.name,
                             pa.architecture == self.architecture,
                             pa.version_number == self.version_number,
@@ -299,39 +252,88 @@ class BinaryPackage(object):
                         (self.name, self.architecture,
                             self.version_number), key)
 
-            v = v[0]
+            v = v[0][0]
 
-            if not time:
-                time = timezone.now()
-
-            if remove:
-                v.manual_hold_time = None
+            if v is None or len(v) == 0:
+                return None
+            elif v[0] == 's':
+                return v[1:]
+            elif v[0] == 'p':
+                return pickle.loads(base64.b64decode(v[1:].encode('ascii')))
             else:
-                v.manual_hold_time = time
+                return None
 
-            s.commit()
+    def get_attribute_meta(self, key):
+        """
+        :param key: The attribute's key
+        :type key: str
+        :returns: tuple(modified_time, reassured_time, manual_hold_time or None)
+        :rtype: tuple(datetime, datetime, datetime or None)
+        """
+        with db.session_scope() as s:
+            pa = aliased(dbbpkg.BinaryPackageAttribute)
+            v = s.query(pa.modified_time, pa.reassured_time, pa.manual_hold_time)\
+                    .filter(pa.binary_package == self.name,
+                            pa.architecture == self.architecture,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()
+
+            if len(v) == 0:
+                raise NoSuchAttribute("Binary package `%s@%s:%s'" %
+                        (self.name, self.architecture,
+                            self.version_number), key)
+
+            return v[0]
+
+    def manually_hold_attribute(self, key, remove=False, time=None):
+        self.ensure_write_intent()
+
+        with lock_X(self.db_root_lock):
+            with db.session_scope() as s:
+                pa = aliased(dbbpkg.BinaryPackageAttribute)
+                v = s.query(pa)\
+                        .filter(pa.binary_package == self.name,
+                                pa.architecture == self.architecture,
+                                pa.version_number == self.version_number,
+                                pa.key == key)\
+                        .all()
+
+                if len(v) == 0:
+                    raise NoSuchAttribute("Binary package `%s@%s:%s'" %
+                            (self.name, self.architecture,
+                                self.version_number), key)
+
+                v = v[0]
+
+                if not time:
+                    time = timezone.now()
+
+                if remove:
+                    v.manual_hold_time = None
+                else:
+                    v.manual_hold_time = time
 
     def attribute_manually_held(self, key):
         """
         :returns: The time the attribute was manually held or None
         :rtype: datetime or None
         """
-        s = db.get_session()
+        with db.session_scope() as s:
+            pa = aliased(dbbpkg.BinaryPackageAttribute)
+            v = s.query(pa.manual_hold_time)\
+                    .filter(pa.binary_package == self.name,
+                            pa.architecture == self.architecture,
+                            pa.version_number == self.version_number,
+                            pa.key == key)\
+                    .all()
 
-        pa = aliased(dbbpkg.BinaryPackageAttribute)
-        v = s.query(pa.manual_hold_time)\
-                .filter(pa.binary_package == self.name,
-                        pa.architecture == self.architecture,
-                        pa.version_number == self.version_number,
-                        pa.key == key)\
-                .all()
+            if len(v) == 0:
+                raise NoSuchAttribute("Binary package `%s@%s:%s'" %
+                        (self.name, self.architecture,
+                            self.version_number), key)
 
-        if len(v) == 0:
-            raise NoSuchAttribute("Binary package `%s@%s:%s'" %
-                    (self.name, self.architecture,
-                        self.version_number), key)
-
-        return v[0][0]
+            return v[0][0]
 
     def set_attribute(self, key, value, time = None):
         """
@@ -355,65 +357,60 @@ class BinaryPackage(object):
 
         # Eventually update the attribute
         with lock_X(self.db_root_lock):
-            s = db.get_session()
+            with db.session_scope() as s:
+                pa = aliased(dbbpkg.BinaryPackageAttribute)
+                a = s.query(pa)\
+                        .filter(pa.binary_package == self.name,
+                                pa.architecture == self.architecture,
+                                pa.version_number == self.version_number,
+                                pa.key == key)\
+                        .all()
 
-            pa = aliased(dbbpkg.BinaryPackageAttribute)
-            a = s.query(pa)\
-                    .filter(pa.binary_package == self.name,
-                            pa.architecture == self.architecture,
-                            pa.version_number == self.version_number,
-                            pa.key == key)\
-                    .all()
+                if len(a) == 0:
+                    # Create a new attribute tuple
+                    s.add(dbbpkg.BinaryPackageAttribute(
+                            self.name,
+                            self.architecture,
+                            self.version_number,
+                            key, o, time))
+                else:
+                    a = a[0]
 
-            if len(a) == 0:
-                # Create a new attribute tuple
-                s.add(dbbpkg.BinaryPackageAttribute(
-                        self.name,
-                        self.architecture,
-                        self.version_number,
-                        key, o, time))
-            else:
-                a = a[0]
+                    # This attribute manually locked?
+                    if a.manual_hold_time is not None:
+                        raise AttributeManuallyHeld(key)
 
-                # This attribute manually locked?
-                if a.manual_hold_time is not None:
-                    raise AttributeManuallyHeld(key)
+                    if a.value != o:
+                        a.value = o;
+                        a.modified_time = time
 
-                if a.value != o:
-                    a.value = o;
-                    a.modified_time = time
-
-                a.reassured_time = time
-
-            s.commit()
+                    a.reassured_time = time
 
     def unset_attribute(self, key):
         self.ensure_write_intent()
 
         with lock_X(self.db_root_lock):
-            s = db.get_session()
+            with db.session_scope() as s:
+                pa = aliased(dbbpkg.BinaryPackageAttribute)
+                a = s.query(pa)\
+                        .filter(pa.binary_package == self.name,
+                                pa.architecture == self.architecture,
+                                pa.version_number == self.version_number,
+                                pa.key == key)\
+                        .all()
 
-            pa = aliased(dbbpkg.BinaryPackageAttribute)
-            a = s.query(pa)\
-                    .filter(pa.binary_package == self.name,
-                            pa.architecture == self.architecture,
-                            pa.version_number == self.version_number,
-                            pa.key == key)\
-                    .all()
+                if len(a) == 0:
+                    raise NoSuchAttribute("Binary package `%s@%s:%s'" %
+                            (self.name, self.architecture,
+                                self.version_number), key)
 
-            if len(a) == 0:
-                raise NoSuchAttribute("Binary package `%s@%s:%s'" %
-                        (self.name, self.architecture,
-                            self.version_number), key)
+                a = a[0]
 
-            a = a[0]
+                # Manually held?
+                if a.manual_hold_time is not None:
+                    raise AttributeManuallyHeld(key)
 
-            # Manually held?
-            if a.manual_hold_time is not None:
-                raise AttributeManuallyHeld(key)
-
-            s.delete(a)
-            s.commit()
+                s.delete(a)
 
 # Some exceptions for our pleasure
 class NoSuchBinaryPackage(Exception):

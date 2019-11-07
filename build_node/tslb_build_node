@@ -1,0 +1,63 @@
+#!/usr/bin/python3
+
+import asyncio
+import BuildNode
+import settings
+import signal
+import yamb_node
+
+# Global variables to hold an always present state (even after tasks exit)
+bn = None
+
+def signal_handler(bn):
+    bn.request_quit()
+
+class LoopStopReason(object):
+    def __init__(self, initial = 0):
+        self.stop_code = initial
+
+    def get_code(self):
+        return self.stop_code
+
+    def set_code(self, code):
+        self.stop_code = code
+
+async def init(loop, lsr, yamb_hub_transport_address):
+    global bn
+
+    # Construct a build node.
+    bn = BuildNode.BuildNode(loop, lsr, yamb_hub_transport_address)
+    loop.add_signal_handler(signal.SIGTERM, signal_handler, bn)
+    loop.add_signal_handler(signal.SIGINT, signal_handler, bn)
+
+    await bn.connect_to_yamb_hub()
+
+def main():
+    print ("TSClient LEGACY Build System Build Node - starting", flush=True)
+
+    # Parse configuration data.
+    if 'Yamb' not in settings:
+        print('Missing section `Yamb\' in system configuration file.')
+        return 1
+
+    yamb_hub_transport_address = settings['Yamb'].get('hub', None)
+    if not yamb_hub_transport_address:
+        print ('No yamb hub transport address specified in the system configuration file.')
+        return 1
+
+    # Mount filesystem if it is not mounted already.
+
+    loop = asyncio.new_event_loop()
+    lsr = LoopStopReason()
+
+    # Control flow changes into the loop
+    loop.create_task(init(loop, lsr, yamb_hub_transport_address))
+
+    # The asyncio main loop - control over the loop is given to the BuildNode
+    # object by now.
+    loop.run_forever()
+
+    return lsr.get_code()
+
+if __name__ == '__main__':
+    exit(main())

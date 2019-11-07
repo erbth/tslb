@@ -1,0 +1,84 @@
+#!/usr/bin/python3
+
+import yamb_node
+import asyncio
+import json
+import settings
+from build_node import TSLB_NODE_YAMB_PROTOCOL
+from Console import Color
+
+# State definitions
+STATE_DISCOVER      = 0
+STATE_CHOOSE        = 1
+STATE_CONNECTED     = 2
+
+# A global state shared across all tasks
+yn = None
+lsr = 0
+state = STATE_DISCOVER
+
+# list(identity, yamb address): list(str, int)
+build_nodes = []
+
+def protocol_handler(src, data):
+    if src != yn.get_own_address():
+        try:
+            j = json.loads(data.decode('utf8'))
+        except:
+            return
+
+        if state == STATE_DISCOVER:
+            try:
+                identity = j['identity']
+            except:
+                return
+
+            build_nodes.append((identity, src))
+            print ((Color.YELLOW + "%s" + Color.NORMAL + " at %s") % (identity, yamb_node.addr_to_str(src)))
+
+async def init(hub):
+    global yn, state
+    loop = asyncio.get_running_loop()
+
+    # Connect to yamb
+    yn = yamb_node.YambNode(loop, hub)
+    yn.register_protocol(TSLB_NODE_YAMB_PROTOCOL, protocol_handler)
+
+    try:
+        await yn.connect()
+        await yn.wait_ready()
+    except Exception as e:
+        print("Failed to connect to yamb hub: %s" %e)
+        lsr = 1
+
+    # Search for build nodes
+    print ("Discovering possible build nodes ...")
+    yn.send_yamb_message(0x80000001, TSLB_NODE_YAMB_PROTOCOL, json.dumps({
+        'action': 'identify'
+        }).encode('utf8'))
+
+    # Timeout of 3 seconds
+    await asyncio.sleep(3)
+    state = STATE_CHOOSE
+    loop.stop()
+        
+def main():
+    # Parse configuration data.
+    if 'Yamb' not in settings:
+        print('Missing section `Yamb\' in system configuration file.')
+        return 1
+
+    yamb_hub_transport_address = settings['Yamb'].get('hub', None)
+    if not yamb_hub_transport_address:
+        print ('No yamb hub transport address specified in the system configuration file.')
+        return 1
+
+    loop = asyncio.new_event_loop()
+
+    loop.create_task(init(yamb_hub_transport_address))
+
+    loop.run_forever()
+    return lsr
+
+if __name__ == "__main__":
+    exit(main())

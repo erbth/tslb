@@ -47,7 +47,7 @@ class MainWindow(object):
         # Model: (source package name, version, binary package name, version, display name)
         self.pkg_treestore = Gtk.TreeStore(str, str, str, str, str)
         self.pkg_treeview = Gtk.TreeView.new_with_model(self.pkg_treestore)
-        self.p1hbox.pack_start(self.pkg_treeview, False, True, 5)
+        self.pkg_treeview.set_property('hexpand', True)
 
         cr = Gtk.CellRendererText()
         self.pkg_treeview.append_column(
@@ -55,6 +55,10 @@ class MainWindow(object):
 
         self.pkg_treeview_sel = self.pkg_treeview.get_selection()
         self.pkg_treeview_sel.set_mode(Gtk.SelectionMode.SINGLE)
+
+        self.pkg_scrolled_treeview = Gtk.ScrolledWindow(vscrollbar_policy=Gtk.PolicyType.ALWAYS)
+        self.pkg_scrolled_treeview.add(self.pkg_treeview)
+        self.p1hbox.pack_start(self.pkg_scrolled_treeview, False, True, 5)
 
         # Package overview
         self.pkg_ovr_frame = Gtk.Frame()

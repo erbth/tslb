@@ -4,15 +4,18 @@
 A General-purpose UI to perform simple tasks.
 """
 
+import sys
 from Architecture import architectures_reverse
-from BuildPipeline import BuildPipeline
+from build_pipeline import BuildPipeline
 from Console import Color
 import Console
 from SourcePackage import SourcePackageList, SourcePackage
-import BuildPipeline as bpp
+import build_pipeline as bpp
 import argparse
 import filesystem as fs
 import utils
+import Graph
+from CdepGraph import CdepGraph
 
 def initially_create_locks(args):
     print (Color.YELLOW + "Creating locks ..." + Color.NORMAL)
@@ -61,6 +64,28 @@ def unmount(args):
     else:
         Console.update_status_box(True)
 
+def show_cdep_graph(arch):
+    Console.print_status_box('Building cdep graph', file=sys.stderr)
+
+    try:
+        g = CdepGraph(arch)
+        g.build()
+        Console.update_status_box(True, file=sys.stderr)
+
+    except:
+        Console.update_status_box(False, file=sys.stderr)
+        raise
+
+    # import xdot, gi
+    # gi.require_version('Gtk', '3.0')
+    # from gi.repository import Gtk
+
+    # win = xdot.DotWindow()
+    # win.connect('delete-event', Gtk.main_quit)
+    # win.set_dotcode(Graph.RenderGraphDot(g.nodes.values(), 'Cdep graph'))
+    # Gtk.main()
+    print(Graph.RenderGraphDot(g.nodes.values(), 'Cdep_graph').decode())
+
 def main():
     parser = argparse.ArgumentParser(description=
             "A General-purpose UI to perform simple tasks."
@@ -81,6 +106,9 @@ def main():
     parser_mount = subparsers.add_parser('mount', help='Mount the filesystem.')
     parser_unmount = subparsers.add_parser('unmount', help='Unmount the filesystem.')
 
+    parser_show_cdep_graph = subparsers.add_parser('show-cdep-graph', help='Show the cdep graph.')
+    parser_show_cdep_graph.add_argument('arch')
+
     args = parser.parse_args()
 
     # Different commands
@@ -96,6 +124,13 @@ def main():
         mount(args)
     elif args.command == 'unmount':
         unmount(args)
+    elif args.command == 'show-cdep-graph':
+        if args.arch not in architectures_reverse:
+            print("Invalid architecture `%s'" % args.arch)
+            exit(1)
+
+        arch = architectures_reverse[args.arch]
+        show_cdep_graph(arch)
 
 if __name__ == '__main__':
     main()

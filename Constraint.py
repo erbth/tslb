@@ -428,6 +428,18 @@ class DependencyList(object):
     def get_constraint_list(self, o):
         return self.l.get(o, [])
 
+    def __hash__(self):
+        return hash(tuple(self.l.items()))
+
+    def __eq__(self, other):
+        return self.l == other.l
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __str__(self):
+        return '%s' % list(self.l.keys())
+
 
 # Exceptions for useful error messages
 class InvalidConstraintType(Exception):
