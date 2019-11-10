@@ -1,0 +1,74 @@
+#!/usr/bin/python3
+
+import asyncio
+from BuildMaster import BuildMaster
+import logging
+import settings
+import signal
+
+# Setup the logging facility
+logging.basicConfig(
+        level = logging.INFO,
+        format = "%(levelname)-8s: %(message)s",
+        )
+
+# Some global variables
+yamb_hub_transport_address = None
+bm = None
+
+async def init():
+    global bm
+    bm = BuildMaster(yamb_hub_transport_address)
+    await bm.connect()
+
+async def exit_gracefully(loop, reason=None):
+    logging.info(("exiting gracefully due to %s" % reason) if reason else "exiting gracefully")
+
+    tasks = [ t for t in asyncio.all_tasks() if t is not asyncio.current_task() ]
+    for t in tasks:
+        t.cancel()
+
+    loop.stop()
+
+def handle_exception(loop, context):
+    msg = context.get('exception', context['message'])
+    logging.critical(f"Caught an exception: {msg}")
+    if loop.is_running():
+        loop.create_task(exit_gracefully(loop))
+
+def handle_signal():
+    loop = asyncio.get_running_loop()
+    loop.create_task(exit_gracefully(loop, "signal"))
+
+def main():
+    logging.info ("TSClient LEGACY Build System Build Master - starting")
+
+    # Globals
+    global yamb_hub_transport_address
+
+    # Parse configuration data.
+    if 'Yamb' not in settings:
+        logging.info('Missing section `Yamb\' in system configuration file.')
+        exit(1)
+
+    yamb_hub_transport_address = settings['Yamb'].get('hub', None)
+    if not yamb_hub_transport_address:
+        logging.info ('No yamb hub transport address specified in the system configuration file.')
+        exit(1)
+
+    # Mount filesystem if it is not mounted already.
+
+    # Create a main loop and an init task
+    loop = asyncio.new_event_loop()
+
+    loop.add_signal_handler(signal.SIGINT,  handle_signal)
+    loop.add_signal_handler(signal.SIGTERM, handle_signal)
+
+    loop.set_exception_handler(handle_exception)
+    loop.create_task(init())
+
+    loop.run_forever()
+
+if __name__ == '__main__':
+    main()
+    exit(0)

@@ -82,8 +82,8 @@ class BuildNode(object):
         :param lsr: LoopStopReason to be set on error
         :type lsr: something with set_code and get_code methods.
         """
-        self.yamb_node = yamb_node.YambNode(loop, yamb_hub_transport_address)
-        self.yamb_node.register_protocol(TSLB_NODE_YAMB_PROTOCOL, self.protocol_handler)
+        self.yamb = yamb_node.YambNode(loop, yamb_hub_transport_address)
+        self.yamb.register_protocol(TSLB_NODE_YAMB_PROTOCOL, self.protocol_handler)
         self.loop = loop
         self.lsr = lsr
 
@@ -102,8 +102,8 @@ class BuildNode(object):
 
     async def connect_to_yamb_hub(self):
         try:
-            await self.yamb_node.connect()
-            await self.yamb_node.wait_ready()
+            await self.yamb.connect()
+            await self.yamb.wait_ready()
         except Exception as e:
             print(e)
             self.loop.stop()
@@ -115,12 +115,26 @@ class BuildNode(object):
             return
 
         print ("Connected to yamb with node address %s." %
-                yamb_node.addr_to_str(self.yamb_node.get_own_address()))
+                yamb_node.addr_to_str(self.yamb.get_own_address()))
 
     def request_quit(self):
         print ("Stopping")
         self.worker_monitor.cancel()
         self.loop.stop()
+
+    # Send a message to the build master
+    def send_message_to_master(self, dst, data={}):
+        """
+        Send a message to the build master that includes our own identity.
+
+        :param int dst: The build master's address
+        :param dict data: The data to send as kv-pairs.
+        """
+        d = dict(data)
+        d['identity'] = self.identity
+
+        self.yamb.send_yamb_message(dst, TSLB_NODE_YAMB_PROTOCOL,
+                json.dumps(d).encode('utf8'))
 
     # Look after the worker process
     async def worker_monitor_function(self):
@@ -152,16 +166,13 @@ class BuildNode(object):
                 self.state = (STATE_FAILED, self.state[1], FAIL_REASON_NODE_ABORT)
 
                 name, arch, version = self.state[1]
-                d = {
+                self.send_message_to_master (self.build_master_addr, {
                         'state': 'failed',
                         'name': name,
                         'arch': architectures[arch],
                         'version': version,
                         'reason': 'node/abort'
-                        }
-
-                self.yamb_node.send_yamb_message(self.build_master_addr, TSLB_NODE_YAMB_PROTOCOL,
-                        json.dumps(d).encode('utf8'))
+                        })
 
             elif exited:
                 if self.worker_error.value >= 0:
@@ -188,8 +199,7 @@ class BuildNode(object):
                             'version': version,
                             }
 
-                self.yamb_node.send_yamb_message(self.build_master_addr, TSLB_NODE_YAMB_PROTOCOL,
-                        json.dumps(d).encode('utf8'))
+                self.send_message_to_master(self.build_master_addr, d)
 
             # Clean up.
             # killed or exited will only be True if the process stopped in this
@@ -212,12 +222,12 @@ class BuildNode(object):
             self.abort_build(dst)
             return
 
-        self.yamb_node.send_yamb_message(dst, TSLB_NODE_YAMB_PROTOCOL, json.dumps({
+        self.send_message_to_master(dst, {
             'state': 'building',
             'name': name,
             'arch': architectures[arch],
             'version': version
-            }).encode('utf8'))
+            })
 
     def abort_build(self, dst):
         self.state = (STATE_FAILED, (name, arch, version), FAIL_REASON_NODE_ABORT)
@@ -229,15 +239,15 @@ class BuildNode(object):
             self.worker_process.close()
             self.worker_process = None
 
-        self.yamb_node.send_yamb_message(dst, TSLB_NODE_YAMB_PROTOCOL, json.dumps({
+        self.send_message_to_master(dst, {
             'state': 'failed',
             'name': name,
             'arch': architectures[arch],
             'version': version,
             'reason': 'node/abort'
-            }).encode('utf8'))
+            })
 
-    def get_status(self):
+    def get_status(self, dst):
         s = self.state[0]
         d = None
 
@@ -281,13 +291,11 @@ class BuildNode(object):
                     }
 
         if d is not None:
-            self.yamb_node.send_yamb_message(dst, TSLB_NODE_YAMB_PROTOCOL,
-                    json.dumps(d).encode('utf8'))
+            self.send_message_to_master(dst, d)
 
     def identify(self, dst):
-        self.yamb_node.send_yamb_message(dst, TSLB_NODE_YAMB_PROTOCOL, json.dumps({
-            'identity': self.identity
-            }).encode('utf8'))
+        # Our own identity will be included automatically
+        self.send_message_to_master(dst)
 
     def enable_maintenance(self, force, dst):
         pass
@@ -299,7 +307,7 @@ class BuildNode(object):
         pass
 
     def protocol_handler(self, src, data):
-        if src != self.yamb_node.get_own_address():
+        if src != self.yamb.get_own_address():
             try:
                 j = json.loads(data.decode('utf8'))
 

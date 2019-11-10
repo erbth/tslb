@@ -11,8 +11,38 @@ from Architecture import architectures, amd64
 from BinaryPackage import BinaryPackage
 
 """
-This is the main window of TSClient LEGACY's buid system's Gtk+ ui.
+This is the main window of TSClient LEGACY's build system's Gtk+ ui.
 """
+
+class BuildClusterView(Gtk.Box):
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+
+        # Display the build master
+        self.bm_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+
+        self.bm_box.pack_start(Gtk.Label(label='Currently not connected to a build master.'),
+                False, False, 0)
+
+        self.pack_start(self.bm_box, False, False, 0)
+
+        # A list of nodes
+        self.pack_start(Gtk.Separator(), False, False, 0)
+
+        label_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        label_box.pack_start(Gtk.Label(label='Build nodes:'), False, False, 0)
+        self.pack_start(label_box, False, False, 0)
+
+        frame = Gtk.Frame()
+        self.node_list_window = Gtk.ScrolledWindow(vscrollbar_policy=Gtk.PolicyType.ALWAYS)
+        frame.add(self.node_list_window)
+        self.pack_start(frame, True, True, 0)
+
+        # Send a build master discovery message
+        self.send_discover_master()
+
+    def send_discover_master(self):
+        pass
 
 class MainWindow(object):
     def __init__(self):
@@ -64,19 +94,15 @@ class MainWindow(object):
         self.pkg_ovr_frame = Gtk.Frame()
         self.p1hbox.pack_start(self.pkg_ovr_frame, True, True, 5)
 
-        # Page 2 for builds
-        self.nb_page2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.nb.append_page(self.nb_page2, Gtk.Label(label="Builds"))
-
-        self.p2hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.nb_page2.pack_start(self.p2hbox, True, True, 5)
-
-        # Page 3 for the build cluster
+        # Page 2 for the build cluster
         self.nb_page3 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.nb.append_page(self.nb_page3, Gtk.Label(label="Build cluster"))
 
         self.p3hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.nb_page3.pack_start(self.p3hbox, True, True, 5)
+
+        self.build_cluster_view = BuildClusterView()
+        self.p3hbox.pack_start(self.build_cluster_view, True, True, 10)
 
         # Connect signals
         self.window.connect("delete-event", Gtk.main_quit)
@@ -118,7 +144,8 @@ class MainWindow(object):
                         self.pkg_treestore.set(l, 0, pn, 1, str(vn), 2, bpn, 3, str(bpv), 4, str(bpv))
 
     def update_data(self, *args, **kwargs):
-        self.update_packages()
+        # self.update_packages()
+        pass
 
     def pkg_treeview_sel_changed(self, selection):
         # Clear package overview
