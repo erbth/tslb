@@ -7,10 +7,19 @@ A Gtk+ 3 UI for the TSClient LEGACY build system. This is the executable file.
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
+import threading
 from MainWindow import MainWindow
+from YambConnection import YambConnection
 
+# Yamb
+# A main loop for asyncio stuff
+yc = YambConnection()
+ycth = threading.Thread(target = yc.run_main_loop())
+ycth.start()
+
+# Gtk things
 mw = MainWindow()
 
-# A main loop
+# Another main loop for Gtk
 Gtk.main()
 exit(0)

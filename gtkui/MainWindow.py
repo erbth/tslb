@@ -1,6 +1,7 @@
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+gi.require_version("Lwg", "1.0")
+from gi.repository import Gtk, Lwg
 
 from SourcePackageProperties import SourcePackageProperties, SourcePackageVersionAttributes
 from Constraint import DependencyList
@@ -19,10 +20,18 @@ class BuildClusterView(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
 
         # Display the build master
-        self.bm_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        tmpbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        tmpbox.pack_start(Gtk.Label('Build Master:'), False, False, 0)
+        self.pack_start(tmpbox, False, False, 0)
 
-        self.bm_box.pack_start(Gtk.Label(label='Currently not connected to a build master.'),
-                False, False, 0)
+        self.bm_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+
+        self.bm_led = Lwg.RGBLed()
+        self.bm_led.set_red(1.0)
+        self.bm_box.pack_start(self.bm_led, False, False, 0)
+
+        self.bm_label = Gtk.Label(label='Currently not connected to a build master.')
+        self.bm_box.pack_start(self.bm_label, False, False, 0)
 
         self.pack_start(self.bm_box, False, False, 0)
 

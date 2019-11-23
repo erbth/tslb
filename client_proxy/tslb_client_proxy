@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import asyncio
-from BuildMaster import BuildMaster
+from client_proxy.ClientProxy import ClientProxy
 import logging
 import settings
 import signal
@@ -15,12 +15,12 @@ logging.basicConfig(
 
 # Some global variables
 yamb_hub_transport_address = None
-bm = None
+mgr = None
 
 async def init():
-    global bm
-    bm = BuildMaster(yamb_hub_transport_address)
-    await bm.connect()
+    global mgr
+    mgr = ClientProxy(yamb_hub_transport_address)
+    await mgr.connect()
 
 async def exit_gracefully(loop, reason=None):
     logging.info(("exiting gracefully due to %s" % reason) if reason else "exiting gracefully")
@@ -35,6 +35,7 @@ def handle_exception(loop, context):
     msg = context.get('exception', context['message'])
     logging.critical(f"Caught an exception: {msg}")
     traceback.print_exc()
+
     if loop.is_running():
         loop.create_task(exit_gracefully(loop))
 
@@ -43,7 +44,7 @@ def handle_signal():
     loop.create_task(exit_gracefully(loop, "signal"))
 
 def main():
-    logging.info ("TSClient LEGACY Build System Build Master - starting")
+    logging.info ("TSClient LEGACY Build System Client Proxy - starting")
 
     # Globals
     global yamb_hub_transport_address
@@ -71,6 +72,6 @@ def main():
 
     loop.run_forever()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
     exit(0)
