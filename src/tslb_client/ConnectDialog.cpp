@@ -1,10 +1,11 @@
 #include "ConnectDialog.h"
-#include <iostream>
+#include "ClientApplication.h"
 
 using namespace std;
 
-ConnectDialog::ConnectDialog() :
+ConnectDialog::ConnectDialog(ClientApplication *c) :
 	Gtk::Window(),
+	client_application(c),
 	m_lDescription("Welcome to the client for TSClient LEGACY Build System."
 			" Connect to a Client Proxy in a build cluster."),
 	m_leProxy("Hostname or IP-Address of Client Proxy:"),
@@ -15,7 +16,7 @@ ConnectDialog::ConnectDialog() :
 {
 	set_default_size (300, 200);
 	set_border_width (10);
-	set_title ("Connect to the TSClient LEGACY Build System");
+	set_title ("Connect to TSClient LEGACY Build System");
 	set_type_hint (Gdk::WindowTypeHint::WINDOW_TYPE_HINT_DIALOG);
 
 	m_lDescription.set_line_wrap(true);
@@ -57,6 +58,6 @@ void ConnectDialog::abort()
 
 void ConnectDialog::connect(string hostname)
 {
-	cout << "Connect to " << hostname << endl;
+	client_application->connect (hostname);
 	hide();
 }

@@ -3,9 +3,14 @@
 
 #include <gtkmm.h>
 
+/* Prototypes */
+class ClientApplication;
+
 class ConnectDialog : public Gtk::Window
 {
 protected:
+	ClientApplication *client_application;
+
 	Gtk::Label m_lDescription;
 	Gtk::Label m_leProxy;
 	Gtk::Entry m_eProxy;
@@ -25,7 +30,7 @@ protected:
 	void connect(std::string hostname);
 
 public:
-	ConnectDialog ();
+	ConnectDialog (ClientApplication *c);
 };
 
 #endif
