@@ -2,12 +2,12 @@
 import os
 import stat
 import re
-import Console
+from tslb import Console
 
-from VersionNumber import VersionNumber
-from Constraint import VersionConstraint, DependencyList
-from Architecture import amd64
-from SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
+from tslb.VersionNumber import VersionNumber
+from tslb.Constraint import VersionConstraint, DependencyList
+from tslb.Architecture import amd64
+from tslb.SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
 
 current_base = '/home/therb/projects/TSClientLEGACY/.old/tslegacy/packaging'
 ignored_dirs = set([

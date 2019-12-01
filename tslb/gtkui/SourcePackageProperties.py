@@ -2,8 +2,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
-from SourcePackage import SourcePackage, SourcePackageVersion
-from Architecture import architectures
+from tslb.SourcePackage import SourcePackage, SourcePackageVersion
+from tslb.Architecture import architectures
 
 class SourcePackageProperties(Gtk.Window):
     def __init__(self, name, architecture):

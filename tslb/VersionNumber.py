@@ -18,7 +18,7 @@ Therefore, each int component must not be greater than 999,999,999
 """
 
 from sqlalchemy import types
-from parse_utils import split_on_number_edge
+from tslb.parse_utils import split_on_number_edge
 import re
 
 class VersionNumber(object):

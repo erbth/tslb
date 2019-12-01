@@ -2,7 +2,7 @@ from contextlib import contextmanager
 import threading
 import sqlalchemy
 import sqlalchemy.orm
-import settings
+from tslb import settings
 
 thlocal = threading.local()
 

@@ -1,5 +1,5 @@
 import unittest
-from Constraint import *
+from tslb.Constraint import *
 
 class TestDependencyList(unittest.TestCase):
     def test_add_empty(self):

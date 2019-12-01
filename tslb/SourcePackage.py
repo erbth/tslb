@@ -1,25 +1,25 @@
-from Architecture import architectures
-from BinaryPackage import BinaryPackage, NoSuchBinaryPackage
-from CommonExceptions import NoSuchAttribute, MissingWriteIntent, AttributeManuallyHeld
-from filesystem import FileOperations as fops
-from SharedLibraryTools import SharedLibrary
-from VersionNumber import VersionNumber
+from tslb.Architecture import architectures
+from tslb.BinaryPackage import BinaryPackage, NoSuchBinaryPackage
+from tslb.CommonExceptions import NoSuchAttribute, MissingWriteIntent, AttributeManuallyHeld
+from tslb.filesystem import FileOperations as fops
+from tslb.SharedLibraryTools import SharedLibrary
+from tslb.VersionNumber import VersionNumber
 from sqlalchemy.orm import aliased
-from tclm import lock_S, lock_Splus, lock_X
+from tslb.tclm import lock_S, lock_Splus, lock_X
 from time import sleep
-import BinaryPackage as bp
+from tslb import BinaryPackage as bp
 import base64
-import database
-import database.BinaryPackage as dbbpkg
-import database.SourcePackage as dbspkg
-import filesystem as fs
+from tslb import database
+from tslb.database import BinaryPackage as dbbpkg
+from tslb.database import SourcePackage as dbspkg
+from tslb import filesystem as fs
 import os
 import pickle
-import tclm
-import timezone
+from tslb import tclm
+from tslb import timezone
 
 # For convenience methods
-from Constraint import VersionConstraint, DependencyList
+from tslb.Constraint import VersionConstraint, DependencyList
 
 class SourcePackageList(object):
     def __init__(self, architecture, create_locks = False):

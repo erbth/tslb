@@ -2,9 +2,9 @@ import asyncio
 import json
 import logging
 import yamb_node
-from build_master import TSLB_MASTER_CLIENT_YAMB_PROTOCOL
-import timezone
-from VersionNumber import VersionNumber
+from tslb.build_master import TSLB_MASTER_CLIENT_YAMB_PROTOCOL
+from tslb import timezone
+from tslb.VersionNumber import VersionNumber
 
 class BuildNodeProxy(object):
     def __init__(self, master, identity):

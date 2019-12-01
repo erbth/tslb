@@ -3,7 +3,7 @@ A package that tries to make filesystem operations such as deleting subtrees
 easier. It also creates an abstraction layer for i.e. snapshot management.
 """
 
-import settings
+from tslb import settings
 
 # Some exceptions - They must be ontop to be importable by modules imported
 # down this module (package).

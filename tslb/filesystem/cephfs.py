@@ -1,5 +1,5 @@
 from . import Fsbase, NoSuchSnapshot
-from CommonExceptions import CommandFailed, SavedYourLife
+from tslb.CommonExceptions import CommandFailed, SavedYourLife
 import os
 import shutil
 import stat

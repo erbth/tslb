@@ -1,9 +1,9 @@
-from tclm import lock_S, lock_Splus, lock_X
-from Console import Color
+from tslb.tclm import lock_S, lock_Splus, lock_X
+from tslb.Console import Color
 import multiprocessing
 import os
-import parse_utils
-import settings
+from tslb import parse_utils
+from tslb import settings
 import subprocess
 
 class StageBuild(object):

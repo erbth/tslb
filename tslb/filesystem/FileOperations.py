@@ -1,7 +1,7 @@
 import os
 import stat
 import shutil
-import CommonExceptions as es
+from tslb import CommonExceptions as es
 from . import fs
 
 def copy_from_base(base_dir, src_path, dst_dir):

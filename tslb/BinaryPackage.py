@@ -1,19 +1,19 @@
-from Architecture import architectures
-from CommonExceptions import NoSuchAttribute, MissingWriteIntent, AttributeManuallyHeld
-from VersionNumber import VersionNumber
+from tslb.Architecture import architectures
+from tslb.CommonExceptions import NoSuchAttribute, MissingWriteIntent, AttributeManuallyHeld
+from tslb.VersionNumber import VersionNumber
 from datetime import datetime
 from datetime import time as dttime
 from sqlalchemy.orm import aliased
-from tclm import lock_S, lock_Splus, lock_X
+from tslb.tclm import lock_S, lock_Splus, lock_X
 import base64
-import database as db
-import database.BinaryPackage as dbbpkg
-import database.SourcePackage as dbspkg
+from tslb import database as db
+from tslb.database import BinaryPackage as dbbpkg
+from tslb.database import SourcePackage as dbspkg
 import os
 import pickle
 import pytz
-import tclm
-import timezone
+from tslb import tclm
+from tslb import timezone
 
 def generate_version_number(time = None):
     """

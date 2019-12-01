@@ -1,6 +1,6 @@
-import Graph
-from SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
-from tclm import lock_S
+from tslb import Graph
+from tslb.SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
+from tslb.tclm import lock_S
 
 """
 Build graph containing all packages with edges that show compiletime

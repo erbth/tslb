@@ -1,16 +1,16 @@
-from Architecture import architectures, architectures_reverse
-from build_pipeline import BuildPipeline
-from Console import Color
-from VersionNumber import VersionNumber
-import SourcePackage
+from tslb.Architecture import architectures, architectures_reverse
+from tslb.build_pipeline import BuildPipeline
+from tslb.Console import Color
+from tslb.VersionNumber import VersionNumber
+from tslb import SourcePackage
 import asyncio
 import json
 import multiprocessing
 import os
-import processes
+from tslb import processes
 import socket
 import yamb_node
-from build_node import TSLB_NODE_YAMB_PROTOCOL
+from tslb.build_node import TSLB_NODE_YAMB_PROTOCOL
 
 # State definitions
 # Packages are triples (name, arch, version)

@@ -1,4 +1,4 @@
-from tclm import lock_S, lock_Splus, lock_X
+from tslb.tclm import lock_S, lock_Splus, lock_X
 
 class StageFindSharedLibraries(object):
     name = 'find_shared_libraries'

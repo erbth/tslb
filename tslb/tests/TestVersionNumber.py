@@ -1,6 +1,6 @@
 import unittest
 
-from VersionNumber import *
+from tslb.VersionNumber import *
 
 class TestVersionNumber(unittest.TestCase):
     def test_comparisons(self):

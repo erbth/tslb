@@ -2,11 +2,11 @@
 Some utility functions that are useful in various conditions or special states
 of the system, and do not properly fit into exactly one Python module/package.
 """
-from Architecture import architectures
-from BinaryPackage import BinaryPackage
-from SourcePackage import SourcePackage, SourcePackageList, SourcePackageVersion
-from tclm import lock_X
-import tclm
+from tslb.Architecture import architectures
+from tslb.BinaryPackage import BinaryPackage
+from tslb.SourcePackage import SourcePackage, SourcePackageList, SourcePackageVersion
+from tslb.tclm import lock_X
+from tslb import tclm
 
 def initially_create_all_locks():
     """

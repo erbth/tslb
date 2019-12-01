@@ -1,11 +1,11 @@
-from tclm import lock_S, lock_Splus, lock_X
-from Architecture import architectures
-from Console import Color
-from filesystem import FileOperations as fops
-import BinaryPackage as bp
+from tslb.tclm import lock_S, lock_Splus, lock_X
+from tslb.Architecture import architectures
+from tslb.Console import Color
+from tslb.filesystem import FileOperations as fops
+from tslb import BinaryPackage as bp
 import os
-import parse_utils
-import settings
+from tslb import parse_utils
+from tslb import settings
 import subprocess
 
 class StageSplitIntoBinaryPackages(object):

@@ -1,6 +1,6 @@
 import asyncio
 import queue
-import settings
+from tslb import settings
 import yamb_node
 
 class YambConnection(object):

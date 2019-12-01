@@ -1,9 +1,9 @@
 import re
 import os
-from VersionNumber import VersionNumber
-import CommonExceptions as ces
+from tslb.VersionNumber import VersionNumber
+from tslb import CommonExceptions as ces
 import subprocess
-from database import SourcePackage as dbspkg
+from tslb.database import SourcePackage as dbspkg
 
 def file_is_shared_object (filename):
     return True if re.match ('^.*\.so(\.\d+)*$', filename) else False

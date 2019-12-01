@@ -4,8 +4,8 @@ A singleton wrapper around tclmc from tclm_python_client.
 
 import threading
 import tclm_python_client
-import settings
-import parse_utils
+from tslb import settings
+from tslb import parse_utils
 
 # Connect
 if 'TCLM' not in settings:

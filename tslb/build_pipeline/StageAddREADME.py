@@ -1,4 +1,4 @@
-from tclm import lock_S, lock_Splus, lock_X
+from tslb.tclm import lock_S, lock_Splus, lock_X
 
 class StageAddREADME(object):
     name = 'add_readme'

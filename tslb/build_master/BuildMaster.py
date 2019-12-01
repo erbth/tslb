@@ -3,12 +3,12 @@ import json
 import logging
 import socket
 import yamb_node
-from build_node import TSLB_NODE_YAMB_PROTOCOL
-from build_master import TSLB_MASTER_CLIENT_YAMB_PROTOCOL
-import timezone
-from build_node import BuildNode
-from Architecture import architectures, architectures_reverse
-from VersionNumber import VersionNumber
+from tslb.build_node import TSLB_NODE_YAMB_PROTOCOL
+from tslb.build_master import TSLB_MASTER_CLIENT_YAMB_PROTOCOL
+from tslb import timezone
+from tslb.build_node import BuildNode
+from tslb.Architecture import architectures, architectures_reverse
+from tslb.VersionNumber import VersionNumber
 
 # The Build Master <-> Build Node protocol:
 # The protocol is composed of messages which are serialized jsons.

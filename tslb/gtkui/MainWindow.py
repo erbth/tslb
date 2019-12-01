@@ -4,12 +4,12 @@ gi.require_version("Lwg", "1.0")
 from gi.repository import Gtk, Lwg
 
 from SourcePackageProperties import SourcePackageProperties, SourcePackageVersionAttributes
-from Constraint import DependencyList
+from tslb.Constraint import DependencyList
 
-from VersionNumber import VersionNumber
-from SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
-from Architecture import architectures, amd64
-from BinaryPackage import BinaryPackage
+from tslb.VersionNumber import VersionNumber
+from tslb.SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
+from tslb.Architecture import architectures, amd64
+from tslb.BinaryPackage import BinaryPackage
 
 """
 This is the main window of TSClient LEGACY's build system's Gtk+ ui.

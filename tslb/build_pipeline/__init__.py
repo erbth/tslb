@@ -1,15 +1,15 @@
-from Architecture import architectures
-from BinaryPackage import BinaryPackage
-from Console import Color
-from SourcePackage import SourcePackage, SourcePackageVersion
-from database import BuildPipeline as dbbp
-from filesystem import FileOperations as fops
+from tslb.Architecture import architectures
+from tslb.BinaryPackage import BinaryPackage
+from tslb.Console import Color
+from tslb.SourcePackage import SourcePackage, SourcePackageVersion
+from tslb.database import BuildPipeline as dbbp
+from tslb.filesystem import FileOperations as fops
 from sqlalchemy.orm import aliased
-import BinaryPackage as bp
-import Console
-import database as db
+from tslb import BinaryPackage as bp
+from tslb import Console
+from tslb import database as db
 import sys
-import timezone
+from tslb import timezone
 
 from .StageUnpack import StageUnpack
 from .StagePatch import StagePatch

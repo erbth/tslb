@@ -1,8 +1,8 @@
 """
 Constraints for i.e. version numbers.
 """
-from VersionNumber import VersionNumber
-from CommonExceptions import SavedYourLife
+from tslb.VersionNumber import VersionNumber
+from tslb.CommonExceptions import SavedYourLife
 
 CONSTRAINT_TYPE_NONE    = 0
 CONSTRAINT_TYPE_EQ      = 1

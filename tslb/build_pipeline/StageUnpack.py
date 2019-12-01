@@ -1,8 +1,8 @@
 import os
-import parse_utils
-import settings
+from tslb import parse_utils
+from tslb import settings
 import subprocess
-from tclm import lock_S, lock_Splus, lock_X
+from tslb.tclm import lock_S, lock_Splus, lock_X
 
 # We need a source location
 if 'TSLB' not in settings:

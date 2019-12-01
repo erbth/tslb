@@ -1,5 +1,5 @@
 import re
-import CommonExceptions as ces
+from tslb import CommonExceptions as ces
 
 """
 General utilities for parsing user input and other string expressions.
