@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 import asyncio
-import BuildNode
-import settings
+from tslb.build_node import BuildNode
+from tslb import settings
 import signal
 import yamb_node
 

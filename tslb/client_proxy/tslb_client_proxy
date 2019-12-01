@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 import asyncio
-from client_proxy.ClientProxy import ClientProxy
+from tslb.client_proxy.ClientProxy import ClientProxy
 import logging
-import settings
+from tslb import settings
 import signal
 import traceback
 

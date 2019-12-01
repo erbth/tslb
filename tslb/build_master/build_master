@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 import asyncio
-from BuildMaster import BuildMaster
+from tslb.build_master.BuildMaster import BuildMaster
 import logging
-import settings
+from tslb import settings
 import signal
 import traceback
 

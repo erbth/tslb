@@ -3,9 +3,9 @@
 import yamb_node
 import asyncio
 import json
-import settings
-from build_node import TSLB_NODE_YAMB_PROTOCOL
-from Console import Color
+from tslb import settings
+from tslb.build_node import TSLB_NODE_YAMB_PROTOCOL
+from tslb.Console import Color
 
 # State definitions
 STATE_DISCOVER      = 0

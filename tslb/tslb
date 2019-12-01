@@ -5,17 +5,17 @@ A General-purpose UI to perform simple tasks.
 """
 
 import sys
-from Architecture import architectures_reverse
-from build_pipeline import BuildPipeline
-from Console import Color
-import Console
-from SourcePackage import SourcePackageList, SourcePackage
-import build_pipeline as bpp
+from tslb.Architecture import architectures_reverse
+from tslb.build_pipeline import BuildPipeline
+from tslb.Console import Color
+from tslb import Console
+from tslb.SourcePackage import SourcePackageList, SourcePackage
+from tslb import build_pipeline as bpp
 import argparse
-import filesystem as fs
-import utils
-import Graph
-from CdepGraph import CdepGraph
+from tslb import filesystem as fs
+from tslb import utils
+from tslb import Graph
+from tslb.CdepGraph import CdepGraph
 
 def initially_create_locks(args):
     print (Color.YELLOW + "Creating locks ..." + Color.NORMAL)
