@@ -31,6 +31,7 @@ ConnectingWindow::ConnectingWindow (ClientApplication *c, string host) :
 	// Connect signal handlers
 	m_btAbort.signal_clicked().connect(sigc::mem_fun(*this, &ConnectingWindow::btAbort_clicked));
 	signal_delete_event().connect(sigc::mem_fun(*this, &ConnectingWindow::on_window_delete));
+	signal_key_press_event().connect(sigc::mem_fun(*this, &ConnectingWindow::on_window_key_press));
 
 	// Start to connect
 	m_socket_client = Gio::SocketClient::create();
@@ -53,6 +54,16 @@ bool ConnectingWindow::on_window_delete(GdkEventAny *any_event)
 	return true;
 }
 
+bool ConnectingWindow::on_window_key_press(GdkEventKey *event)
+{
+	if (event->keyval == GDK_KEY_Escape)
+	{
+		abort();
+		return true;
+	}
+	return false;
+}
+
 void ConnectingWindow::abort()
 {
 	if (m_connect_cancellable)
@@ -68,13 +79,21 @@ void ConnectingWindow::async_connect_ready (Glib::RefPtr<Gio::AsyncResult> async
 	try {
 		conn = m_socket_client->connect_to_host_finish(async_result);
 	} catch (Glib::Error &e) {
-		m_client_application->failed_to_connect(e.what());
+		if (e.code() != G_IO_ERROR_CANCELLED)
+		{
+			m_client_application->failed_to_connect(e.what());
+			hide();
+		}
+		return;
+	}
+
+	if (!conn)
+	{
+		m_client_application->failed_to_connect("Conn is a nullptr.");
 		hide();
 		return;
 	}
 
-	if (conn)
-		m_client_application->connected(conn);
-
+	m_client_application->connected(conn);
 	hide();
 }

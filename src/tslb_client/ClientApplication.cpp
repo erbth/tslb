@@ -67,6 +67,7 @@ void ClientApplication::failed_to_connect(Glib::ustring error)
 void ClientApplication::connected(Glib::RefPtr<Gio::SocketConnection> conn)
 {
 	build_cluster_window = make_shared<BuildClusterWindow>(this);
+	build_cluster_window->set_connection(conn);
 	add_window (*build_cluster_window);
 	build_cluster_window->show();
 }

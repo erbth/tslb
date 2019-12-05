@@ -22,6 +22,7 @@ protected:
 
 	void btAbort_clicked();
 	bool on_window_delete(GdkEventAny *any_event);
+	bool on_window_key_press(GdkEventKey *event);
 	void abort();
 
 	void async_connect_ready (Glib::RefPtr<Gio::AsyncResult> async_result);

@@ -24,6 +24,8 @@ protected:
 	// Event handlers
 	void btAbort_clicked ();
 	void btConnect_clicked ();
+	bool on_window_key_press (GdkEventKey *event);
+	void eProxy_activate();
 
 	// Control the program
 	void abort();

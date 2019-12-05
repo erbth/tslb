@@ -39,6 +39,8 @@ ConnectDialog::ConnectDialog(ClientApplication *c) :
 	// Connect signal handlers
 	m_btAbort.signal_clicked().connect(sigc::mem_fun(*this, &ConnectDialog::btAbort_clicked));
 	m_btConnect.signal_clicked().connect(sigc::mem_fun(*this, &ConnectDialog::btConnect_clicked));
+	m_eProxy.signal_activate().connect(sigc::mem_fun(*this, &ConnectDialog::eProxy_activate));
+	signal_key_press_event().connect(sigc::mem_fun(*this, &ConnectDialog::on_window_key_press));
 }
 
 void ConnectDialog::btAbort_clicked()
@@ -49,6 +51,26 @@ void ConnectDialog::btAbort_clicked()
 void ConnectDialog::btConnect_clicked()
 {
 	connect(m_eProxy.get_text());
+}
+
+void ConnectDialog::eProxy_activate()
+{
+	connect(m_eProxy.get_text());
+}
+
+bool ConnectDialog::on_window_key_press(GdkEventKey *event)
+{
+	switch (event->keyval)
+	{
+		case GDK_KEY_Escape:
+		{
+			abort();
+			return true;
+		}
+
+		default:
+			return false;
+	}
 }
 
 void ConnectDialog::abort()

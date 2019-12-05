@@ -5,6 +5,8 @@ import yamb_node
 from tslb.build_master import TSLB_MASTER_CLIENT_YAMB_PROTOCOL
 from tslb import timezone
 from tslb.VersionNumber import VersionNumber
+from tslb.stream import stream
+from tslb.client_proxy import message
 
 class BuildNodeProxy(object):
     def __init__(self, master, identity):
@@ -52,6 +54,10 @@ class BuildNodeProxy(object):
                     (self.identity, self.last_response, self.responding, self.state))
 
 class BuildMasterProxy(object):
+    """
+    The BuildMasterProxy does not only hold a build master's attributes but also
+    inform clients about status changes.
+    """
     def __init__(self, mgr, identity, current_yamb_address):
         self.mgr = mgr
         self.identity = identity
@@ -151,6 +157,77 @@ class BuildMasterProxy(object):
         """
         logging.debug("Received build state: %s" % build_state)
 
+class Client(object):
+    """
+    Stores a client connection and processes incomming messages.
+    """
+    def __init__(self, client_proxy, reader, writer):
+        self.client_proxy = client_proxy
+        self.reader = reader
+        self.writer = writer
+
+        # Start a read loop
+        asyncio.get_running_loop().create_task(self.read_loop())
+
+    async def read_loop(self):
+        buf = stream()
+
+        while True:
+            try:
+                data = await self.reader.read(10000)
+            except Exception as e:
+                logging.debug("Client connection closed due to: %s." % e)
+                break
+            except:
+                logging.debug("Client connection closed due to unknown error.")
+                break
+
+            if data == b'':
+                break
+
+            buf.write_bytes(data)
+
+            l = message.contains_full(buf)
+            if l:
+                msg = buf.pop(l)
+                self.process_message(msg)
+
+        # Remove the client
+        self.client_proxy.remove_client(self)
+
+    def process_message(self, msg):
+        msgid, length = message.parse(msg)
+
+        if msgid == 1:
+            if self.client_proxy.build_master is not None:
+                msg = message.create_build_master_update((
+                    self.client_proxy.build_master.identity,
+                    self.client_proxy.build_master.current_yamb_address,
+                    self.client_proxy.build_master.seems_dead()
+                    ))
+            else:
+                msg = message.create_build_master_update()
+
+            self.send_stream(msg)
+
+        elif msgid == 2:
+            logging.debug('get_node_list')
+
+        elif msgid == 3:
+            try:
+                name = message.parse_get_node_state(msg)
+            except message.ParseError as e:
+                logging.error(str(e))
+
+            else:
+                logging.debug('get_node_state(%s)' % name)
+
+        else:
+            logging.error("Received unknown message with msgid = %d." % msgid)
+
+    def send_stream(self, s):
+        self.writer.write(s.buffer)
+
 class ClientProxy(object):
     def __init__(self, yamb_hub_transport_addr):
         self.loop = asyncio.get_running_loop()
@@ -168,7 +245,13 @@ class ClientProxy(object):
 
         # Finally we should communicate with clients.
         self.client_server = None
-        self.clients = []
+        self.loop.create_task(self.start_server())
+
+        self.clients = set()
+
+    async def start_server(self):
+        self.client_server = await asyncio.start_server(self.handle_client_connect, '::', 30100)
+        await self.client_server.start_serving()
 
     async def connect(self):
         # Connect to yamb
@@ -246,6 +329,14 @@ class ClientProxy(object):
 
         if 'node-states' in j:
             self.build_master.process_node_states(j['node-states'])
+
+    # Client connections
+    def remove_client(self, client):
+        self.clients.remove(client)
+        client.writer.close()
+
+    async def handle_client_connect(self, reader, writer):
+        self.clients.add(Client(self, reader, writer))
 
     # Do periodic updates
     async def periodic_updates(self):
