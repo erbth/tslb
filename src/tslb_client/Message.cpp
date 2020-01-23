@@ -4,7 +4,7 @@ using namespace std;
 
 namespace Message {
 
-stream create(uint32_t msgid)
+/* stream create(uint32_t msgid)
 {
 	stream s;
 	s.write_uint32(msgid);
@@ -38,13 +38,13 @@ stream create_get_node_state(std::string id)
 	s.write_string(id);
 	update_length(s);
 	return s;
-}
+} */
 
 
 /**
  * :returns: 0 if s does not contain a full message, otherwise the message's
  * 		total length. */
-size_t contains_full(stream &s)
+/* size_t contains_full(stream &s)
 {
 	if (s.size() >= 8)
 	{
@@ -58,6 +58,6 @@ size_t contains_full(stream &s)
 	}
 
 	return 0;
-}
+} */
 
 };

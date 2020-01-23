@@ -1,18 +1,20 @@
 #include "ConnectingWindow.h"
+#include "BuildClusterProxy.h"
 #include "ClientApplication.h"
 
 using namespace std;
 
-ConnectingWindow::ConnectingWindow (ClientApplication *c, string host) :
+ConnectingWindow::ConnectingWindow (ClientApplication *c) :
 	Gtk::Window (),
 	m_client_application(c),
+	m_build_cluster_proxy(c->get_build_cluster_proxy()),
 	m_lInfo ("Intializing"),
 	m_btAbort("Abort"),
 	m_bMain_vbox(Gtk::Orientation::ORIENTATION_VERTICAL)
 {
 	set_default_size (300, 200);
 	set_border_width (10);
-	set_title ("Connecting to TSClient LEGACY Build System");
+	set_title ("Connecting to the yamb hub");
 	set_type_hint (Gdk::WindowTypeHint::WINDOW_TYPE_HINT_SPLASHSCREEN);
 
 	override_background_color (Gdk::RGBA("#008000"));
@@ -33,14 +35,17 @@ ConnectingWindow::ConnectingWindow (ClientApplication *c, string host) :
 	signal_delete_event().connect(sigc::mem_fun(*this, &ConnectingWindow::on_window_delete));
 	signal_key_press_event().connect(sigc::mem_fun(*this, &ConnectingWindow::on_window_key_press));
 
-	// Start to connect
-	m_socket_client = Gio::SocketClient::create();
+	m_build_cluster_proxy.subscribe_to_connection_state(
+			BuildClusterProxy::ConnectionStateSubscriber(
+				&ConnectingWindow::_connection_established,
+				nullptr,
+				&ConnectingWindow::_connection_failed,
+				this));
+}
 
-	m_lInfo.set_text("Connecting to " + host + " ...");
-
-	m_connect_cancellable = Gio::Cancellable::create();
-	m_socket_client->connect_to_host_async (host, 30100, m_connect_cancellable,
-			sigc::mem_fun(*this, &ConnectingWindow::async_connect_ready));
+ConnectingWindow::~ConnectingWindow()
+{
+	m_build_cluster_proxy.unsubscribe_from_connection_state(this);
 }
 
 void ConnectingWindow::btAbort_clicked()
@@ -66,34 +71,42 @@ bool ConnectingWindow::on_window_key_press(GdkEventKey *event)
 
 void ConnectingWindow::abort()
 {
-	if (m_connect_cancellable)
-		m_connect_cancellable->cancel();
-
 	hide();
 }
 
-void ConnectingWindow::async_connect_ready (Glib::RefPtr<Gio::AsyncResult> async_result)
+
+void ConnectingWindow::connection_established()
 {
-	Glib::RefPtr<Gio::SocketConnection> conn;
-
-	try {
-		conn = m_socket_client->connect_to_host_finish(async_result);
-	} catch (Glib::Error &e) {
-		if (e.code() != G_IO_ERROR_CANCELLED)
-		{
-			m_client_application->failed_to_connect(e.what());
-			hide();
-		}
-		return;
-	}
-
-	if (!conn)
-	{
-		m_client_application->failed_to_connect("Conn is a nullptr.");
-		hide();
-		return;
-	}
-
-	m_client_application->connected(conn);
+	m_client_application->connected();
 	hide();
+}
+
+void ConnectingWindow::connection_failed(string error)
+{
+	m_client_application->failed_to_connect(error);
+	hide();
+}
+
+void ConnectingWindow::_connection_established(void *pThis)
+{
+	((ConnectingWindow*)pThis)->connection_established();
+}
+
+void ConnectingWindow::_connection_failed(void *pThis, string error)
+{
+	((ConnectingWindow*)pThis)->connection_failed(error);
+}
+
+
+void ConnectingWindow::connect()
+{
+	// Start to connect to yamb
+	m_lInfo.set_text("Connecting to yamb hub on ::1 ...");
+	auto ret = m_build_cluster_proxy.connect_to_hub();
+
+	if (ret)
+	{
+		m_client_application->failed_to_connect(ret.value());
+		hide();
+	}
 }

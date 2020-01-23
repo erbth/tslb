@@ -1,5 +1,4 @@
 #include "ClientApplication.h"
-#include "ConnectDialog.h"
 #include "ConnectingWindow.h"
 #include "BuildClusterWindow.h"
 #include <iostream>
@@ -17,32 +16,24 @@ Glib::RefPtr<ClientApplication> ClientApplication::create ()
 	return Glib::RefPtr<ClientApplication> (new ClientApplication());
 }
 
+BuildClusterProxy::BuildClusterProxy &ClientApplication::get_build_cluster_proxy()
+{
+	return build_cluster_proxy;
+}
+
 void ClientApplication::on_activate ()
 {
-	connect_dialog = make_shared<ConnectDialog> (this);
-	connect_dialog->signal_hide().connect(
-			sigc::mem_fun(*this, &ClientApplication::on_connect_dialog_hide));
-
-	add_window (*connect_dialog);
-	connect_dialog->show();
-}
-
-/* Functions that interact with windows */
-void ClientApplication::on_connect_dialog_hide ()
-{
-	connect_dialog = nullptr;
-}
-
-void ClientApplication::connect (std::string host)
-{
-	connecting_window = make_shared<ConnectingWindow> (this, host);
+	connecting_window = make_shared<ConnectingWindow> (this);
 	connecting_window->signal_hide().connect(
 			sigc::mem_fun(*this, &ClientApplication::on_connecting_window_hide));
 
 	add_window (*connecting_window);
 	connecting_window->show();
+
+	connecting_window->connect();
 }
 
+/* Functions that interact with windows */
 void ClientApplication::on_connecting_window_hide()
 {
 	connecting_window = nullptr;
@@ -51,7 +42,7 @@ void ClientApplication::on_connecting_window_hide()
 void ClientApplication::failed_to_connect(Glib::ustring error)
 {
 	connection_failure_dialog = make_shared<Gtk::MessageDialog>(
-			"Failed to connect to Client Proxy.",
+			"Failed to connect to the yamb hub.",
 			false,
 			Gtk::MessageType::MESSAGE_ERROR,
 			Gtk::ButtonsType::BUTTONS_OK);
@@ -64,10 +55,9 @@ void ClientApplication::failed_to_connect(Glib::ustring error)
 	connection_failure_dialog->show();
 }
 
-void ClientApplication::connected(Glib::RefPtr<Gio::SocketConnection> conn)
+void ClientApplication::connected()
 {
 	build_cluster_window = make_shared<BuildClusterWindow>(this);
-	build_cluster_window->set_connection(conn);
 	add_window (*build_cluster_window);
 	build_cluster_window->show();
 }

@@ -5,11 +5,13 @@
 
 /* Prototypes */
 class ClientApplication;
+namespace BuildClusterProxy { class BuildClusterProxy; }
 
 class ConnectingWindow : public Gtk::Window
 {
 protected:
 	ClientApplication *m_client_application;
+	BuildClusterProxy::BuildClusterProxy &m_build_cluster_proxy;
 
 	Gtk::Label m_lInfo;
 	Gtk::Button m_btAbort;
@@ -17,18 +19,23 @@ protected:
 	Gtk::Box m_blInfo;
 	Gtk::ButtonBox m_bAbort;
 
-	Glib::RefPtr<Gio::SocketClient> m_socket_client;
-	Glib::RefPtr<Gio::Cancellable> m_connect_cancellable;
-
 	void btAbort_clicked();
 	bool on_window_delete(GdkEventAny *any_event);
 	bool on_window_key_press(GdkEventKey *event);
 	void abort();
 
-	void async_connect_ready (Glib::RefPtr<Gio::AsyncResult> async_result);
+	/* Get notified when the connection is established */
+	void connection_established();
+	void connection_failed(std::string error);
+
+	static void _connection_established(void *pThis);
+	static void _connection_failed(void *pThis, std::string error);
 
 public:
-	ConnectingWindow (ClientApplication *c, std::string host);
+	ConnectingWindow (ClientApplication *c);
+	virtual ~ConnectingWindow();
+
+	void connect();
 };
 
 #endif

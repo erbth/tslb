@@ -16,7 +16,7 @@ from tslb.VersionNumber import VersionNumber
 # Master -> Node messages:
 # Each message has an action field. More fields may be added as needed. Unlike
 # in the other direction, the master does currently only request the nodes to
-# to things but does e.g. not broadcast state changes. The nodes have no use for
+# do things but does e.g. not broadcast state changes. The nodes have no use for
 # such information.
 #    * action=identify: Request the node to identify itself.
 #
