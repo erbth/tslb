@@ -7,18 +7,18 @@
  *   * The BuildClusterProxy, to which a BuildNodeProxy is assigned, must live
  *     longer than the node proxy. */
 
-class BuildClusterProxy;
+namespace BuildClusterProxy { class BuildClusterProxy; }
 
 class BuildNodeProxy
 {
 private:
-	friend BuildClusterProxy;
+	friend BuildClusterProxy::BuildClusterProxy;
 
 	std::string identity;
-	BuildClusterProxy *build_cluster_proxy;
+	BuildClusterProxy::BuildClusterProxy &build_cluster_proxy;
 
 public:
-	BuildNodeProxy(BuildClusterProxy *bcp, std::string identity);
+	BuildNodeProxy(BuildClusterProxy::BuildClusterProxy &bcp, std::string identity);
 
 	std::string get_identity() const;
 };

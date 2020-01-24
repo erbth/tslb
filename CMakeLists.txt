@@ -8,7 +8,7 @@ project("tslb" C CXX)
 set (THREADS_PREFER_PTHREAD_FLAG ON)
 find_package (Threads REQUIRED)
 find_package (gtkmm-3.0 REQUIRED)
-find_package (legacy_widgets_for_gtk-1.0 REQUIRED)
+find_package (legacy_widgets_for_gtkmm-1.0 REQUIRED)
 find_package (yamb_node++ REQUIRED)
 find_package (RapidJSON REQUIRED)
 

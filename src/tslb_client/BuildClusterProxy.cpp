@@ -1,8 +1,11 @@
 #include <algorithm>
+#include <cstdio>
 #include <rapidjson/document.h>
+#include <rapidjson/error/en.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 #include "BuildClusterProxy.h"
+#include "BuildNodeProxy.h"
 #include "yamb_node_helpers.h"
 
 using namespace std;
@@ -10,6 +13,21 @@ using namespace rapidjson;
 
 namespace BuildClusterProxy
 {
+
+BuildClusterProxy::BuildClusterProxy()
+{
+	Glib::signal_timeout().connect(
+			sigc::mem_fun(*this, &BuildClusterProxy::soft_timeout_1s_handler),
+			1000);
+}
+
+bool BuildClusterProxy::soft_timeout_1s_handler()
+{
+	if (++build_nodes_last_searched >= 10)
+		search_for_build_nodes();
+
+	return true;
+}
 
 void BuildClusterProxy::on_connection_established()
 {
@@ -59,7 +77,14 @@ optional<string> BuildClusterProxy::connect_to_hub()
 				"::1", 0));
 
 		if (!build_node_yprotocol)
-			build_node_yprotocol = make_shared<build_node_yamb_protocol>(*this);
+			build_node_yprotocol = make_shared<build_node_yamb_protocol>(
+					*this, bind(
+						&BuildClusterProxy::build_node_message_received,
+						this,
+						placeholders::_1,
+						placeholders::_2,
+						placeholders::_3,
+						placeholders::_4));
 
 		ynode->register_protocol(build_node_yprotocol);
 
@@ -115,6 +140,49 @@ void BuildClusterProxy::search_for_build_nodes()
 		msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
 
 		build_node_yprotocol->send_message(ynode.get(), 0xffffffff, move(msg));
+
+		build_nodes_last_searched = 0;
+	}
+}
+
+/* Respond to messages from different entities in the cluster */
+void BuildClusterProxy::build_node_message_received(
+		yamb_node::yamb_node *nodes,
+		uint32_t source, uint32_t destination,
+		unique_ptr<yamb_node::stream> msg)
+{
+	Document d;
+	ParseResult ok = d.Parse((const char*) msg->pointer(), msg->remaining_length());
+
+	if (!ok)
+	{
+		fprintf (stderr, "JSON parse error: %s (%lu)\n", GetParseError_En(ok.Code()), ok.Offset());
+		return;
+	}
+
+	if (d.IsObject() && d.HasMember("identity") && d["identity"].IsString())
+	{
+		string identity = d["identity"].GetString();
+
+		/* If we don't know about that node yet, add it. */
+		bool node_list_changed = false;
+
+		if (build_nodes.find(identity) == build_nodes.cend())
+		{
+			build_nodes.insert({identity, make_shared<BuildNodeProxy>(*this,identity)});
+			node_list_changed = true;
+		}
+
+		/* Call subscribers at the end to have the message fully interpreted. */
+		if (node_list_changed)
+			for_each(
+					build_node_list_subscribers.begin(),
+					build_node_list_subscribers.end(),
+					[](BuildNodeListSubscriber &s){
+						if (s.on_list_changed) {
+							s.on_list_changed(s.priv);
+						}
+					});
 	}
 }
 
@@ -137,6 +205,21 @@ vector<shared_ptr<BuildNodeProxy>> BuildClusterProxy::get_build_nodes() const
 			[&v](pair<string,shared_ptr<BuildNodeProxy>> t) { v.push_back(t.second); });
 
 	return v;
+}
+
+void BuildClusterProxy::subscribe_to_build_node_list(const BuildNodeListSubscriber &s)
+{
+	if (s.on_list_changed)
+		build_node_list_subscribers.push_back(s);
+}
+
+void BuildClusterProxy::unsubscribe_from_build_node_list(void *priv)
+{
+	auto i = find(build_node_list_subscribers.begin(), build_node_list_subscribers.end(),
+			BuildNodeListSubscriber(priv));
+
+	if (i != build_node_list_subscribers.end())
+		build_node_list_subscribers.erase(i);
 }
 
 }

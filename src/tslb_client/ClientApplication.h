@@ -12,6 +12,12 @@ class BuildClusterWindow;
 
 class ClientApplication : public Gtk::Application
 {
+public:
+	/* The build cluster proxy. Member order matters here since the cluster
+	 * proxy must be destroyed last. Other objects may hold references to it or
+	 * to entities (objects) exposed (owned) by it. */
+	BuildClusterProxy::BuildClusterProxy build_cluster_proxy;
+
 private:
 	std::shared_ptr<ConnectingWindow> connecting_window;
 	std::shared_ptr<Gtk::MessageDialog> connection_failure_dialog;
@@ -20,9 +26,6 @@ private:
 	ClientApplication ();
 
 	void on_activate ();
-
-	/* The build cluster proxy. */
-	BuildClusterProxy::BuildClusterProxy build_cluster_proxy;
 
 	/* Functions that interact with windows */
 	void on_connecting_window_hide();

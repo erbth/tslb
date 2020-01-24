@@ -46,10 +46,33 @@ namespace BuildClusterProxy
 			: on_established(nullptr),on_lost(nullptr),on_failed(nullptr),priv(priv) {}
 	};
 
+	struct BuildNodeListSubscriber
+	{
+		using on_list_changed_t = void(*)(void*);
+
+		on_list_changed_t on_list_changed;
+
+		void *priv;
+
+		BuildNodeListSubscriber() : on_list_changed(nullptr), priv(nullptr) {}
+		BuildNodeListSubscriber(on_list_changed_t a, void* p) : on_list_changed(a), priv(p) {}
+		BuildNodeListSubscriber(void* p) : on_list_changed(nullptr), priv(p) {}
+
+		bool operator==(const BuildNodeListSubscriber &o)
+		{
+			return priv == o.priv;
+		}
+	};
+
 	class BuildClusterProxy
 	{
 	private:
+		/* Properties of the build system proxied by you */
 		std::map<std::string, std::shared_ptr<BuildNodeProxy>> build_nodes;
+		std::vector<BuildNodeListSubscriber> build_node_list_subscribers;
+
+		/* A soft timer that runs every second */
+		bool soft_timeout_1s_handler();
 
 		/* Communicating through the yamb */
 		std::unique_ptr<yamb_node::yamb_node> ynode;
@@ -59,6 +82,7 @@ namespace BuildClusterProxy
 		void on_connection_failed(std::string error);
 
 		std::shared_ptr<build_node_yamb_protocol> build_node_yprotocol;
+		unsigned build_nodes_last_searched = 10000;
 
 		/* Other entities can subscribe to the connection status */
 		std::vector<ConnectionStateSubscriber> connection_state_subscribers;
@@ -67,7 +91,15 @@ namespace BuildClusterProxy
 		/* Different actions */
 		void search_for_build_nodes();
 
+		/* Respond to messages from entities in the cluster */
+		void build_node_message_received(
+				yamb_node::yamb_node *node,
+				uint32_t source, uint32_t destination,
+				std::unique_ptr<yamb_node::stream> msg);
+
 	public:
+		BuildClusterProxy();
+
 		/* Returns a string with an error message on failure and nullopt on
 		 * success. */
 		std::optional<std::string> connect_to_hub();
@@ -77,6 +109,9 @@ namespace BuildClusterProxy
 
 		std::vector<std::string> list_build_nodes() const;
 		std::vector<std::shared_ptr<BuildNodeProxy>> get_build_nodes() const;
+
+		void subscribe_to_build_node_list(const BuildNodeListSubscriber &s);
+		void unsubscribe_from_build_node_list(void* priv);
 	};
 }
 

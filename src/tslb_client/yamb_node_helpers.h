@@ -1,6 +1,7 @@
 #ifndef __YAMB_NODE_HELPERS_H
 #define __YAMB_NODE_HELPERS_H
 
+#include <functional>
 #include <glibmm.h>
 #include <giomm.h>
 #include <optional>
@@ -73,10 +74,17 @@ public:
 class build_node_yamb_protocol : public yamb_node::yamb_protocol
 {
 private:
+	using message_received_callback_t = std::function<void(yamb_node::yamb_node*,
+			uint32_t source, uint32_t destination, std::unique_ptr<yamb_node::stream>)>;
+
 	BuildClusterProxy::BuildClusterProxy &build_cluster_proxy;
+
+	message_received_callback_t message_received_callback;
 
 public:
 	build_node_yamb_protocol(BuildClusterProxy::BuildClusterProxy &bcp);
+	build_node_yamb_protocol(BuildClusterProxy::BuildClusterProxy &bcp,
+			message_received_callback_t mrc);
 
 	virtual ~build_node_yamb_protocol();
 

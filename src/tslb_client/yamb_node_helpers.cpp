@@ -2,8 +2,6 @@
 #include "yamb_node_helpers.h"
 #include "BuildClusterProxy.h"
 
-#include <iostream>
-
 using namespace std;
 
 connection_factory::~connection_factory()
@@ -212,6 +210,14 @@ build_node_yamb_protocol::build_node_yamb_protocol(BuildClusterProxy::BuildClust
 {
 }
 
+build_node_yamb_protocol::build_node_yamb_protocol(BuildClusterProxy::BuildClusterProxy &bcp,
+		message_received_callback_t mrc)
+	:
+		build_cluster_proxy(bcp),
+		message_received_callback(mrc)
+{
+}
+
 build_node_yamb_protocol::~build_node_yamb_protocol()
 {
 }
@@ -233,8 +239,6 @@ void build_node_yamb_protocol::message_received(
 		uint32_t destination,
 		unique_ptr<yamb_node::stream> msg)
 {
-	if (source != node->get_current_address())
-	{
-		cout << "Received message of length " << msg->length() << "." << endl;
-	}
+	if (source != node->get_current_address() && message_received_callback)
+		message_received_callback(node, source, destination, move(msg));
 }
