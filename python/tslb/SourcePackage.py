@@ -179,12 +179,19 @@ class SourcePackage(object):
             raise
 
     def __del__(self):
-        if self.write_intent:
-            self.db_root_lock.release_Splus()
-            self.fs_root_lock.release_Splus()
-        else:
-            self.db_root_lock.release_S()
-            self.fs_root_lock.release_S()
+        try:
+            if self.write_intent:
+                self.db_root_lock.release_Splus()
+                self.fs_root_lock.release_Splus()
+            else:
+                self.db_root_lock.release_S()
+                self.fs_root_lock.release_S()
+
+        except Exception as e:
+            print("Failed to __del__ %s: %s." % (repr(self), e))
+
+        except:
+            print("Failed to __del__ %s." % repr(self))
 
 
     # Peripheral methods and functions ...

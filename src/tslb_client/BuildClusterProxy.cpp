@@ -23,8 +23,12 @@ BuildClusterProxy::BuildClusterProxy()
 
 bool BuildClusterProxy::soft_timeout_1s_handler()
 {
-	if (++build_nodes_last_searched >= 10)
+	if (++build_nodes_last_searched >= 30)
 		search_for_build_nodes();
+
+	for_each(
+			build_nodes.begin(), build_nodes.end(),
+			[](pair<string,shared_ptr<BuildNodeProxy::BuildNodeProxy>> p){ p.second->timeout_1s(); });
 
 	return true;
 }
@@ -164,13 +168,23 @@ void BuildClusterProxy::build_node_message_received(
 	{
 		string identity = d["identity"].GetString();
 
-		/* If we don't know about that node yet, add it. */
+		auto i = build_nodes.find(identity);
+
 		bool node_list_changed = false;
 
-		if (build_nodes.find(identity) == build_nodes.cend())
+		if (i == build_nodes.cend())
 		{
-			build_nodes.insert({identity, make_shared<BuildNodeProxy>(*this,identity)});
+			/* If we don't know about that node yet, add it. */
+			build_nodes.insert({identity,
+					move(make_shared<BuildNodeProxy::BuildNodeProxy>(*this,identity,source))});
 			node_list_changed = true;
+		}
+		else
+		{
+			auto node = i->second;
+
+			node->set_yamb_addr(source);
+			node->message_received(d);
 		}
 
 		/* Call subscribers at the end to have the message fully interpreted. */
@@ -192,19 +206,28 @@ vector<string> BuildClusterProxy::list_build_nodes() const
 	vector<string> v;
 
 	for_each(build_nodes.cbegin(), build_nodes.cend(),
-			[&v](pair<string,shared_ptr<BuildNodeProxy>> t) { v.push_back(t.first); });
+			[&v](pair<string,shared_ptr<BuildNodeProxy::BuildNodeProxy>> t) { v.push_back(t.first); });
 
 	return v;
 }
 
-vector<shared_ptr<BuildNodeProxy>> BuildClusterProxy::get_build_nodes() const
+vector<shared_ptr<BuildNodeProxy::BuildNodeProxy>> BuildClusterProxy::get_build_nodes() const
 {
-	vector<shared_ptr<BuildNodeProxy>> v;
+	vector<shared_ptr<BuildNodeProxy::BuildNodeProxy>> v;
 
 	for_each(build_nodes.cbegin(), build_nodes.cend(),
-			[&v](pair<string,shared_ptr<BuildNodeProxy>> t) { v.push_back(t.second); });
+			[&v](pair<string,shared_ptr<BuildNodeProxy::BuildNodeProxy>> t) { v.push_back(t.second); });
 
 	return v;
+}
+
+shared_ptr<BuildNodeProxy::BuildNodeProxy> BuildClusterProxy::get_build_node(string identity) const
+{
+	for (auto t : build_nodes)
+		if (t.second->identity == identity)
+			return t.second;
+
+	return nullptr;
 }
 
 void BuildClusterProxy::subscribe_to_build_node_list(const BuildNodeListSubscriber &s)

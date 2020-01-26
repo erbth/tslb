@@ -8,9 +8,9 @@
 #include <utility>
 #include <vector>
 #include <yamb_node++.hpp>
+#include "yamb_node_helpers.h"
 
-class BuildNodeProxy;
-class build_node_yamb_protocol;
+namespace BuildNodeProxy { class BuildNodeProxy; }
 
 namespace BuildClusterProxy
 {
@@ -68,20 +68,22 @@ namespace BuildClusterProxy
 	{
 	private:
 		/* Properties of the build system proxied by you */
-		std::map<std::string, std::shared_ptr<BuildNodeProxy>> build_nodes;
+		std::map<std::string, std::shared_ptr<BuildNodeProxy::BuildNodeProxy>> build_nodes;
 		std::vector<BuildNodeListSubscriber> build_node_list_subscribers;
 
 		/* A soft timer that runs every second */
 		bool soft_timeout_1s_handler();
 
+	public:
 		/* Communicating through the yamb */
 		std::unique_ptr<yamb_node::yamb_node> ynode;
+		std::shared_ptr<build_node_yamb_protocol> build_node_yprotocol;
 
+	private:
 		void on_connection_established();
 		void on_connection_lost();
 		void on_connection_failed(std::string error);
 
-		std::shared_ptr<build_node_yamb_protocol> build_node_yprotocol;
 		unsigned build_nodes_last_searched = 10000;
 
 		/* Other entities can subscribe to the connection status */
@@ -108,7 +110,8 @@ namespace BuildClusterProxy
 		void unsubscribe_from_connection_state(void* priv);
 
 		std::vector<std::string> list_build_nodes() const;
-		std::vector<std::shared_ptr<BuildNodeProxy>> get_build_nodes() const;
+		std::vector<std::shared_ptr<BuildNodeProxy::BuildNodeProxy>> get_build_nodes() const;
+		std::shared_ptr<BuildNodeProxy::BuildNodeProxy> get_build_node(std::string identity) const;
 
 		void subscribe_to_build_node_list(const BuildNodeListSubscriber &s);
 		void unsubscribe_from_build_node_list(void* priv);

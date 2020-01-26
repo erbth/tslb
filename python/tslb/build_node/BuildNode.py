@@ -1,16 +1,17 @@
+from tslb import SourcePackage
+from tslb import processes
 from tslb.Architecture import architectures, architectures_reverse
-from tslb.build_pipeline import BuildPipeline
 from tslb.Console import Color
 from tslb.VersionNumber import VersionNumber
-from tslb import SourcePackage
+from tslb.build_node import TSLB_NODE_YAMB_PROTOCOL
+from tslb.build_pipeline import BuildPipeline
 import asyncio
 import json
-import multiprocessing
+import multiprocessing, aioprocessing
 import os
-from tslb import processes
 import socket
+import time
 import yamb_node
-from tslb.build_node import TSLB_NODE_YAMB_PROTOCOL
 
 # State definitions
 # Packages are triples (name, arch, version)
@@ -24,16 +25,24 @@ FAIL_REASON_NODE_TRY_AGAIN  = 0
 FAIL_REASON_NODE_ABORT      = 1
 FAIL_REASON_PACKAGE         = 2
 
+state_to_str = {
+        STATE_IDLE: 'idle',
+        STATE_BUILDING: 'building',
+        STATE_FAILED: 'failed',
+        STATE_FINISHED: 'finished',
+        STATE_MAINTENANCE: 'maintenance'
+        }
+
 reason_to_str = {
         FAIL_REASON_NODE_TRY_AGAIN: 'node/try_again',
         FAIL_REASON_NODE_ABORT: 'node/abort',
         FAIL_REASON_PACKAGE: 'package'
         }
 
-def build_package_worker(self, name, arch, version_number, error, finished_event):
+def build_package_worker(self, name, arch, version_number, error):
     """
     This function is to be run in an extra process. It builds a package and
-    reports the result in the error shared mulitprocessing.Value. It may
+    reports the result in the error shared multiprocessing.Value. It may
     place -1 there, in which case the build succeeded, or any of FAIL_REASON_*
     defined above.
 
@@ -45,10 +54,13 @@ def build_package_worker(self, name, arch, version_number, error, finished_event
     :type version_number: VersionNumber.VersionNumber
     :param error: A variable to receive a potential error code
     :type error: multiprocessing.Value
-    :param finished_event: An event to be set just before the process will finish
-    :type finished_event: asyncio.Event
     """
     print("Building Source Package %s:%s@%s" % (name, version_number, architectures[arch]))
+
+    time.sleep(5)
+    error.value = -1
+    print("done.")
+    return
 
     # Find the package version
     try:
@@ -57,11 +69,9 @@ def build_package_worker(self, name, arch, version_number, error, finished_event
     except Exception as e:
         print(e)
         error.value = FAIL_REASON_PACKAGE
-        finished_event.set()
         return
     except:
         error.value = FAIL_REASON_PACKAGE
-        finished_event.set()
         return
 
     # Build the package
@@ -73,8 +83,6 @@ def build_package_worker(self, name, arch, version_number, error, finished_event
     else:
         print(Color.RED + "FAILED." + Color.NORMAL)
         error.value = FAIL_REASON_PACKAGE
-
-    finished_event.set()
 
 class BuildNode(object):
     def __init__(self, loop, lsr, yamb_hub_transport_address):
@@ -97,8 +105,7 @@ class BuildNode(object):
         # A worker process and its monitor task
         self.worker_error = multiprocessing.Value('i', FAIL_REASON_NODE_ABORT)
         self.worker_process = None
-        self.worker_monitor = self.loop.create_task(self.worker_monitor_function())
-        self.worker_finished_event = asyncio.Event()
+        self.worker_monitor = None
 
     async def connect_to_yamb_hub(self):
         try:
@@ -119,7 +126,13 @@ class BuildNode(object):
 
     def request_quit(self):
         print ("Stopping")
-        self.worker_monitor.cancel()
+        if self.worker_monitor:
+            self.worker_monitor.cancel()
+
+        if self.worker_process:
+            self.worker_process.kill()
+            print(Color.RED + "Killed the worker process." + Color.NORMAL)
+
         self.loop.stop()
 
     # Send a message to the build master
@@ -136,116 +149,131 @@ class BuildNode(object):
         self.yamb.send_yamb_message(dst, TSLB_NODE_YAMB_PROTOCOL,
                 json.dumps(d).encode('utf8'))
 
-    # Look after the worker process
     async def worker_monitor_function(self):
-        while True:
-            killed = False
-            exited = False
+        """
+        Look after the worker process
+        """
+        killed = False
+        exited = False
 
-            await self.worker_finished_event.wait()
-            if self.worker_finished_event.get():
-                self.worker_finished_event.reset()
+        # Wait for worker process
+        await self.worker_process.coro_join()
 
-                # Give the worker time to exit after it set the event
-                self.worker_process.join(timeout=5)
+        if self.worker_error.value == -2:
+            # The worker did not alter this value and hence must have been
+            # killed ...
+            killed = True
+        else:
+            # The worker has finished!
+            exited = True
 
-                if self.worker_process.exit_code is not None:
-                    # The worker has finished!
-                    exited = True
-                else:
-                    # It appears to hang. Kill it ...
-                    self.worker_process.kill()
-                    killed = True
-                    print(Color.RED + "The worker process hung. Killed it." + Color.NORMAL)
+        # Change state and send notifications
+        # self.build_master_addr will not be None because someone must have
+        # initiated the build.
+        if killed:
+            # -> failed
+            self.state = (STATE_FAILED, self.state[1], FAIL_REASON_NODE_ABORT)
 
-            # Change state and send notifications
-            # self.build_master_addr will not be None because someone must have
-            # initiated the build.
-            if killed:
+            name, arch, version = self.state[1]
+            self.send_message_to_master (self.build_master_addr, {
+                    'state': 'failed',
+                    'name': name,
+                    'arch': architectures[arch],
+                    'version': str(version),
+                    'reason': 'node/abort'
+                    })
+
+        elif exited:
+            if self.worker_error.value >= 0:
                 # -> failed
-                self.state = (STATE_FAILED, self.state[1], FAIL_REASON_NODE_ABORT)
+                self.state = (STATE_FAILED, self.state[1], self.worker_error.value)
 
                 name, arch, version = self.state[1]
-                self.send_message_to_master (self.build_master_addr, {
+                reason = reason_to_str[self.state[2]]
+                d = {
                         'state': 'failed',
                         'name': name,
                         'arch': architectures[arch],
-                        'version': version,
-                        'reason': 'node/abort'
-                        })
+                        'version': str(version),
+                        'reason': reason
+                        }
+            else:
+                # -> finished
+                self.state = (STATE_FINISHED, self.state[1])
+                name, arch, version = self.state[1]
+                d = {
+                        'state': 'finished',
+                        'name': name,
+                        'arch': architectures[arch],
+                        'version': str(version),
+                        }
 
-            elif exited:
-                if self.worker_error.value >= 0:
-                    # -> failed
-                    self.state = (STATE_FAILED, self.state[1], self.worker_error.value)
+            self.send_message_to_master(self.build_master_addr, d)
 
-                    name, arch, version = self.state[1]
-                    reason = reason_to_str[self.state[2]]
-                    d = {
-                            'state': 'failed',
-                            'name': name,
-                            'arch': architectures[arch],
-                            'version': version,
-                            'reason': reason
-                            }
-                else:
-                    # -> finished
-                    self.state = (STATE_FINISHED, self.state[1])
-                    name, arch, version = self.state[1]
-                    d = {
-                            'state': 'finished',
-                            'name': name,
-                            'arch': architectures[arch],
-                            'version': version,
-                            }
-
-                self.send_message_to_master(self.build_master_addr, d)
-
-            # Clean up.
-            # killed or exited will only be True if the process stopped in this
-            # iteration of the loop a few lines above.
-            if killed or exited:
-                self.worker_process.close()
-                self.worker_process = None
+        # Clean up.
+        self.worker_process.close()
+        self.worker_process = None
+        self.worker_monitor = None
 
     # Interacting with the build master
     def start_build(self, name, arch, version, dst):
-        self.state = (STATE_BUILDING, (name, arch, version))
-        self.build_master_addr = dst
+        if self.state[0] == STATE_IDLE:
+            self.state = (STATE_BUILDING, (name, arch, version))
+            self.build_master_addr = dst
 
-        try:
-            self.worker_process = multiprocessing.Process(target=build_package_worker,
-                    args=(name, arch, version, self.worker_error, self.worker_finished_event))
-            self.worker_process.start()
+            self.worker_error.value = -2
 
-        except Exception as e:
-            self.abort_build(dst)
-            return
+            try:
+                self.worker_process = aioprocessing.AioProcess(target=build_package_worker,
+                        args=(self, name, arch, version, self.worker_error))
+                self.worker_process.start()
 
-        self.send_message_to_master(dst, {
-            'state': 'building',
-            'name': name,
-            'arch': architectures[arch],
-            'version': version
-            })
+                self.loop.create_task(self.worker_monitor_function())
+
+            except Exception as e:
+                self.abort_build(dst)
+                return
+
+            self.send_message_to_master(dst, {
+                'state': 'building',
+                'name': name,
+                'arch': architectures[arch],
+                'version': str(version)
+                })
+
+        else:
+            self.send_message_to_master(dst, {
+                'err': 'Action `start_build\' not applicable in state %s.' % state_to_str[self.state[0]]
+                })
 
     def abort_build(self, dst):
-        self.state = (STATE_FAILED, (name, arch, version), FAIL_REASON_NODE_ABORT)
+        if self.state[0] == STATE_BUILDING:
+            name, arch, version = self.state[1]
+            self.state = (STATE_FAILED, (name, arch, version), FAIL_REASON_NODE_ABORT)
 
-        if self.worker_process is not None:
-            if self.worker_process.is_alive():
-                self.worker_process.kill()
+            if self.worker_process is not None:
+                if self.worker_process.is_alive():
+                    self.worker_process.kill()
 
-            self.worker_process.close()
-            self.worker_process = None
+        else:
+            self.send_message_to_master(dst, {
+                'err': 'Action `abort\' not applicable in state %s.' % state_to_str[self.state[0]]
+                })
 
-        self.send_message_to_master(dst, {
-            'state': 'failed',
-            'name': name,
-            'arch': architectures[arch],
-            'version': version,
-            'reason': 'node/abort'
-            })
+    def reset(self, dst):
+        if self.state[0] == STATE_FINISHED or self.state[0] == STATE_FAILED or\
+                self.state[0] == STATE_IDLE:
+
+            self.state = (STATE_IDLE,)
+
+            self.send_message_to_master(dst, {
+                'state': 'idle',
+                })
+
+        else:
+            self.send_message_to_master(dst, {
+                'err': 'Action `reset\' not applicable in state %s.' % state_to_str[self.state[0]]
+                })
 
     def get_status(self, dst):
         s = self.state[0]
@@ -262,7 +290,7 @@ class BuildNode(object):
                     'state': 'building',
                     'name': name,
                     'arch': architectures[arch],
-                    'version': version,
+                    'version': str(version),
                     }
 
         elif s == STATE_FAILED:
@@ -272,7 +300,7 @@ class BuildNode(object):
                     'state': 'failed',
                     'name': name,
                     'arch': architectures[arch],
-                    'version': version,
+                    'version': str(version),
                     'reason': reason
                     }
 
@@ -282,7 +310,7 @@ class BuildNode(object):
                     'state': 'finished',
                     'name': name,
                     'arch': architectures[arch],
-                    'version': version,
+                    'version': str(version),
                     }
 
         elif s == STATE_MAINTENANCE:
@@ -297,11 +325,31 @@ class BuildNode(object):
         # Our own identity will be included automatically
         self.send_message_to_master(dst)
 
-    def enable_maintenance(self, force, dst):
-        pass
+    def enable_maintenance(self, dst):
+        if self.state[0] == STATE_IDLE:
+            self.state = (STATE_MAINTENANCE,)
+
+            self.send_message_to_master(dst, {
+                'state': 'maintenance',
+                })
+
+        else:
+            self.send_message_to_master(dst, {
+                'err': 'Action `enable_maintenance\' not applicable in state %s.' % state_to_str[self.state[0]]
+                })
 
     def disable_maintenance(self, dst):
-        pass
+        if self.state[0] == STATE_MAINTENANCE:
+            self.state = (STATE_IDLE,)
+
+            self.send_message_to_master(dst, {
+                'state': 'idle',
+                })
+
+        else:
+            self.send_message_to_master(dst, {
+                'err': 'Action `disable_maintenance\' not applicable in state %s.' % state_to_str[self.state[0]]
+                })
 
     def get_load(self):
         pass
@@ -333,3 +381,12 @@ class BuildNode(object):
 
             elif action == 'abort_build':
                 self.abort_build(src)
+
+            elif action == 'reset':
+                self.reset(src)
+
+            elif action == 'enable_maintenance':
+                self.enable_maintenance(src)
+
+            elif action == 'disable_maintenance':
+                self.disable_maintenance(src)

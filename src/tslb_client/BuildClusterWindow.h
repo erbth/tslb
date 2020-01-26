@@ -2,8 +2,10 @@
 #define __BUILD_CLUSTER_WINDOW_H
 
 #include <gtkmm.h>
-#include <list>
+#include <map>
+#include <memory>
 #include <legacy_widgets_for_gtkmm.h>
+#include "BuildNodeProxy.h"
 
 /* Prototypes */
 class ClientApplication;
@@ -12,10 +14,28 @@ class BuildClusterWindow;
 
 namespace BuildClusterProxy { class BuildClusterProxy; }
 
+class NodeStartBuildDialog : public Gtk::Window
+{
+private:
+	std::shared_ptr<BuildNodeProxy::BuildNodeProxy> node;
+
+	/* UI components */
+	Gtk::Entry m_eName;
+	Gtk::ComboBoxText m_cbtArch;
+	Gtk::Entry m_eVersion;
+
+	void on_build_clicked();
+	void on_abort_clicked();
+
+public:
+	NodeStartBuildDialog(std::shared_ptr<BuildNodeProxy::BuildNodeProxy> node);
+};
+
 class BuildNodeOverview : public Gtk::Frame
 {
 private:
-	const std::string identity;
+	/* The build node proxy */
+	std::shared_ptr<BuildNodeProxy::BuildNodeProxy> node;
 
 	/* UI components */
 	Gtk::Box m_bMain;
@@ -23,12 +43,35 @@ private:
 	Gtk::Label m_lIdentity;
 	Lwg::RGBLed m_ledStatus;
 	Gtk::Label m_lStatus;
-	Gtk::Button m_btStart;
+	Gtk::Button m_btBuild;
 	Gtk::Button m_btAbort;
 	Gtk::Button m_btReset;
+	Gtk::Button m_btMaintenance;
+
+	std::unique_ptr<Gtk::Window> node_start_build_dialog;
+
+	/* Signal handlers */
+	void on_build_clicked();
+	void on_abort_clicked();
+	void on_reset_clicked();
+	void on_maintenance_clicked();
+
+	/* You subscribe to the build node. Therefore you need these callbacks. */
+	void on_node_responding_changed(bool responding);
+	void on_node_state_changed(enum BuildNodeProxy::State state);
+	void on_node_error_received(std::string err);
+
+	static void _on_node_responding_changed(void *pThis, bool);
+	static void _on_node_state_changed(void *pThis, enum BuildNodeProxy::State);
+	static void _on_node_error_received(void *pThis, std::string err);
 
 public:
-	BuildNodeOverview(std::string identity);
+	BuildNodeOverview(std::shared_ptr<BuildNodeProxy::BuildNodeProxy>);
+	BuildNodeOverview(const BuildNodeOverview &o) = delete;
+	BuildNodeOverview(BuildNodeOverview &&o) = delete;
+	~BuildNodeOverview();
+
+	void update_display();
 };
 
 class ClusterOverview : public Gtk::Box
@@ -44,7 +87,7 @@ private:
 	Gtk::ScrolledWindow m_sw;
 	Gtk::Box m_bNodes;
 
-	std::map<std::string,BuildNodeOverview> nodes;
+	std::map<std::string,std::unique_ptr<BuildNodeOverview>> nodes;
 
 	/* You subscribe to the build cluster proxy */
 	void on_node_list_changed();
@@ -52,6 +95,7 @@ private:
 
 public:
 	ClusterOverview(BuildClusterWindow *bcwin);
+	~ClusterOverview();
 
 	void add_node(std::string identity);
 };
