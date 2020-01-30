@@ -1,5 +1,5 @@
 import subprocess
-import Exceptions as es
+from tslb import CommonExceptions as ces
 
 class tpm(object):
     """
@@ -17,31 +17,31 @@ class tpm(object):
         cmd = [self.tpm, '--create-desc', pkg_type]
 
         if subprocess.call(cmd) != 0:
-            raise es.CommandFailed(' '.join(cmd))
+            raise ces.CommandFailed(' '.join(cmd))
 
     def set_name(self, name):
         cmd = [self.tpm, '--set-name', name]
 
         if subprocess.call(cmd) != 0:
-            raise es.CommandFailed(' '.join(cmd))
+            raise ces.CommandFailed(' '.join(cmd))
 
     def set_version(self, version):
         cmd = [self.tpm, '--set-version', version]
 
         if subprocess.call(cmd) != 0:
-            raise es.CommandFailed(' '.join(cmd))
+            raise ces.CommandFailed(' '.join(cmd))
 
     def set_arch(self, arch):
         cmd = [self.tpm, '--set-arch', arch]
 
         if subprocess.call(cmd) != 0:
-            raise es.CommandFailed(' '.join(cmd))
+            raise ces.CommandFailed(' '.join(cmd))
 
     def remove_dependencies(self):
         cmd = [self.tpm, '--remove-dependencies']
 
         if subprocess.call(cmd) != 0:
-            raise es.CommandFailed(' '.join(cmd))
+            raise ces.CommandFailed(' '.join(cmd))
 
     def add_dependencies(self, deps):
         for dep in deps:
@@ -52,16 +52,16 @@ class tpm(object):
         print (' '.join(cmd))
 
         if subprocess.call(cmd) != 0:
-            raise es.CommandFailed(' '.join(cmd))
+            raise ces.CommandFailed(' '.join(cmd))
 
     def add_files(self):
         cmd = [self.tpm, '--add-files']
 
         if subprocess.call(cmd) != 0:
-            raise es.CommandFailed(' '.join(cmd))
+            raise ces.CommandFailed(' '.join(cmd))
 
     def pack(self):
         cmd = [self.tpm, '--pack']
 
         if subprocess.call(cmd) != 0:
-            raise es.CommandFailed(' '.join(cmd))
+            raise ces.CommandFailed(' '.join(cmd))

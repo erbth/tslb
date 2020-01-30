@@ -1,0 +1,21 @@
+#!/usr/bin/python3
+
+from tslb.ProgramAnalysis.PythonTools import find_required_modules_in_path
+import sys
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: %s <path>" % sys.argv[0])
+        exit(1)
+
+    ms = sorted(find_required_modules_in_path(sys.argv[1], printer=print))
+
+    print("\nThese modules seem to be required:\n")
+
+    for m in ms:
+        print(m)
+
+    exit(0)
+
+if __name__ == '__main__':
+    main()

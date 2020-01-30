@@ -2,7 +2,7 @@ import os
 import re
 import subprocess
 import FileOperations as FOps
-import Exceptions as es
+from tslb import CommonExceptions as ces
 
 """
 Utilities for working with compiled code.
@@ -27,7 +27,7 @@ def strip_symbols(base_directory):
                     cmd = [ 'strip', '-v', '--strip-debug', os.path.join(directory, n) ]
 
                     if subprocess.call(cmd) != 0:
-                        raise es.CommandFailed(' '.join(cmd))
+                        raise ces.CommandFailed(' '.join(cmd))
 
             FOps.traverse_directory_tree(directory, action)
 
@@ -39,7 +39,7 @@ def strip_symbols(base_directory):
                     cmd = [ 'strip', '-v', '--strip-unneeded', os.path.join(directory, n) ]
 
                     if subprocess.call(cmd) != 0:
-                        raise es.CommandFailed(' '.join(cmd))
+                        raise ces.CommandFailed(' '.join(cmd))
 
             FOps.traverse_directory_tree(directory, action)
 
@@ -62,7 +62,7 @@ def strip_symbols(base_directory):
                 cmd = [ 'strip', '-v', '--strip-unneeded', os.path.join(directory, n) ]
 
                 if subprocess.call(cmd) != 0:
-                    raise es.CommandFailed(' '.join(cmd))
+                    raise ces.CommandFailed(' '.join(cmd))
 
         FOps.traverse_directory_tree(directory, action)
 
@@ -78,7 +78,7 @@ def strip_symbols(base_directory):
                 cmd = [ 'strip', '-v', '--strip-all', os.path.join(directory, n) ]
 
                 if subprocess.call(cmd) != 0:
-                    raise es.CommandFailed(' '.join(cmd))
+                    raise ces.CommandFailed(' '.join(cmd))
 
             FOps.traverse_directory_tree(directory, action)
 
