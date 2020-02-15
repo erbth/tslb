@@ -46,6 +46,12 @@ class SourceArchiveMissing(Exception):
 
 class CommandFailed(Exception):
     def __init__(self, command, code=None):
+        if isinstance(command, list) or isinstance(command, tuple):
+            command = ' '.join(command)
+
+        self.command = command
+        self.returncode = code
+
         if code is not None:
             super().__init__("Command `%s' failed with exit code %s." % (command, code))
         else:

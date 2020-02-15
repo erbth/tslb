@@ -82,7 +82,19 @@ def traverse_directory_tree(base, action, element = ''):
         for e in os.listdir (abs_element):
             traverse_directory_tree(base, action, os.path.join(element, e))
 
-def mkdir_p(path, mode, base="/"):
+
+def mkdir_p(path, mode=0o755, base="/"):
+    """
+    Create the directory given in path and all its ancessors shall they be
+    missing. If path is not absolute, it is expanded to an absolute path using
+    the current working directory. Then base is prepended to path. This works
+    with absolute and relative paths alike, but remember that relative paths
+    are expanded first.
+
+    :param path: Path to the directory to create
+    :param mode: Permission bits of the new directories (like install -d)
+    :param base: Additional path prefix, see above.
+    """
     path_components = []
 
     # If the path is not absolute, make it so. This won't interfere with base,
@@ -103,6 +115,7 @@ def mkdir_p(path, mode, base="/"):
 
         if not os.path.isdir(p):
             os.mkdir(p, mode=mode)
+
 
 def rm_r(path):
     """

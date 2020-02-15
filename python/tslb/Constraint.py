@@ -411,8 +411,8 @@ class DependencyList(object):
         Object versions that are compatible with me. Specify what I want more
         precisely.
 
-        If one views the dependencies of a single object asa set of allowed
-        version number, this tests if the given version number is contained.
+        If one views the dependencies of a single object as a set of allowed
+        version numbers, this tests if the given version number is contained.
 
         :param t: tuple(o, version_number)
         """

@@ -29,8 +29,8 @@ class SourcePackageList(object):
         self.architecture = architecture
 
         # Define a few required locks
-        self.dbrlp = 'tslb_db.%s.source_packages' % architectures[architecture]
-        self.fsrlp = 'tslb_fs.%s.packaging' % architectures[architecture]
+        self.dbrlp = 'tslb.db.%s.source_packages' % architectures[architecture]
+        self.fsrlp = 'tslb.fs.%s.packaging' % architectures[architecture]
 
         self.db_root_lock = tclm.define_lock(self.dbrlp)
         self.fs_root_lock = tclm.define_lock(self.fsrlp)
@@ -47,9 +47,6 @@ class SourcePackageList(object):
         """
         Returns an ordered list of the source packages' names.
 
-        :param architecture: If not None, the list of packages will be filtered
-            by the supplied architecture.
-        :type architecture: int or None
         :returns: list(name)
         :rtype: list(str)
         """
@@ -135,8 +132,8 @@ class SourcePackage(object):
         self.write_intent = write_intent
 
         # Define a few required locks
-        self.dbrlp = 'tslb_db.%s.source_packages.%s' % (architectures[self.architecture], self.name)
-        self.fsrlp = 'tslb_fs.%s.packaging.%s' % (architectures[self.architecture], self.name)
+        self.dbrlp = 'tslb.db.%s.source_packages.%s' % (architectures[self.architecture], self.name)
+        self.fsrlp = 'tslb.fs.%s.packaging.%s' % (architectures[self.architecture], self.name)
 
         self.db_root_lock = tclm.define_lock(self.dbrlp)
 

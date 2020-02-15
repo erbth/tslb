@@ -35,8 +35,14 @@ def get_local_p():
 
     return thlocal.p
 
-# A wrapper around the locks to use the thread local process
+
 class lock(object):
+    """
+    A wrapper around a TCLM lock that uses the thread local process TCLM
+    process.
+
+    :param path: The lock's path.
+    """
     def __init__(self, path):
         ensure_connection()
         self.l = tclmc.define_lock(path)
@@ -107,6 +113,11 @@ class lock(object):
     def get_path(self):
         return self.l.get_path()
 
+
+    def __repr__(self):
+        return ('lock(\"%s\")' % self.get_path())
+
+
 # Wrap a tclmc's methods
 def define_lock(path):
     return lock(path)
@@ -117,6 +128,9 @@ def register_process():
 
 # Context managers for scoped locking
 class lock_S(object):
+    """
+    Context manager that holds the specified lock in S mode.
+    """
     def __init__(self, lk):
         self.lk = lk
 
@@ -126,7 +140,11 @@ class lock_S(object):
     def __exit__(self, *args):
         self.lk.release_S()
 
+
 class lock_Splus(object):
+    """
+    Context manager that holds the specified lock in S+ mode.
+    """
     def __init__(self, lk):
         self.lk = lk
 
@@ -136,7 +154,11 @@ class lock_Splus(object):
     def __exit__(self, *args):
         self.lk.release_Splus()
 
+
 class lock_X(object):
+    """
+    Context manager that holds the specified lock in X mode.
+    """
     def __init__(self, lk):
         self.lk = lk
 

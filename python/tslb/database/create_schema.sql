@@ -180,4 +180,28 @@ create table build_pipeline_stage_events (
 	primary key (stage, time, source_package, "architecture", version_number)
 );
 
+-- Root filesystems
+create table rootfs_images (
+	id bigserial primary key
+);
+
+create table rootfs_image_contents (
+	id bigint references rootfs_images on update cascade on delete cascade,
+	package varchar,
+	version integer[],
+	arch integer,
+
+	primary key (id, package, version, arch)
+);
+
+create table available_rootfs_images (
+	id bigint primary key references rootfs_images
+);
+
+create index on rootfs_image_contents (
+	package,
+	version,
+	arch
+);
+
 COMMIT;

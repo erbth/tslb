@@ -10,3 +10,37 @@ architectures_reverse = {
         'i386': i386,
         'amd64': amd64
 }
+
+
+def to_int(param):
+    """
+    Converts an acrchitecture in int or str format to the int representation.
+
+    :param param: int or str arch representation
+    :type param: int or str
+    :returns: The arch in int representation
+    :rtype: int
+    """
+    if isinstance(param, int):
+        return param
+    elif isinstance(param, str):
+        return architectures_reverse[param]
+    else:
+        raise TypeError
+
+
+def to_str(param):
+    """
+    Converts an architecture in int or str format to the str representation.
+
+    :param param: int or str arch representation
+    :type param: int or str
+    :returns: The arch in str representation
+    :rtype: str
+    """
+    if isinstance(param, int):
+        return architectures[param]
+    elif isinstance(param, str):
+        return param
+    else:
+        raise TypeError

@@ -4,6 +4,7 @@
 A General-purpose UI to perform simple tasks.
 """
 
+import os
 import sys
 from tslb.Architecture import architectures_reverse
 from tslb.build_pipeline import BuildPipeline
@@ -16,6 +17,8 @@ from tslb import filesystem as fs
 from tslb import utils
 from tslb import Graph
 from tslb.CdepGraph import CdepGraph
+from tslb import settings
+
 
 def initially_create_locks(args):
     print (Color.YELLOW + "Creating locks ..." + Color.NORMAL)
@@ -109,6 +112,8 @@ def main():
     parser_show_cdep_graph = subparsers.add_parser('show-cdep-graph', help='Show the cdep graph.')
     parser_show_cdep_graph.add_argument('arch')
 
+    parse_psql = subparsers.add_parser('psql', help='Launch a psql shell with TSLB\'s user, password and database.')
+
     args = parser.parse_args()
 
     # Different commands
@@ -131,6 +136,36 @@ def main():
 
         arch = architectures_reverse[args.arch]
         show_cdep_graph(arch)
+
+    elif args.command == 'psql':
+        db_root = settings.get('Database')
+
+        if not db_root:
+            print("No database configuration defined.")
+            exit(1)
+
+        host = db_root.get('host')
+        user = db_root.get('user')
+        password = db_root.get('password')
+        name = db_root.get('db_name')
+
+        if not name:
+            print("No database defined in system config file.")
+            exit(1)
+
+        argv = [ 'psql', '-d', name ]
+        env = dict(os.environ)
+
+        if host:
+            argv += [ '-h', host ]
+
+        if user:
+            argv += [ '-U', user ]
+
+            if password:
+                env['PGPASSWORD'] = password
+
+        os.execvpe('psql', argv, env)
 
 if __name__ == '__main__':
     main()

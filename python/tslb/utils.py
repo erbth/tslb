@@ -5,6 +5,7 @@ of the system, and do not properly fit into exactly one Python module/package.
 from tslb.Architecture import architectures
 from tslb.BinaryPackage import BinaryPackage
 from tslb.SourcePackage import SourcePackage, SourcePackageList, SourcePackageVersion
+from tslb import rootfs
 from tslb.tclm import lock_X
 from tslb import tclm
 
@@ -16,7 +17,7 @@ def initially_create_all_locks():
     for arch in architectures.keys():
         spl = SourcePackageList(arch, create_locks = True)
 
-        sps = [ e[0] for e in spl.list_source_packages(arch) ]
+        sps = spl.list_source_packages()
 
         with lock_X(spl.fs_root_lock):
             with lock_X(spl.db_root_lock):
@@ -29,3 +30,19 @@ def initially_create_all_locks():
                         for bn in spv.list_all_binary_packages():
                             for bv in spv.list_binary_package_version_numbers(bn):
                                 BinaryPackage(spv, bn, bv, create_locks=True)
+
+
+    # Create locks for rootfs images
+    lk = tclm.define_lock('tslb.rootfs.available')
+    lk.create(True)
+    lk.release_X()
+
+    rlk = tclm.define_lock('tslb.rootfs.images')
+    rlk.create(True)
+
+    try:
+        for i in rootfs.list_images():
+            tclm.define_lock('tslb.rootfs.images.' + str(i)).create(False)
+
+    finally:
+        rlk.release_X()
