@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from tslb.ProgramAnalysis.PythonTools import find_required_modules_in_path
+from tslb.program_analysis.PythonTools import find_required_modules_in_path
 import sys
 
 def main():
