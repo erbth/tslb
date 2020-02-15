@@ -7,7 +7,9 @@ A General-purpose UI to perform simple tasks.
 import os
 import sys
 from tslb.Architecture import architectures_reverse
-from tslb.build_pipeline import BuildPipeline
+from tslb import Architecture
+# from tslb.build_pipeline import BuildPipeline
+from tslb.package_builder import PackageBuilder
 from tslb.Console import Color
 from tslb import Console
 from tslb.SourcePackage import SourcePackageList, SourcePackage
@@ -32,15 +34,29 @@ def list_source_packages(args):
     for name in SourcePackageList().get_source_packages():
         print ("%s" % name)
 
-def build_single_package(spname, sparch, spversion):
-    sp = SourcePackage(spname, sparch, write_intent=True)
-    spv = sp.get_version(spversion)
-    bp = BuildPipeline()
 
-    if bp.build_source_package_version(spv):
-        print(Color.GREEN + "Completed successfully." + Color.NORMAL)
-    else:
-        print(Color.RED + "FAILED." + Color.NORMAL)
+def build_single_package(spname, sparch, spversion):
+    # sp = SourcePackage(spname, sparch, write_intent=True)
+    # spv = sp.get_version(spversion)
+    # bp = BuildPipeline()
+    #
+    # if bp.build_source_package_version(spv):
+    #     print(Color.GREEN + "Completed successfully." + Color.NORMAL)
+    # else:
+    #     print(Color.RED + "FAILED." + Color.NORMAL)
+
+    pb = PackageBuilder('manual')
+
+    try:
+        pb.build_package(spname, sparch, spversion)
+        print(Color.GREEN + "finished." + Color.NORMAL)
+
+    except BaseException as e:
+        print(Color.RED + "FAILED: %s" % e + Color.NORMAL)
+        raise e
+
+    exit(0)
+
 
 def sync_buildpipeline_stages(args):
     bpp.sync_stages_with_db()
@@ -103,7 +119,7 @@ def main():
     parser_bsp = subparsers.add_parser('build-single-package', help='Build a single source package\'s version.')
     parser_bsp.add_argument('spname')
     parser_bsp.add_argument('sparch')
-    parser_bsp.add_argument('spversion')
+    parser_bsp.add_argument('spversion', nargs='?', default=None)
 
     parser_sbps = subparsers.add_parser('sync-buildpipeline-stages', help='Sync the buildpipeline stages with the db.')
     parser_mount = subparsers.add_parser('mount', help='Mount the filesystem.')
@@ -122,7 +138,7 @@ def main():
     elif args.command == 'list-source-packages':
         list_source_packages(args)
     elif args.command == 'build-single-package':
-        build_single_package(args.spname, architectures_reverse[args.sparch], args.spversion)
+        build_single_package(args.spname, Architecture.to_str(args.sparch), args.spversion)
     elif args.command == 'sync-buildpipeline-stages':
         sync_buildpipeline_stages(args)
     elif args.command == 'mount':

@@ -122,10 +122,13 @@ class SourcePackageList(object):
                     fops.rm_rf (os.path.join(fs.root, 'packaging', name))
 
 class SourcePackage(object):
-    def __init__(self, name, architecture, write_intent = False, create_locks = False, db_session=None):
+    def __init__(self, name, architecture,
+        write_intent = False, create_locks = False, db_session=None):
+
         """
-        Initially, create_locks must be true for the first time the package was
-        used. If write_intent is True, S+ locks are acquired initially.
+        Initially, create_locks must be True for the first time the package was
+        used. If write_intent is True, S+ locks are acquired during
+        initialization.
         """
         self.name = name
         self.architecture = architecture
@@ -154,10 +157,10 @@ class SourcePackage(object):
             self.db_root_lock.acquire_S()
 
         # Download information from the DB. This is like an opaque class, hence
-        # I can implement the db information by linking this pure-memory object,
-        # which is more like a control class accumulating all functionality
-        # spread across different modules (DB, locking, fs) into one interface,
-        # to a db object.
+        # I can implement the db information by linking this pure-memory
+        # object, which is more like a control class accumulating all
+        # functionality spread across different modules (DB, locking, fs) into
+        # one interface, to a db object.
         try:
             self.read_from_db(db_session)
 

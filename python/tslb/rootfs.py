@@ -422,6 +422,10 @@ class Image(object):
                     s.delete(ac)
 
 
+    def __str(self):
+        return "Image(%d)" % self.id
+
+
     def __repr__(self):
         return "tslb.rootfs.Image(%d)" % self.id
 
@@ -525,7 +529,7 @@ def find_image(requirements):
     matches, just bigger equal- or maybe no version requirements at all.
 
     For now, this function tries to fulfill all given package constraints. If
-    this is not possible it selects an image with least missing and disruptiv
+    this is not possible it selects an image with least missing and disruptive
     packages. A package is disruptive if it violates a constraint and hence
     needs to be removed. Missing and disruptive packages are weighted equally.
     From the remaining, feasible package set one with least extra packages is
@@ -535,8 +539,10 @@ def find_image(requirements):
     :type requirements: tslb.Constraint.DependencyList of (str:name, int:arch)
         tuples
 
-    :returns: The image
-    :rtype: tslb.rootfs.Image
+    :returns: The image or None if no image was found (none is published
+        yet ...)
+
+    :rtype: tslb.rootfs.Image or NoneType
     """
     with lock_S(tclm.define_lock('tslb.rootfs.available')):
         # Calculating an error function for each image
@@ -562,7 +568,7 @@ def find_image(requirements):
 
                         e += 1
 
-                # How many packages are disruptiv i.e. conflict with the
+                # How many packages are disruptive i.e. conflict with the
                 # requirements?
                 content = s.query(
                     db.rootfs.ImageContent.package,
@@ -594,7 +600,10 @@ def find_image(requirements):
                 error_function.append((e, img_id))
 
         # Find the best one
-        return Image(min(error_function)[1])
+        if len(error_function) > 0:
+            return Image(min(error_function)[1])
+        else:
+            return None
 
 
 def create_empty_image():
