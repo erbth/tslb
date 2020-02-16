@@ -59,13 +59,15 @@ def copy_from_base(base_dir, src_path, dst_dir):
                 shutil.copystat(src, dst)
                 os.chown(dst, uid=s.st_uid, gid=s.st_gid)
 
-def traverse_directory_tree(base, action, element = ''):
+def traverse_directory_tree(base, action, skip_hidden=False, element = ''):
     """
     With respect to directories, this function does an pre-order traversel.
     Nothing else would be suitable for general purpose directory structures,
     as they are hierarchical.
 
     action gets a path relative to base.
+
+    :param skip_hidden: Skip hidden files and directories and their contents
     """
 
     if element:
@@ -80,10 +82,11 @@ def traverse_directory_tree(base, action, element = ''):
 
     if stat.S_ISDIR(s.st_mode):
         for e in os.listdir (abs_element):
-            traverse_directory_tree(base, action, os.path.join(element, e))
+            if not e.startswith('.'):
+                traverse_directory_tree(base, action, skip_hidden, os.path.join(element, e))
 
 
-def mkdir_p(path, mode=0o755, base="/"):
+def mkdir_p(path, mode=0o777, base="/"):
     """
     Create the directory given in path and all its ancessors shall they be
     missing. If path is not absolute, it is expanded to an absolute path using
@@ -92,7 +95,8 @@ def mkdir_p(path, mode=0o755, base="/"):
     are expanded first.
 
     :param path: Path to the directory to create
-    :param mode: Permission bits of the new directories (like install -d)
+    :param mode: Maximum permissions of the new directory. The umask is
+        subtracted first.
     :param base: Additional path prefix, see above.
     """
     path_components = []

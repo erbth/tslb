@@ -52,7 +52,7 @@ def build_single_package(spname, sparch, spversion):
         print(Color.GREEN + "finished." + Color.NORMAL)
 
     except BaseException as e:
-        print(Color.RED + "FAILED: %s" % e + Color.NORMAL)
+        print(Color.RED + "FAILED." + Color.NORMAL)
         raise e
 
     exit(0)
@@ -128,7 +128,10 @@ def main():
     parser_show_cdep_graph = subparsers.add_parser('show-cdep-graph', help='Show the cdep graph.')
     parser_show_cdep_graph.add_argument('arch')
 
-    parse_psql = subparsers.add_parser('psql', help='Launch a psql shell with TSLB\'s user, password and database.')
+    parser_psql = subparsers.add_parser('psql', help='Launch a psql shell with TSLB\'s user, password and database.')
+
+    parser_run_bash_in_image = subparsers.add_parser('run-bash-in-image', help='Start an interactive bash shell in the specified rootfs image')
+    parser_run_bash_in_image.add_argument('img_id')
 
     args = parser.parse_args()
 
@@ -182,6 +185,14 @@ def main():
                 env['PGPASSWORD'] = password
 
         os.execvpe('psql', argv, env)
+
+    elif args.command == 'run-bash-in-image':
+        try:
+            ret_code = utils.run_bash_in_rootfs_image(args.img_id)
+        except:
+            raise
+
+        exit(ret_code)
 
 if __name__ == '__main__':
     main()

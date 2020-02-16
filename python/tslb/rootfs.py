@@ -105,6 +105,19 @@ class Image(object):
         return self.query_packages()
 
 
+    def get_mountpoint(self, namespace):
+        """
+        Computes the mountpoint at which the image would be mounted in the
+        given namespace.
+
+        :param namespace: The namespace
+        :returns: The mountpoint
+        :rtype: str
+        """
+        return os.path.join(settings.get_temp_location(), 'rootfs', namespace,
+                str(self.id))
+
+
     def contains_package(self, name, arch=None, version=None):
         """
         Test if the image contains the specified package. The test my include
@@ -216,7 +229,7 @@ class Image(object):
 
         # Create mountpoint (this will fail if the image is mounted already)
         base = os.path.join(settings.get_temp_location(), 'rootfs', namespace)
-        mkdir_p(base)
+        mkdir_p(base, 0o755)
 
         mountpoint = os.path.join(base, str(self.id))
 
@@ -261,8 +274,7 @@ class Image(object):
 
         :raises BaseException: If something goes wrong.
         """
-        mountpoint = os.path.join(settings.get_temp_location(), 'rootfs',
-            namespace, str(self.id))
+        mountpoint = self.get_mountpoint(namespace)
 
         if not os.path.isdir(mountpoint):
             raise ImageNotMounted(namespace, self.id)

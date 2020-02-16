@@ -1,3 +1,5 @@
+from tslb import Architecture
+from tslb import settings
 from tslb.Architecture import architectures
 from tslb.BinaryPackage import BinaryPackage, NoSuchBinaryPackage
 from tslb.CommonExceptions import NoSuchAttribute, MissingWriteIntent, AttributeManuallyHeld
@@ -12,7 +14,6 @@ import base64
 from tslb import database
 from tslb.database import BinaryPackage as dbbpkg
 from tslb.database import SourcePackage as dbspkg
-from tslb import filesystem as fs
 import os
 import pickle
 from tslb import tclm
@@ -23,6 +24,8 @@ from tslb.Constraint import VersionConstraint, DependencyList
 
 class SourcePackageList(object):
     def __init__(self, architecture, create_locks = False):
+        architecture = Architecture.to_int(architecture)
+
         if architecture not in architectures.keys():
             raise ValueError('Invalid architecture')
 
@@ -82,7 +85,7 @@ class SourcePackageList(object):
                     del spkg
 
                     # Create fs location
-                    fs_base = os.path.join(fs.root, 'packaging', name)
+                    fs_base = os.path.join(settings.get_packaging_location(), name)
 
                     # Transactionality
                     try:
@@ -119,7 +122,7 @@ class SourcePackageList(object):
                         s.delete(spkg)
 
                     # Remove the fs location(s)
-                    fops.rm_rf (os.path.join(fs.root, 'packaging', name))
+                    fops.rm_rf (os.path.join(settings.get_packaging_location(), name))
 
 class SourcePackage(object):
     def __init__(self, name, architecture,
@@ -130,6 +133,8 @@ class SourcePackage(object):
         used. If write_intent is True, S+ locks are acquired during
         initialization.
         """
+        architecture = Architecture.to_int(architecture)
+
         self.name = name
         self.architecture = architecture
         self.write_intent = write_intent
@@ -165,7 +170,7 @@ class SourcePackage(object):
             self.read_from_db(db_session)
 
             # The fs location for this source package:
-            self.fs_base = os.path.join(fs.root, 'packaging', name)
+            self.fs_base = os.path.join(settings.get_packaging_location(), name)
 
         except:
             # Release locks
@@ -438,6 +443,16 @@ class SourcePackage(object):
         """
         return (self.dbo.versions_modified_time, self.dbo.versions_reassured_time,
                 self.dbo.versions_manual_hold_time)
+
+
+    def __str__(self):
+        return "SourcePackage(%s@%s)" % (self.name,
+            Architecture.to_str(self.architecture))
+
+
+    def __repr__(self):
+        return "tslb.SourcePackage.SourcePackage(%s@%s)" % (self.name,
+            Architecture.to_str(self.architecture))
 
 
 class SourcePackageVersion(object):
@@ -1173,6 +1188,17 @@ class SourcePackageVersion(object):
                         ndl.add_constraint(pn, c)
 
             self.set_attribute('cdeps', ndl)
+
+
+    def __str__(self):
+        return "SourcePackage(%s@%s:%s)" % (self.source_package.name,
+            Architecture.to_str(self.architecture), self.version_number)
+
+
+    def __repr__(self):
+        return "tslb.SourcePackage.SourcePackage(%s@%s:%s)" % (
+                self.source_package.name,
+                Architecture.to_str(self.architecture), self.version_number)
 
 
 # Some exceptions for our pleasure.

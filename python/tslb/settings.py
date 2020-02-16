@@ -125,6 +125,7 @@ class settings_internal(types.ModuleType):
         return ("-m", monitor, "--name", name, "--keyring", keyring)
 
 
+
     def get_ceph_rootfs_rbd_pool(self):
         """
         :raises NoSuchSetting: if required settings are missing.
@@ -133,6 +134,7 @@ class settings_internal(types.ModuleType):
             return self['Ceph']['rootfs_rbd_pool']
         except KeyError:
             raise NoSuchSetting('Ceph', 'rootfs_rbd_pool')
+
 
     def get_temp_location(self):
         """
@@ -145,6 +147,97 @@ class settings_internal(types.ModuleType):
             l = t.get('temp_location', l)
 
         return l
+
+
+    def get_fs_root(self):
+        """
+        Retrieves the configured root of the filesystem.
+        """
+        f = self.get('Filesystem')
+        if not f:
+            raise NoSuchSetting('Filesystem')
+
+        root = f.get('root')
+        if not root:
+            raise NoSuchSetting('Filesystem', 'root')
+
+        return root
+
+
+    def guess_if_in_rootfs_chroot(self):
+        """
+        Guess if we are inside a rootfs-image chroot environment based on if
+        all of /tmp/tslb/{packaging,collecting_repo,source_location} exist.
+        """
+        return os.path.isdir('/tmp/tslb/packaging') and\
+            os.path.isdir('/tmp/tslb/collecting_repo') and\
+            os.path.isdir('/tmp/tslb/source_location')
+
+
+    def get_packaging_location(self, in_rootfs="auto"):
+        """
+        Get the packaging location.
+
+        :param in_rootfs: If true, everything shall be based on /tmp/tslb. When
+            set to "auto", the function determines if it is run inside an
+            chroot rootfs image environment based on if all of
+            /tmp/tslb/{packaging,collecting_repo,source_location} exist.
+        """
+        if in_rootfs == "auto":
+            in_rootfs = self.guess_if_in_rootfs_chroot()
+
+        return os.path.join('/tmp/tslb' if in_rootfs else self.get_fs_root(),
+            'packaging')
+
+
+    def get_collecting_repo_location(self, in_rootfs="auto"):
+        """
+        Get the configured or default location of the collectin repo.
+
+        :param in_rootfs: If true, everything shall be based on /tmp/tslb. When
+            set to "auto", the function determines if it is run inside an
+            chroot rootfs image environment based on if all of
+            /tmp/tslb/{packaging,collecting_repo,source_location} exist.
+        """
+        if in_rootfs == "auto":
+            in_rootfs = self.guess_if_in_rootfs_chroot()
+
+        if in_rootfs:
+            return '/tmp/tslb/collecting_repo'
+
+        else:
+            l = os.path.join(self.get_fs_root(), 'collecting_repo')
+
+            t = self.get('TSLB')
+            if t:
+                l = t.get('collecting_repo_location', l)
+
+            return l
+
+
+    def get_source_location(self, in_rootfs="auto"):
+        """
+        Get the configured or default source location.
+
+        :param in_rootfs: If true, everything shall be based on /tmp/tslb. When
+            set to "auto", the function determines if it is run inside an
+            chroot rootfs image environment based on if all of
+            /tmp/tslb/{packaging,collecting_repo,source_location} exist.
+        """
+        if in_rootfs == "auto":
+            in_rootfs = self.guess_if_in_rootfs_chroot()
+
+        if in_rootfs:
+
+            return '/tmp/tslb/source_location'
+        else:
+            l = os.path.join(self.get_fs_root(), 'source_location')
+
+            t = self.get('TSLB')
+            if t:
+                l = t.get('source_location', l)
+
+            return l
 
 
 # **************************** Exceptions *************************************

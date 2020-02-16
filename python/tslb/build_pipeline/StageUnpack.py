@@ -4,14 +4,6 @@ from tslb import settings
 import subprocess
 from tslb.tclm import lock_S, lock_Splus, lock_X
 
-# We need a source location
-if 'TSLB' not in settings:
-    raise Exception('There is no section `TSLB\' in the tslb config file.')
-
-source_location = settings['TSLB'].get('source_location')
-if source_location == None:
-    raise Exception('No source location configured in the tslb config file.')
-
 
 class StageUnpack(object):
     name = 'unpack'
@@ -25,6 +17,8 @@ class StageUnpack(object):
         :rtype: tuple(bool, str)
         """
         output = ""
+
+        source_location = settings.get_source_location()
 
         # Look if the package has a source archive configured
         if spv.has_attribute('source_archive'):

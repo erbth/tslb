@@ -59,7 +59,12 @@ def sync_stages_with_db():
     s.commit()
 
 class BuildPipeline(object):
-    def __init__(self, out = sys.stdout):
+    """
+    The package Build Pipeline.
+
+    :param out: An output stream to log to.
+    """
+    def __init__(self, out=sys.stdout):
         self.out = out
 
     def build_source_package_version(self, spv):

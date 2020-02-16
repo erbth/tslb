@@ -8,6 +8,11 @@ from tslb.SourcePackage import SourcePackage, SourcePackageList, SourcePackageVe
 from tslb import rootfs
 from tslb.tclm import lock_X
 from tslb import tclm
+from tslb import rootfs
+from tslb import package_builder as pb
+import multiprocessing
+import os
+
 
 def initially_create_all_locks():
     """
@@ -46,3 +51,31 @@ def initially_create_all_locks():
 
     finally:
         rlk.release_X()
+
+
+def run_bash_in_rootfs_image(img_id):
+    """
+    Start an interactive bash shell in an isolated (not sharing environment)
+    chroot environment rooted at the given image.
+
+    :param img_id: The rootfs image's id
+    :returns: The shell's return code
+    :raises rootfs.NoSuchImage: If the id does not match an image
+    """
+    image = rootfs.Image(int(img_id))
+    mount_namespace = 'manual'
+
+    image.mount(mount_namespace)
+    mountpoint = image.get_mountpoint(mount_namespace)
+
+    try:
+        pb.mount_pseudo_filesystems(mountpoint)
+
+        def f():
+            return os.execlp('bash', 'bash', '--login', '+h')
+
+        return pb.execute_in_chroot(mountpoint, f)
+
+    finally:
+        pb.unmount_pseudo_filesystems(mountpoint, raises=True)
+        image.unmount(mount_namespace)
