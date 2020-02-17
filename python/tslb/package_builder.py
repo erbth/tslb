@@ -213,7 +213,9 @@ class PackageBuilder(object):
                 spkg.name, spkg.architecture, spkgv.version_number)
 
             # Release the source package so that the other process can take an
-            # X lock on it
+            # X lock on it.
+            # TODO: To behave atomically, the lock must be transfered.
+            sleep(1)
             del spkg
             del spkgv
 
@@ -294,7 +296,7 @@ def mount_pseudo_filesystems(root):
     Mount all pseudo filesystems under root. Additionally a run/shm or dev/shm
     directory is created as needed.
 
-    Additionally copies python packages.
+    Additionally copies python packages and the system config file.
 
     :param root: The root of the directory tree in which the pseudo filesystems
         shall be mounted
@@ -318,6 +320,7 @@ def mount_pseudo_filesystems(root):
     #         os.path.join(root, 'run', 'shm'))
 
     _copy_python_packages(root)
+    _copy_config_file(root)
 
 
 def unmount_pseudo_filesystems(root, raises=True):
@@ -683,3 +686,18 @@ def _copy_python_packages(root):
         elif t == 'd':
             os.mkdir(dst)
             shutil.copystat(src, dst)
+
+
+def _copy_config_file(root):
+    """
+    Copies the system config file to root/tslb/system.ini.
+    """
+    tmp = os.path.join(root, 'tmp')
+
+    if not os.path.isdir(tmp):
+        raise RuntimeError("tmp dir at '%s' does not exist." % tmp)
+
+    fops.mkdir_p(os.path.join(root, 'tmp', 'tslb'))
+    shutil.copy2(
+        settings.get_config_file_path(),
+        os.path.join(root, 'tmp', 'tslb', 'system.ini'))

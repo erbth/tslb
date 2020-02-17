@@ -86,7 +86,7 @@ class InvalidText(Exception):
 
 class NoSuchRow(Exception):
     def __init__(self, id, table):
-        super().__init__("Row '%s' does not exists in table %s." (id, table))
+        super().__init__("Row '%s' does not exists in table %s." % (id, table))
 
 class NoSuchAttribute(Exception):
     def __init__(self, obj, key):

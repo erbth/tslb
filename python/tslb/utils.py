@@ -6,6 +6,7 @@ from tslb.Architecture import architectures
 from tslb.BinaryPackage import BinaryPackage
 from tslb.SourcePackage import SourcePackage, SourcePackageList, SourcePackageVersion
 from tslb import rootfs
+from tslb import tclm
 from tslb.tclm import lock_X
 from tslb import tclm
 from tslb import rootfs
@@ -62,7 +63,20 @@ def run_bash_in_rootfs_image(img_id):
     :returns: The shell's return code
     :raises rootfs.NoSuchImage: If the id does not match an image
     """
-    image = rootfs.Image(int(img_id))
+    img_id = int(img_id)
+    image = rootfs.Image(img_id)
+
+    if not image.in_available_list:
+        # Upgrade to an X lock
+        lk = tclm.define_lock('tslb.rootfs.images.%d' % img_id)
+        lk.acquire_Splus()
+
+        del image
+        lk.acquire_X()
+        lk.release_Splus()
+
+        image = rootfs.Image(img_id, acquired_X=True)
+
     mount_namespace = 'manual'
 
     image.mount(mount_namespace)

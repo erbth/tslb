@@ -382,6 +382,44 @@ class Image(object):
                     s.delete(ai)
 
 
+    def remove_ro_base(self):
+        """
+        Remove the ro_base snapshot of the image. This requires an X lock.
+        Moreover all child images must have been deleted or inflated. If the
+        image has no ro_base snapshot, this function does nothing (and requires
+        non of the above demands).
+
+        :raises RuntimeError: If the lock is not held in X mode or the image is
+            published.
+
+        :raises BaseException: If an operation fails.
+        """
+        if 'ro_base' in _list_rbd_image_snapshots(self.id):
+            if not self.acquired_X:
+                raise RuntimeError("An X lock is required to alter the image.")
+
+            if self.in_available_list:
+                raise RuntimeError("The image is published.")
+
+            cmd = ['rbd', 'snap', 'unprotect',
+                *settings.get_ceph_cmd_conn_params(),
+                settings.get_ceph_rootfs_rbd_pool() + '/' + str(self.id) +
+                '@ro_base']
+
+            r = subprocess.call(cmd)
+            if r != 0:
+                raise CommandFailed(cmd, r)
+
+            cmd = ['rbd', 'snap', 'rm',
+                *settings.get_ceph_cmd_conn_params(),
+                settings.get_ceph_rootfs_rbd_pool() + '/' + str(self.id) +
+                '@ro_base']
+
+            r = subprocess.call(cmd)
+            if r != 0:
+                raise CommandFailed(cmd, r)
+
+
     def add_packages_to_list(self, pkgs):
         """
         Add packages to the list of installed packages. This requires an X lock

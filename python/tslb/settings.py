@@ -2,6 +2,7 @@
 A settings wrapper presenting various system settings from a ini file in one of
 the following locations:
   * ./tslb_system.ini
+  * /tmp/tslb/system.ini
   * ~/.tslb_system.ini
   * /etc/tslb/system.ini
 
@@ -47,6 +48,8 @@ def find_config_file():
 
     if os.path.exists('tslb_system.ini'):
         config_file_path = os.path.abspath('tslb_system.ini')
+    elif os.path.exists('/tmp/tslb/system.ini'):
+        config_file_path = '/tmp/tslb/system.ini'
     elif os.path.exists(os.path.join(os.getenv('HOME'), '.tslb_system.ini')):
         config_file_path = os.path.join(os.getenv('HOME'), '.tslb_system.ini')
     elif os.path.exists('/etc/tslb/system.ini'):
@@ -98,6 +101,17 @@ class settings_internal(types.ModuleType):
             return config_file_path
 
         return options.get(key)
+
+
+    def get_config_file_path(self):
+        """
+        Return the path of the config file from which the config parameters
+        where read.
+
+        :returns: The path
+        :rtype: str
+        """
+        return config_file_path
 
 
     # Interpret settings and formulate strings.

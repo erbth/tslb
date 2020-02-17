@@ -6,6 +6,7 @@ from tslb import Architecture
 from tslb.VersionNumber import VersionNumber
 from tslb import SourcePackage
 from tslb.build_pipeline import BuildPipeline
+from tslb.Console import Color
 import sys
 
 
@@ -15,19 +16,22 @@ def rootfs_module_entry(name, arch, version):
     value to get a somewhat safe interface to the rootfs module.
     """
     try:
-        sp = SourcePackage(name, arch)
-        spv = SourcePackage.get_version(version)
+        sp = SourcePackage.SourcePackage(name, arch, write_intent=True)
+        spv = sp.get_version(version)
         bp = BuildPipeline()
 
         r = bp.build_source_package_version(spv)
 
-    except:
+    except BaseException as e:
+        print(Color.red("ERROR: %s" % e))
         r = False
 
     return 0 if r else 2
 
 
 if __name__ == '__main__':
+    print(Color.magenta("Entered the rootfs module"))
+
     if len(sys.argv) != 4:
         print("Invalid API usage.")
         exit(1)
@@ -41,4 +45,7 @@ if __name__ == '__main__':
         print("Invalid API usage: %s" % e)
         exit(1)
 
-    exit(rootfs_module_entry(name, arch, version))
+    r = rootfs_module_entry(name, arch, version)
+
+    print(Color.magenta("Leaving the rootfs module"))
+    exit(r)
