@@ -1,6 +1,7 @@
 from tslb.tclm import lock_S, lock_Splus, lock_X
 from tslb.filesystem import FileOperations as fops
 import os
+import subprocess
 
 class StageCreatePMPackages(object):
     name = 'create_pm_packages'
@@ -32,5 +33,43 @@ class StageCreatePMPackages(object):
 
             b.set_files(files)
 
-        success = False
+            #
+            # Add files to the TPM package
+            cmd = ['tpm', '--add-files']
+
+            r = subprocess.run(cmd, cwd=b.fs_base,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            output += r.stdout.decode() + r.stderr.decode()
+
+            if r.returncode != 0:
+                output += '"%s" exited with code %d.' % (
+                    ' '.join(cmd), r.returncode)
+
+                success = False
+                break
+
+
+            # Add runtime dependencies
+
+
+            # Pack
+            cmd = ['tpm', '--pack']
+
+            r = subprocess.run(cmd, cwd=b.fs_base,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            output += r.stdout.decode() + r.stderr.decode()
+
+            if r.returncode != 0:
+                output += '"%s" exited with code %d.' % (
+                    ' '.join(cmd), r.returncode)
+
+                success = False
+                break
+
+
+            # Copy the package to the collecting repo
+
+
         return (success, output)
