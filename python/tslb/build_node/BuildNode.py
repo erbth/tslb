@@ -5,6 +5,7 @@ from tslb.Console import Color
 from tslb.VersionNumber import VersionNumber
 from tslb.build_node import TSLB_NODE_YAMB_PROTOCOL
 from tslb.build_pipeline import BuildPipeline
+from tslb.package_builder import PackageBuilder, PkgBuildFailed
 import asyncio
 import json
 import multiprocessing, aioprocessing
@@ -39,7 +40,8 @@ reason_to_str = {
         FAIL_REASON_PACKAGE: 'package'
         }
 
-def build_package_worker(self, name, arch, version_number, error):
+
+def build_package_worker(self, name, arch, version_number, error, identity):
     """
     This function is to be run in an extra process. It builds a package and
     reports the result in the error shared multiprocessing.Value. It may
@@ -54,35 +56,31 @@ def build_package_worker(self, name, arch, version_number, error):
     :type version_number: VersionNumber.VersionNumber
     :param error: A variable to receive a potential error code
     :type error: multiprocessing.Value
+    :param identity: This build node's identity
+    :type identity: str
     """
     print("Building Source Package %s:%s@%s" % (name, version_number, architectures[arch]))
 
-    time.sleep(5)
-    error.value = -1
-    print("done.")
-    return
+    # time.sleep(5)
+    # error.value = -1
+    # print("done.")
+    # return
 
-    # Find the package version
+    pb = PackageBuilder(identity)
+
     try:
-        spkg = SourcePackage.SourcePackage(name, arch, write_intent=True)
-        spv = spkg.get_version(version_number)
-    except Exception as e:
-        print(e)
-        error.value = FAIL_REASON_PACKAGE
-        return
-    except:
-        error.value = FAIL_REASON_PACKAGE
-        return
-
-    # Build the package
-    bp = BuildPipeline()
-
-    if bp.build_source_package_version(spv):
+        pb.build_package(name, arch, version_number)
         print(Color.GREEN + "Completed successfully." + Color.NORMAL)
         error.value = -1
-    else:
+
+    except PkgBuildFailed:
         print(Color.RED + "FAILED." + Color.NORMAL)
         error.value = FAIL_REASON_PACKAGE
+
+    except:
+        print(Color.RED + "FAILED." + Color.NORMAL)
+        error.value = FAIL_REASON_NODE_ABORT
+
 
 class BuildNode(object):
     def __init__(self, loop, lsr, yamb_hub_transport_address):
@@ -95,8 +93,7 @@ class BuildNode(object):
         self.loop = loop
         self.lsr = lsr
 
-        number = len(processes.list_matching('^' + processes.name_from_pid(os.getpid()) + '$')) - 1
-        self.identity = "%s:%d" % (socket.gethostname(), number)
+        self.identity = "%s:%d" % (socket.gethostname(), os.getpid())
         print ("Own identity: %s" % self.identity, flush=True)
 
         self.state = (STATE_IDLE,)
@@ -225,7 +222,7 @@ class BuildNode(object):
 
             try:
                 self.worker_process = aioprocessing.AioProcess(target=build_package_worker,
-                        args=(self, name, arch, version, self.worker_error))
+                    args=(self, name, arch, version, self.worker_error, self.identity))
                 self.worker_process.start()
 
                 self.loop.create_task(self.worker_monitor_function())

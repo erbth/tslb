@@ -8,7 +8,6 @@ from tslb.Constraint import DependencyList, VersionConstraint
 from tslb import Console
 from tslb.Console import Color
 from tslb import CommonExceptions as ce
-from tslb.build_pipeline import BuildPipeline
 from tslb.filesystem import FileOperations as fops
 import multiprocessing
 import os
@@ -47,7 +46,10 @@ class PackageBuilder(object):
         :type arch: int or str
         :type version: Anything that VersionNumber accepts or NoneType
 
-        :raises BaseException: if something failes.
+        :raises PkgBuildFailed: If the package failed to build and the build
+            system is sane.
+
+        :raises BaseException: If something system-specific fails.
         """
         arch = Architecture.to_int(arch)
 
@@ -221,9 +223,15 @@ class PackageBuilder(object):
 
             p.join()
             if p.exitcode != 0:
-                raise Exception(
-                    "Failed to build package with (error code %d)" %
-                    p.exitcode)
+                if r == 2:
+                    raise PkgBuildFailed(
+                        "Failed to build package with error code %d (package)." %
+                        p.exitcode)
+
+                else:
+                    raise Exception(
+                        "Failed to build package with error code %d (system)." %
+                        p.exitcode)
 
         except BaseException as e:
             self.out.write(Color.RED + "FAILED: %s\n" % e + Color.NORMAL)
@@ -701,3 +709,14 @@ def _copy_config_file(root):
     shutil.copy2(
         settings.get_config_file_path(),
         os.path.join(root, 'tmp', 'tslb', 'system.ini'))
+
+
+
+# *************************** Exceptions **************************************
+class PkgBuildFailed(Exception):
+    """
+    To be raised when a package failed to build and the build system worked
+    that is no infrastractural problem occured.
+    """
+    def __init__(self, msg):
+        super().__init__(msg)
