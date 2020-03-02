@@ -10,7 +10,8 @@ import yamb_node
 bn = None
 
 def signal_handler(bn):
-    bn.request_quit()
+    loop = asyncio.get_running_loop()
+    loop.create_task(bn.request_quit())
 
 class LoopStopReason(object):
     def __init__(self, initial = 0):

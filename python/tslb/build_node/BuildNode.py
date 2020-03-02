@@ -6,7 +6,9 @@ from tslb.VersionNumber import VersionNumber
 from tslb.build_node import TSLB_NODE_YAMB_PROTOCOL
 from tslb.build_pipeline import BuildPipeline
 from tslb.package_builder import PackageBuilder, PkgBuildFailed
+from tslb.console_streaming import ConsoleStreamer, ConsoleAccessProtocol
 import asyncio
+import base64
 import json
 import multiprocessing, aioprocessing
 import os
@@ -61,10 +63,19 @@ def build_package_worker(self, name, arch, version_number, error, identity):
     """
     print("Building Source Package %s:%s@%s" % (name, version_number, architectures[arch]))
 
-    # time.sleep(5)
-    # error.value = -1
-    # print("done.")
-    # return
+    time.sleep(1)
+    print("after 1s")
+    time.sleep(1)
+    print("after 2s")
+    time.sleep(1)
+    print("after 3s")
+    time.sleep(1)
+    print("after 4s")
+    time.sleep(1)
+
+    error.value = -1
+    print("done.")
+    return
 
     pb = PackageBuilder(identity)
 
@@ -99,10 +110,23 @@ class BuildNode(object):
         self.state = (STATE_IDLE,)
         self.build_master_addr = None
 
+        # Streaming console output
+        class _CAS(ConsoleAccessProtocol):
+            def data(cas, addr, mdata, blob):
+                self.send_console_data(addr, mdata, blob)
+
+            def update(cas, addr, mdata, blob):
+                self.send_console_update(addr, mdata, blob)
+
+
+        self.cas = _CAS()
+        self.console_streamer = ConsoleStreamer(self.cas)
+
         # A worker process and its monitor task
         self.worker_error = multiprocessing.Value('i', FAIL_REASON_NODE_ABORT)
         self.worker_process = None
         self.worker_monitor = None
+
 
     async def connect_to_yamb_hub(self):
         try:
@@ -110,18 +134,19 @@ class BuildNode(object):
             await self.yamb.wait_ready()
         except Exception as e:
             print(e)
-            self.loop.stop()
+            await self.request_quit()
             self.lsr.set_code(1)
             return
         except:
-            self.loop.stop()
+            await self.request_quit()
             self.lsr.set_code(1)
             return
 
         print ("Connected to yamb with node address %s." %
                 yamb_node.addr_to_str(self.yamb.get_own_address()))
 
-    def request_quit(self):
+
+    async def request_quit(self):
         print ("Stopping")
         if self.worker_monitor:
             self.worker_monitor.cancel()
@@ -130,10 +155,20 @@ class BuildNode(object):
             self.worker_process.kill()
             print(Color.RED + "Killed the worker process." + Color.NORMAL)
 
-        self.loop.stop()
+        # Stop all remaining tasks
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
 
-    # Send a message to the build master
-    def send_message_to_master(self, dst, data={}):
+        for task in tasks:
+            task.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        self.loop.stop()
+        self.lsr.set_code(0)
+
+
+    # Send a message to the client
+    def send_message_to_client(self, dst, data={}):
         """
         Send a message to the build master that includes our own identity.
 
@@ -145,6 +180,7 @@ class BuildNode(object):
 
         self.yamb.send_yamb_message(dst, TSLB_NODE_YAMB_PROTOCOL,
                 json.dumps(d).encode('utf8'))
+
 
     async def worker_monitor_function(self):
         """
@@ -172,7 +208,7 @@ class BuildNode(object):
             self.state = (STATE_FAILED, self.state[1], FAIL_REASON_NODE_ABORT)
 
             name, arch, version = self.state[1]
-            self.send_message_to_master (self.build_master_addr, {
+            self.send_message_to_client (self.build_master_addr, {
                     'state': 'failed',
                     'name': name,
                     'arch': architectures[arch],
@@ -205,14 +241,16 @@ class BuildNode(object):
                         'version': str(version),
                         }
 
-            self.send_message_to_master(self.build_master_addr, d)
+            self.send_message_to_client(self.build_master_addr, d)
 
         # Clean up.
         self.worker_process.close()
         self.worker_process = None
         self.worker_monitor = None
 
-    # Interacting with the build master
+
+    # Interacting with a client
+    # Concerning build and state
     def start_build(self, name, arch, version, dst):
         if self.state[0] == STATE_IDLE:
             self.state = (STATE_BUILDING, (name, arch, version))
@@ -231,7 +269,7 @@ class BuildNode(object):
                 self.abort_build(dst)
                 return
 
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'state': 'building',
                 'name': name,
                 'arch': architectures[arch],
@@ -239,9 +277,10 @@ class BuildNode(object):
                 })
 
         else:
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'err': 'Action `start_build\' not applicable in state %s.' % state_to_str[self.state[0]]
                 })
+
 
     def abort_build(self, dst):
         if self.state[0] == STATE_BUILDING:
@@ -253,9 +292,10 @@ class BuildNode(object):
                     self.worker_process.kill()
 
         else:
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'err': 'Action `abort\' not applicable in state %s.' % state_to_str[self.state[0]]
                 })
+
 
     def reset(self, dst):
         if self.state[0] == STATE_FINISHED or self.state[0] == STATE_FAILED or\
@@ -263,14 +303,15 @@ class BuildNode(object):
 
             self.state = (STATE_IDLE,)
 
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'state': 'idle',
                 })
 
         else:
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'err': 'Action `reset\' not applicable in state %s.' % state_to_str[self.state[0]]
                 })
+
 
     def get_status(self, dst):
         s = self.state[0]
@@ -316,74 +357,142 @@ class BuildNode(object):
                     }
 
         if d is not None:
-            self.send_message_to_master(dst, d)
+            self.send_message_to_client(dst, d)
+
 
     def identify(self, dst):
         # Our own identity will be included automatically
-        self.send_message_to_master(dst)
+        self.send_message_to_client(dst)
+
 
     def enable_maintenance(self, dst):
         if self.state[0] == STATE_IDLE:
             self.state = (STATE_MAINTENANCE,)
 
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'state': 'maintenance',
                 })
 
         else:
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'err': 'Action `enable_maintenance\' not applicable in state %s.' % state_to_str[self.state[0]]
                 })
+
 
     def disable_maintenance(self, dst):
         if self.state[0] == STATE_MAINTENANCE:
             self.state = (STATE_IDLE,)
 
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'state': 'idle',
                 })
 
         else:
-            self.send_message_to_master(dst, {
+            self.send_message_to_client(dst, {
                 'err': 'Action `disable_maintenance\' not applicable in state %s.' % state_to_str[self.state[0]]
                 })
+
 
     def get_load(self):
         pass
 
+
+    # Sending and receiving console streaming messages
+    def send_console_data(self, addr, mdata, blob):
+        self.send_message_to_client(addr, {
+            'console_streaming': {
+                'msg': 'data',
+                'mdata': mdata,
+                'blob': base64.b64encode(blob).decode('ascii')
+                }
+            })
+
+
+    def send_console_update(self, addr, mdata, blob):
+        self.send_message_to_client(addr, {
+            'console_streaming': {
+                'msg': 'update',
+                'mdata': mdata,
+                'blob': base64.b64encode(blob).decode('ascii')
+                }
+            })
+
+
+    def handle_console_request_updates(self, peer):
+        self.cas.updates_requested(peer)
+
+
+    def handle_console_ack(self, peer):
+        self.cas.update_acknowledged(peer)
+
+
+    def handle_console_request(self, peer, start, end):
+        self.cas.requested(peer, start, end)
+
+
+    # Handle incomming messages
     def protocol_handler(self, src, data):
         if src != self.yamb.get_own_address():
             try:
                 j = json.loads(data.decode('utf8'))
 
-                action = j['action']
+                action = j.get('action')
+                cs = j.get('console_streaming')
             except:
                 return
 
-            if action == 'identify':
-                self.identify(src)
 
-            elif action == 'start_build':
+            if action:
+                if action == 'identify':
+                    self.identify(src)
+
+                elif action == 'start_build':
+                    try:
+                        name = j['name']
+                        arch = architectures_reverse[j['arch']]
+                        version = VersionNumber(j['version'])
+                    except:
+                        return
+
+                    self.start_build(name, arch, version, src)
+
+                elif action == 'get_status':
+                    self.get_status(src)
+
+                elif action == 'abort_build':
+                    self.abort_build(src)
+
+                elif action == 'reset':
+                    self.reset(src)
+
+                elif action == 'enable_maintenance':
+                    self.enable_maintenance(src)
+
+                elif action == 'disable_maintenance':
+                    self.disable_maintenance(src)
+
+
+            if cs:
                 try:
-                    name = j['name']
-                    arch = architectures_reverse[j['arch']]
-                    version = VersionNumber(j['version'])
+                    msg = cs['msg']
                 except:
                     return
 
-                self.start_build(name, arch, version, src)
+                if msg == 'request_updates':
+                    self.handle_console_request_updates(src)
 
-            elif action == 'get_status':
-                self.get_status(src)
+                elif msg == 'ack':
+                    self.handle_console_ack(src)
 
-            elif action == 'abort_build':
-                self.abort_build(src)
+                elif msg == 'request':
+                    try:
+                        start = int(cs['start'])
+                        end = int(cs['end'])
 
-            elif action == 'reset':
-                self.reset(src)
+                        if start < 0 or end < 0 or start > 0xffffffff or end > 0xffffffff:
+                            raise Exception
 
-            elif action == 'enable_maintenance':
-                self.enable_maintenance(src)
+                    except:
+                        return
 
-            elif action == 'disable_maintenance':
-                self.disable_maintenance(src)
+                    self.handle_console_request(src, start, end)
