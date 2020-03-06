@@ -11,7 +11,6 @@ from tslb.console_streaming import ConsoleStreamer, ConsoleAccessProtocol
 import asyncio
 import base64
 import json
-import multiprocessing
 import os
 import socket
 import time
@@ -379,6 +378,10 @@ class BuildNode(object):
     def handle_console_request(self, peer, start, end):
         self.cas.requested(peer, start, end)
 
+    def handle_console_input(self, src, blob):
+        if self.worker_process is not None and self.worker_process.returncode is None:
+            self.cas.input(blob)
+
 
     # Handle incomming messages
     def protocol_handler(self, src, data):
@@ -447,3 +450,12 @@ class BuildNode(object):
                         return
 
                     self.handle_console_request(src, start, end)
+
+                elif msg == 'input':
+                    try:
+                        blob = base64.b64decode(cs['blob'].encode('ascii'))
+
+                    except:
+                        return
+
+                    self.handle_console_input(src, blob)

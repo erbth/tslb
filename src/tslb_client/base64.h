@@ -8,6 +8,7 @@ extern "C" {
 #include <stdlib.h>
 
 /* The caller is respnsible for freeing the returned buffer using free. */
+char *base64_encode(const char *input, size_t input_size, size_t *output_size);
 char *base64_decode(const char *input, size_t input_size, size_t *output_size);
 
 #ifdef __cplusplus

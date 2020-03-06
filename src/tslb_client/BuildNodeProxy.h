@@ -151,6 +151,9 @@ namespace BuildNodeProxy
 		void console_send_ack();
 		void console_send_request(uint32_t start, uint32_t end);
 
+		/* Does NOT free data. */
+		void console_send_input(const char *data, size_t size);
+
 
 		bool is_responding() const;
 		enum State get_state() const;

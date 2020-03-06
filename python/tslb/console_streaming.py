@@ -380,6 +380,16 @@ class ConsoleAccessProtocol(object):
         raise NotImplemented
 
 
+    def input(self, addr, data):
+        """
+        Receiver to streamer
+
+        Called by the protocol implementation if an input mesage is received
+        from a client with unique address.
+        """
+        raise NotImplemented
+
+
     def data(self, addr, mdata, data):
         """
         Streamer to receiver
@@ -421,6 +431,7 @@ class ConsoleStreamer(object):
         cas.updates_requested = self.updates_requested
         cas.update_acknowledged = self.update_acknowledged
         cas.requested = self.requested
+        cas.input = self.input
 
         self.send_data = cas.data
         self.send_update = cas.update
@@ -457,6 +468,10 @@ class ConsoleStreamer(object):
             if a == addr:
                 self.subscribers[i] = (a, 0)
                 break
+
+
+    def input(self, blob):
+        os.write(self.pty_master, blob)
 
 
     def requested(self, addr, start, end):

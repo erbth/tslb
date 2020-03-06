@@ -420,6 +420,47 @@ void BuildNodeProxy::console_send_request(uint32_t start, uint32_t end)
 			move(msg));
 }
 
+void BuildNodeProxy::console_send_input(const char *data, size_t size)
+{
+	/* Encode data */
+	size_t encoded_size;
+	char *encoded = base64_encode(data, size, &encoded_size);
+	if (!encoded)
+		return;
+
+	/* Formulate response */
+	try
+	{
+		Document d;
+		d.SetObject();
+
+		Value cs(kObjectType);
+
+		cs.AddMember("msg", "input", d.GetAllocator());
+		cs.AddMember("blob", StringRef(encoded, encoded_size), d.GetAllocator());
+		d.AddMember("console_streaming", cs, d.GetAllocator());
+
+		StringBuffer buffer;
+		Writer<StringBuffer> writer(buffer);
+		d.Accept(writer);
+
+		auto msg = make_unique<yamb_node::stream>();
+		msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
+		build_cluster_proxy.build_node_yprotocol->send_message(
+				build_cluster_proxy.ynode.get(),
+				current_yamb_address,
+				move(msg));
+	}
+	catch(...)
+	{
+		free (encoded);
+		throw;
+	}
+
+	/* Free encoded string. */
+	free (encoded);
+}
+
 
 bool BuildNodeProxy::is_responding() const
 {
