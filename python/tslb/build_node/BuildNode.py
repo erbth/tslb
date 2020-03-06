@@ -193,12 +193,16 @@ class BuildNode(object):
     async def start_build(self, name, arch, version, dst):
         if self.state[0] == STATE_IDLE:
             try:
+                env = dict(os.environ)
+                env['TERM'] = 'xterm-256color'
+
                 self.worker_process = await asyncio.create_subprocess_exec(
                     'python3', '-m', 'tslb.build_node.worker',
                     name, Architecture.to_str(arch), str(version), self.identity,
                     stdin=self.console_streamer.pty_slave,
                     stdout=self.console_streamer.pty_slave,
-                    stderr=self.console_streamer.pty_slave)
+                    stderr=self.console_streamer.pty_slave,
+                    env=env)
 
 
                 try:

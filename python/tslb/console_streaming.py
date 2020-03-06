@@ -6,9 +6,12 @@ client. I.e. to view the output of build commands on a build node from remote.
 from bisect import bisect_left
 import array
 import asyncio
+import fcntl
 import math
 import os
 import pty
+import struct
+import termios
 
 
 class FDWrapper(object):
@@ -424,6 +427,9 @@ class ConsoleStreamer(object):
     def __init__(self, cas):
         self.buffer = Buffer()
         self.pty_master, self.pty_slave = pty.openpty()
+
+        fcntl.ioctl(self.pty_slave, termios.TIOCSWINSZ,
+                struct.pack("HHHH", 25, 80, 0, 0))
 
         self.subscribers = []
 

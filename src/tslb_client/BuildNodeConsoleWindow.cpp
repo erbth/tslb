@@ -27,6 +27,7 @@ BuildNodeConsoleWindow::BuildNodeConsoleWindow(
 			VTE_CURSOR_BLINK_OFF);
 
 	vte_terminal_set_scrollback_lines(VTE_TERMINAL(m_vteTerminal), 100000);
+	vte_terminal_set_size(VTE_TERMINAL(m_vteTerminal), 80, 25);
 
 	gtk_box_pack_start(GTK_BOX(m_bTerminal.gobj()), m_vteTerminal, true, true, 0);
 
