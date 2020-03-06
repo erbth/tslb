@@ -1,5 +1,6 @@
 from tslb import SourcePackage
 from tslb import processes
+from tslb import Architecture
 from tslb.Architecture import architectures, architectures_reverse
 from tslb.Console import Color
 from tslb.VersionNumber import VersionNumber
@@ -10,7 +11,7 @@ from tslb.console_streaming import ConsoleStreamer, ConsoleAccessProtocol
 import asyncio
 import base64
 import json
-import multiprocessing, aioprocessing
+import multiprocessing
 import os
 import socket
 import time
@@ -43,56 +44,6 @@ reason_to_str = {
         }
 
 
-def build_package_worker(self, name, arch, version_number, error, identity):
-    """
-    This function is to be run in an extra process. It builds a package and
-    reports the result in the error shared multiprocessing.Value. It may
-    place -1 there, in which case the build succeeded, or any of FAIL_REASON_*
-    defined above.
-
-    :param name: The package's name
-    :type name: str
-    :param arch: The package's architecture
-    :type arch: int
-    :param version_number: The package's version number
-    :type version_number: VersionNumber.VersionNumber
-    :param error: A variable to receive a potential error code
-    :type error: multiprocessing.Value
-    :param identity: This build node's identity
-    :type identity: str
-    """
-    print("Building Source Package %s:%s@%s" % (name, version_number, architectures[arch]))
-
-    time.sleep(1)
-    print("after 1s")
-    time.sleep(1)
-    print("after 2s")
-    time.sleep(1)
-    print("after 3s")
-    time.sleep(1)
-    print("after 4s")
-    time.sleep(1)
-
-    error.value = -1
-    print("done.")
-    return
-
-    pb = PackageBuilder(identity)
-
-    try:
-        pb.build_package(name, arch, version_number)
-        print(Color.GREEN + "Completed successfully." + Color.NORMAL)
-        error.value = -1
-
-    except PkgBuildFailed:
-        print(Color.RED + "FAILED." + Color.NORMAL)
-        error.value = FAIL_REASON_PACKAGE
-
-    except:
-        print(Color.RED + "FAILED." + Color.NORMAL)
-        error.value = FAIL_REASON_NODE_ABORT
-
-
 class BuildNode(object):
     def __init__(self, loop, lsr, yamb_hub_transport_address):
         """
@@ -123,7 +74,6 @@ class BuildNode(object):
         self.console_streamer = ConsoleStreamer(self.cas)
 
         # A worker process and its monitor task
-        self.worker_error = multiprocessing.Value('i', FAIL_REASON_NODE_ABORT)
         self.worker_process = None
         self.worker_monitor = None
 
@@ -151,7 +101,7 @@ class BuildNode(object):
         if self.worker_monitor:
             self.worker_monitor.cancel()
 
-        if self.worker_process:
+        if self.worker_process is not None and self.worker_process.returncode is None:
             self.worker_process.kill()
             print(Color.RED + "Killed the worker process." + Color.NORMAL)
 
@@ -190,84 +140,87 @@ class BuildNode(object):
         exited = False
 
         # Wait for worker process
-        await self.worker_process.coro_join()
-
-        if self.worker_error.value == -2:
-            # The worker did not alter this value and hence must have been
-            # killed ...
-            killed = True
-        else:
-            # The worker has finished!
-            exited = True
+        await self.worker_process.wait()
 
         # Change state and send notifications
         # self.build_master_addr will not be None because someone must have
         # initiated the build.
-        if killed:
+        if self.worker_process.returncode < 0:
             # -> failed
             self.state = (STATE_FAILED, self.state[1], FAIL_REASON_NODE_ABORT)
 
             name, arch, version = self.state[1]
-            self.send_message_to_client (self.build_master_addr, {
+            d = {
                     'state': 'failed',
                     'name': name,
                     'arch': architectures[arch],
                     'version': str(version),
                     'reason': 'node/abort'
-                    })
+                    }
 
-        elif exited:
-            if self.worker_error.value >= 0:
-                # -> failed
-                self.state = (STATE_FAILED, self.state[1], self.worker_error.value)
+        elif self.worker_process.returncode != 255:
+            # -> failed
+            self.state = (STATE_FAILED, self.state[1], self.worker_process.returncode)
 
-                name, arch, version = self.state[1]
-                reason = reason_to_str[self.state[2]]
-                d = {
-                        'state': 'failed',
-                        'name': name,
-                        'arch': architectures[arch],
-                        'version': str(version),
-                        'reason': reason
-                        }
-            else:
-                # -> finished
-                self.state = (STATE_FINISHED, self.state[1])
-                name, arch, version = self.state[1]
-                d = {
-                        'state': 'finished',
-                        'name': name,
-                        'arch': architectures[arch],
-                        'version': str(version),
-                        }
+            name, arch, version = self.state[1]
+            reason = reason_to_str[self.state[2]]
+            d = {
+                    'state': 'failed',
+                    'name': name,
+                    'arch': architectures[arch],
+                    'version': str(version),
+                    'reason': reason
+                    }
+        else:
+            # -> finished
+            self.state = (STATE_FINISHED, self.state[1])
+            name, arch, version = self.state[1]
+            d = {
+                    'state': 'finished',
+                    'name': name,
+                    'arch': architectures[arch],
+                    'version': str(version),
+                    }
 
-            self.send_message_to_client(self.build_master_addr, d)
+        self.send_message_to_client(self.build_master_addr, d)
 
         # Clean up.
-        self.worker_process.close()
         self.worker_process = None
         self.worker_monitor = None
 
 
     # Interacting with a client
     # Concerning build and state
-    def start_build(self, name, arch, version, dst):
+    async def start_build(self, name, arch, version, dst):
         if self.state[0] == STATE_IDLE:
+            try:
+                self.worker_process = await asyncio.create_subprocess_exec(
+                    'python3', '-m', 'tslb.build_node.worker',
+                    name, Architecture.to_str(arch), str(version), self.identity,
+                    stdin=self.console_streamer.pty_slave,
+                    stdout=self.console_streamer.pty_slave,
+                    stderr=self.console_streamer.pty_slave)
+
+
+                try:
+                    self.worker_monitor = self.loop.create_task(
+                        self.worker_monitor_function())
+
+                except:
+                    self.worker_process.kill()
+                    await self.worker_process.wait()
+                    self.worker_process = None
+                    raise
+
+            except BaseException as e:
+                print("Failed to start build: %s" % e)
+                self.send_message_to_client(dst, {
+                    'err': 'Failed to start build: %s' % e
+                    })
+                return
+
             self.state = (STATE_BUILDING, (name, arch, version))
             self.build_master_addr = dst
-
-            self.worker_error.value = -2
-
-            try:
-                self.worker_process = aioprocessing.AioProcess(target=build_package_worker,
-                    args=(self, name, arch, version, self.worker_error, self.identity))
-                self.worker_process.start()
-
-                self.loop.create_task(self.worker_monitor_function())
-
-            except Exception as e:
-                self.abort_build(dst)
-                return
 
             self.send_message_to_client(dst, {
                 'state': 'building',
@@ -282,13 +235,10 @@ class BuildNode(object):
                 })
 
 
-    def abort_build(self, dst):
+    def abort_build(self, dst, cleanup=False):
         if self.state[0] == STATE_BUILDING:
-            name, arch, version = self.state[1]
-            self.state = (STATE_FAILED, (name, arch, version), FAIL_REASON_NODE_ABORT)
-
             if self.worker_process is not None:
-                if self.worker_process.is_alive():
+                if self.worker_process.returncode is None:
                     self.worker_process.kill()
 
         else:
@@ -454,7 +404,8 @@ class BuildNode(object):
                     except:
                         return
 
-                    self.start_build(name, arch, version, src)
+                    asyncio.get_running_loop().create_task(
+                        self.start_build(name, arch, version, src))
 
                 elif action == 'get_status':
                     self.get_status(src)

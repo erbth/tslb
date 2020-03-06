@@ -1,5 +1,6 @@
 #include "BuildClusterWindow.h"
 #include "BuildClusterProxy.h"
+#include "BuildNodeConsoleWindow.h"
 #include "ClientApplication.h"
 #include "Message.h"
 #include <cstdio>
@@ -85,7 +86,8 @@ BuildNodeOverview::BuildNodeOverview(shared_ptr<BuildNodeProxy::BuildNodeProxy> 
 		m_btBuild("build"),
 		m_btAbort("abort"),
 		m_btReset("reset"),
-		m_btMaintenance("maintenance")
+		m_btMaintenance("maintenance"),
+		m_btConsole("console")
 {
 	set_border_width(5);
 	m_ledConnected.set_red(1);
@@ -97,6 +99,8 @@ BuildNodeOverview::BuildNodeOverview(shared_ptr<BuildNodeProxy::BuildNodeProxy> 
 	m_bMain.pack_start(m_lIdentity, false, false, 0);
 	m_bMain.pack_start(m_ledStatus, false, false, 0);
 	m_bMain.pack_start(m_lStatus, true, true, 0);
+
+	m_bMain.pack_end(m_btConsole, false, false, 0);
 	m_bMain.pack_end(m_btMaintenance, false, false, 0);
 	m_bMain.pack_end(m_btReset, false, false, 0);
 	m_bMain.pack_end(m_btAbort, false, false, 0);
@@ -118,6 +122,9 @@ BuildNodeOverview::BuildNodeOverview(shared_ptr<BuildNodeProxy::BuildNodeProxy> 
 
 	m_btMaintenance.signal_clicked().connect(sigc::mem_fun(
 		*this, &BuildNodeOverview::on_maintenance_clicked));
+
+	m_btConsole.signal_clicked().connect(sigc::mem_fun(
+		*this, &BuildNodeOverview::on_console_clicked));
 
 	/* Subscribe to the build node (proxy). */
 	node->subscribe_to_state(BuildNodeProxy::StateSubscriber(
@@ -161,6 +168,30 @@ void BuildNodeOverview::on_maintenance_clicked()
 		node->request_disable_maintenance();
 	else
 		node->request_enable_maintenance();
+}
+
+void BuildNodeOverview::on_console_clicked()
+{
+	auto cw = make_unique<BuildNodeConsoleWindow>(node);
+	cw->show();
+	auto ptr = cw.get();
+
+	cw->signal_hide().connect([this, ptr](){
+		Glib::signal_idle().connect([this, ptr](){
+			auto i = console_windows.begin();
+
+			for (; i != console_windows.end(); i++)
+				if (i->get() == ptr)
+					break;
+
+			if (i != console_windows.end())
+				console_windows.erase(i);
+
+			return false;
+			});
+		});
+
+	console_windows.push_back(move(cw));
 }
 
 

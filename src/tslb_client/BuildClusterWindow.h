@@ -4,6 +4,7 @@
 #include <gtkmm.h>
 #include <map>
 #include <memory>
+#include <list>
 #include <legacy_widgets_for_gtkmm.h>
 #include "BuildNodeProxy.h"
 
@@ -11,6 +12,7 @@
 class ClientApplication;
 class stream;
 class BuildClusterWindow;
+class BuildNodeConsoleWindow;
 
 namespace BuildClusterProxy { class BuildClusterProxy; }
 
@@ -47,14 +49,18 @@ private:
 	Gtk::Button m_btAbort;
 	Gtk::Button m_btReset;
 	Gtk::Button m_btMaintenance;
+	Gtk::Button m_btConsole;
 
 	std::unique_ptr<Gtk::Window> node_start_build_dialog;
+
+	std::list<std::unique_ptr<BuildNodeConsoleWindow>> console_windows;
 
 	/* Signal handlers */
 	void on_build_clicked();
 	void on_abort_clicked();
 	void on_reset_clicked();
 	void on_maintenance_clicked();
+	void on_console_clicked();
 
 	/* You subscribe to the build node. Therefore you need these callbacks. */
 	void on_node_responding_changed(bool responding);

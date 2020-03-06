@@ -3,6 +3,8 @@
 
 #include <rapidjson/document.h>
 #include <string>
+#include <utility>
+#include <vector>
 
 /* Invariants:
  *   * The BuildClusterProxy, to which a BuildNodeProxy is assigned, must live
@@ -12,6 +14,9 @@ namespace BuildClusterProxy { class BuildClusterProxy; }
 
 namespace BuildNodeProxy
 {
+	/* Prototypes */
+	class BuildNodeProxy;
+
 	enum State
 	{
 		STATE_IDLE = 0,
@@ -45,6 +50,51 @@ namespace BuildNodeProxy
 		}
 	};
 
+
+	class ConsoleSubscriber
+	{
+		friend class BuildNodeProxy;
+
+	private:
+		BuildNodeProxy *node = nullptr;
+		uint32_t last_mark_received = 0;
+
+		void *priv = nullptr;
+
+		/* Called when console data is received from the node.
+		 * Initially all available (old) data is transfered to the subscriber
+		 * through this cb.
+		 *
+		 * @param data: The data, do NOT consume, will be free'd afterwards /
+		 *     could point to internal storage.
+		 * @param size: Count of bytes in data */
+		using new_data_cb_t = void(*)(void *priv, const char *data, size_t size);
+		new_data_cb_t new_data_cb = nullptr;
+
+		ConsoleSubscriber(BuildNodeProxy *node, new_data_cb_t new_data_cb, void *priv)
+			: node(node), priv(priv), new_data_cb(new_data_cb) {}
+
+	public:
+		/* Only empty ConsoleSubscriber objects are publicly constructable. */
+		ConsoleSubscriber() {};
+
+		/* Can be called by the subscriber to send input data to the node. The
+		 * node will forward it to the current build process's stdin.
+		 *
+		 * @param data: The data to send; will NOT be consumed i.e. free'd.
+		 * @param size: Count of bytes in data. */
+		void send_to_stdin(char *data, size_t size)
+		{
+			// node->...
+		}
+
+		bool operator==(const ConsoleSubscriber &o) const
+		{
+			return priv == o.priv;
+		}
+	};
+
+
 	class BuildNodeProxy
 	{
 	private:
@@ -76,6 +126,9 @@ namespace BuildNodeProxy
 		/* A list of entities that subscribe to your state. */
 		std::vector<StateSubscriber> state_subscribers;
 
+		/* A vector of console subscriber */
+		std::vector<ConsoleSubscriber> console_subscribers;
+
 	public:
 		BuildNodeProxy(
 				BuildClusterProxy::BuildClusterProxy &bcp,
@@ -87,6 +140,17 @@ namespace BuildNodeProxy
 
 		void set_yamb_addr(uint32_t addr);
 		void message_received(rapidjson::Document&);
+
+		void console_data_received(
+			std::vector<std::pair<uint32_t, uint32_t>> mdata, char *data, size_t data_size);
+
+		void console_update_received(
+			std::vector<std::pair<uint32_t, uint32_t>> mdata, char *data, size_t data_size);
+
+		void console_send_request_updates();
+		void console_send_ack();
+		void console_send_request(uint32_t start, uint32_t end);
+
 
 		bool is_responding() const;
 		enum State get_state() const;
@@ -106,6 +170,18 @@ namespace BuildNodeProxy
 		void request_reset();
 		void request_enable_maintenance();
 		void request_disable_maintenance();
+
+		/* Subscribe to the current process's console output. @param priv is
+		 * used to identify the subscription. It SHOULD NOT be nullptr as this
+		 * indicates an empty / invalid ConsoleSubscriber object. If it is, an
+		 * empty ConsoleSubscriber object is returned. */
+		ConsoleSubscriber subscribe_to_console(ConsoleSubscriber::new_data_cb_t, void *priv);
+
+		/* Unsubscribe from console output. The ConsoleSubscriber object given
+		 * and all copies of it MUST NOT be used anymore afterwards. Therefore
+		 * an internal pointer of the given object is set to nullptr. This does,
+		 * however, not affect copies ... */
+		void unsubscribe_from_console(ConsoleSubscriber&);
 	};
 }
 
