@@ -12,7 +12,6 @@ import asyncio
 import base64
 import json
 import os
-import socket
 import time
 import yamb_node
 
@@ -44,7 +43,7 @@ reason_to_str = {
 
 
 class BuildNode(object):
-    def __init__(self, loop, lsr, yamb_hub_transport_address):
+    def __init__(self, loop, lsr, yamb_hub_transport_address, identity):
         """
         :param lsr: LoopStopReason to be set on error
         :type lsr: something with set_code and get_code methods.
@@ -54,8 +53,7 @@ class BuildNode(object):
         self.loop = loop
         self.lsr = lsr
 
-        self.identity = "%s:%d" % (socket.gethostname(), os.getpid())
-        print ("Own identity: %s" % self.identity, flush=True)
+        self.identity = identity
 
         self.state = (STATE_IDLE,)
         self.build_master_addr = None

@@ -1,9 +1,12 @@
 #!/usr/bin/python3
 
-import asyncio
-from tslb.build_node import BuildNode
 from tslb import settings
+from tslb.build_node import BuildNode
+from tslb.filesystem.FileOperations import mkdir_p
+import asyncio
+import os
 import signal
+import socket
 import yamb_node
 
 # Global variables to hold an always present state (even after tasks exit)
@@ -23,11 +26,11 @@ class LoopStopReason(object):
     def set_code(self, code):
         self.stop_code = code
 
-async def init(loop, lsr, yamb_hub_transport_address):
+async def init(loop, lsr, yamb_hub_transport_address, identity):
     global bn
 
     # Construct a build node.
-    bn = BuildNode.BuildNode(loop, lsr, yamb_hub_transport_address)
+    bn = BuildNode.BuildNode(loop, lsr, yamb_hub_transport_address, identity)
     loop.add_signal_handler(signal.SIGTERM, signal_handler, bn)
     loop.add_signal_handler(signal.SIGINT, signal_handler, bn)
 
@@ -55,12 +58,44 @@ def main():
 
     lsr = LoopStopReason()
 
+    # Find an identity for this build node
+    lock_base = os.path.join('/', 'tmp', 'tslb_build_nodes')
+    mkdir_p(lock_base)
+
+    number = 0
+
+    while True:
+        try:
+            os.close(os.open(os.path.join(lock_base, str(number)),
+                os.O_RDONLY | os.O_CREAT | os.O_EXCL))
+
+            break
+
+        except FileExistsError:
+            number += 1
+
+            if number >= 65536:
+                number = -1
+                break
+
+
+    if number < 0:
+        print("Failed to find free node id number.")
+        return 1
+
+
+    identity = "%s:%d" % (socket.gethostname(), number)
+    print ("Own identity: %s" % identity, flush=True)
+
     # Control flow changes into the loop
-    loop.create_task(init(loop, lsr, yamb_hub_transport_address))
+    loop.create_task(init(loop, lsr, yamb_hub_transport_address, identity))
 
     # The asyncio main loop - control over the loop is given to the BuildNode
     # object by now.
     loop.run_forever()
+
+    # Remove the id number lock file
+    os.unlink(os.path.join(lock_base, str(number)))
 
     return lsr.get_code()
 
