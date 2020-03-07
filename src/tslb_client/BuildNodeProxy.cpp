@@ -645,4 +645,14 @@ void BuildNodeProxy::unsubscribe_from_console(ConsoleSubscriber &cs)
 	}
 }
 
+
+void BuildNodeProxy::console_reconnect()
+{
+	for (ConsoleSubscriber &sub : console_subscribers)
+		sub.last_mark_received = 0;
+
+	console_send_request_updates();
+	console_send_request(0, 0xffffffff);
+}
+
 }

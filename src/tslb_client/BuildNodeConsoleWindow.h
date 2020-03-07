@@ -14,7 +14,9 @@ private:
 	/* UI components */
 	Gtk::Box m_bMain_vbox;
 	Gtk::Box m_bTerminal;
+	Gtk::Box m_bHeader;
 	Gtk::Label m_lInfo;
+	Gtk::Button m_btReconnect;
 
 	/* This is old school. */
 	GtkWidget *m_vteTerminal = nullptr;
@@ -29,6 +31,8 @@ private:
 	/* Signal handlers */
 	static void _on_terminal_commit(VteTerminal *terminal, gchar *text, guint size, gpointer priv);
 	void on_terminal_commit(const char *text, size_t size);
+
+	void on_reconnect_clicked();
 
 public:
 	BuildNodeConsoleWindow(std::shared_ptr<BuildNodeProxy::BuildNodeProxy>);

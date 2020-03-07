@@ -185,6 +185,8 @@ namespace BuildNodeProxy
 		 * an internal pointer of the given object is set to nullptr. This does,
 		 * however, not affect copies ... */
 		void unsubscribe_from_console(ConsoleSubscriber&);
+
+		void console_reconnect();
 	};
 }
 
