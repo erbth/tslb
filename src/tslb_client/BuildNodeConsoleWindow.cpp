@@ -34,7 +34,7 @@ BuildNodeConsoleWindow::BuildNodeConsoleWindow(
 	m_sTerminal = gtk_scrollbar_new(GTK_ORIENTATION_VERTICAL,
 			gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(m_vteTerminal)));
 
-	gtk_box_pack_start(GTK_BOX(m_bTerminal.gobj()), m_sTerminal, true, true, 0);
+	gtk_box_pack_start(GTK_BOX(m_bTerminal.gobj()), m_sTerminal, false, false, 0);
 
 	m_bMain_vbox.pack_start(m_bTerminal, true, true, 0);
 	add(m_bMain_vbox);
