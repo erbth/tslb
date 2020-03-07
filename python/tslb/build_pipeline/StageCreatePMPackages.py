@@ -1,6 +1,9 @@
-from tslb.tclm import lock_S, lock_Splus, lock_X
+from tslb import Architecture
+from tslb import settings
 from tslb.filesystem import FileOperations as fops
+from tslb.tclm import lock_S, lock_Splus, lock_X
 import os
+import shutil
 import subprocess
 
 class StageCreatePMPackages(object):
@@ -70,6 +73,12 @@ class StageCreatePMPackages(object):
 
 
             # Copy the package to the collecting repo
+            transport_form = os.path.join(b.fs_base,
+                '%s-%s_%s.tpm.tar' % (b.name, b.version_number,
+                    Architecture.to_str(b.architecture)))
+
+            shutil.copy(transport_form,
+                os.path.join(settings.get_collecting_repo_location(), ''))
 
 
         return (success, output)

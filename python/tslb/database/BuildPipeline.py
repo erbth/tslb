@@ -10,8 +10,13 @@ class BuildPipelineStage(Base):
 
     name = Column(types.String, primary_key=True)
 
-    def __init__(self, name):
+    # Can be the same as name for the first stage (ONLY for the first stage
+    # ...)
+    parent = Column(types.String, nullable=False)
+
+    def __init__(self, name, parent):
         self.name = name
+        self.parent = parent
 
 class BuildPipelineStageEvent(Base):
     __tablename__ = 'build_pipeline_stage_events'
@@ -39,23 +44,71 @@ class BuildPipelineStageEvent(Base):
             onupdate='CASCADE', ondelete='CASCADE'),)
 
     class status_values(object):
-        failed  = 1000
-        begin   = 50000
-        success = 100000
+        failed   =   1000
+        begin    =  50000
+        success  = 100000
+        outdated = 150000
         
         values = [ failed, begin, success ]
 
         str_map = {
                 failed: 'failed',
                 begin: 'begin',
-                success: 'success'
+                success: 'success',
+                outdated: 'outdated'
                 }
 
         str_rmap = {
                 'failed': failed,
                 'begin': begin,
-                'success': success
+                'success': success,
+                'outdated': outdated
                 }
+
+
+        @classmethod
+        def to_str(cls, s):
+            """
+            Convert the given state to string representation 
+
+            :type s: int or str
+            """
+            if isinstance(s, int):
+                if s not in cls.str_map:
+                    raise ValueError("Invalid BuildPipelineEvent state %s" % s)
+
+                return cls.str_map(s)
+
+            else:
+                s = str(s)
+
+                if s not in cls.str_rmap:
+                    raise ValueError("Invalid BuildPipelineEvent state %s" % s)
+
+                return s
+
+
+        @classmethod
+        def to_int(cls, s):
+            """
+            Convert the given state to int representation
+
+            :type s: int or str
+            """
+            if isinstance(s, int):
+                if s not in cls.str_map:
+                    raise ValueError("Invalid BuildPipelineEvent state %s" % s)
+
+                return s
+
+            else:
+                s = str(s)
+
+                if s not in cls.str_rmap:
+                    raise ValueError("Invalid BuildPipelineEvent state %s" % s)
+
+                return cls.str_rmap(s)
+
 
     def __init__(self, stage, time, source_package, architecture, version_number,
             status, output=None, snapshot_path=None, snapshot_name=None):

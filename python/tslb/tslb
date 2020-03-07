@@ -13,6 +13,7 @@ from tslb.package_builder import PackageBuilder
 from tslb.Console import Color
 from tslb import Console
 from tslb.SourcePackage import SourcePackageList, SourcePackage
+from tslb.SourcePackage import NoSuchSourcePackage, NoSuchSourcePackageVersion
 from tslb import build_pipeline as bpp
 import argparse
 from tslb import filesystem as fs
@@ -20,6 +21,7 @@ from tslb import utils
 from tslb import Graph
 from tslb.CdepGraph import CdepGraph
 from tslb import settings
+from tslb.build_state import outdate_package_stage
 
 
 def initially_create_locks(args):
@@ -54,6 +56,32 @@ def build_single_package(spname, sparch, spversion):
     except BaseException as e:
         print(Color.RED + "FAILED." + Color.NORMAL)
         raise e
+
+    exit(0)
+
+
+def outdate_package(name, arch, version, stage):
+    try:
+        outdate_package_stage(name, arch, version, stage)
+        print(Color.GREEN + "finished." + Color.NORMAL)
+
+
+    except NoSuchSourcePackage as e:
+        print(str(e))
+        exit(1)
+
+    except NoSuchSourcePackageVersion as e:
+        print(str(e))
+        exit(1)
+
+    except ValueError as e:
+        print(str(e))
+        exit(1)
+
+    except BaseException as e:
+        print(Color.RED + "FAILED." + Color.NORMAL)
+        raise e
+
 
     exit(0)
 
@@ -133,6 +161,14 @@ def main():
     parser_run_bash_in_image = subparsers.add_parser('run-bash-in-image', help='Start an interactive bash shell in the specified rootfs image')
     parser_run_bash_in_image.add_argument('img_id')
 
+    parser_outdate_package = subparsers.add_parser('outdate-package', help='Outdate a stage of a single source package version')
+    parser_outdate_package.add_argument('name')
+    parser_outdate_package.add_argument('arch')
+    parser_outdate_package.add_argument('version')
+    parser_outdate_package.add_argument('stage')
+
+    parser_list_stages = subparsers.add_parser('list-stages', help='Retrieve a list of all build pipeline stages')
+
     args = parser.parse_args()
 
     # Different commands
@@ -193,6 +229,21 @@ def main():
             raise
 
         exit(ret_code)
+
+
+    elif args.command == 'outdate-package':
+        outdate_package(args.name, args.arch, args.version, args.stage)
+
+
+    elif args.command == 'list-stages':
+        print("Build pipeline stages:")
+
+        for s in bpp.all_stages:
+            print("    %s" % s.name)
+
+        print()
+        exit(0)
+
 
 if __name__ == '__main__':
     main()

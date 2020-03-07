@@ -157,7 +157,8 @@ create table binary_package_attributes (
 
 -- The build pipeline
 create table build_pipeline_stages (
-	name varchar primary key
+	name varchar primary key,
+	parent varchar not null
 );
 
 create table build_pipeline_stage_events (

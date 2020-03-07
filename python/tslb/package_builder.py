@@ -223,7 +223,7 @@ class PackageBuilder(object):
 
             p.join()
             if p.exitcode != 0:
-                if r == 2:
+                if p.exitcode == 2:
                     raise PkgBuildFailed(
                         "Failed to build package with error code %d (package)." %
                         p.exitcode)

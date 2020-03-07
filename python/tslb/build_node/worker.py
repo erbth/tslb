@@ -6,6 +6,7 @@ from tslb.package_builder import PackageBuilder, PkgBuildFailed
 import subprocess
 import sys
 import time
+from tslb.Console import Color
 
 
 def worker(name, arch, version_number, identity):
@@ -25,12 +26,6 @@ def worker(name, arch, version_number, identity):
     """
     print("Building Source Package %s:%s@%s" % (name, version_number, Architecture.to_str(arch)))
 
-    print("\033[32mStarting an interactive bash shell ...\033[0m")
-    subprocess.run(['bash'])
-
-    print("done.")
-    return 255
-
     pb = PackageBuilder(identity)
 
     try:
@@ -42,8 +37,8 @@ def worker(name, arch, version_number, identity):
         print(Color.RED + "FAILED." + Color.NORMAL)
         return FAIL_REASON_PACKAGE
 
-    except:
-        print(Color.RED + "FAILED." + Color.NORMAL)
+    except BaseException as e:
+        print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + ".")
         return FAIL_REASON_NODE_ABORT
 
 
