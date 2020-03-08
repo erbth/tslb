@@ -8,16 +8,21 @@ from tslb.tclm import lock_S, lock_Splus, lock_X
 class StageUnpack(object):
     name = 'unpack'
 
-    def flow_through(spv):
+    def flow_through(spv, out):
         """
         :param spv: The source package version to let flow through this segment
             of the pipeline.
-        :type spv: SourcePackage.SourcePackageVersion
-        :returns: tuple(successful, output)
-        :rtype: tuple(bool, str)
-        """
-        output = ""
 
+        :type spv: SourcePackage.SourcePackageVersion
+
+        :param out: The (wrapped) fd to send output that shall be recorded in
+            the db to.  Typically all output would go there.
+
+        :type out: Something like sys.stdout
+
+        :returns: successful
+        :rtype: bool
+        """
         source_location = settings.get_source_location()
 
         # Look if the package has a source archive configured
@@ -26,7 +31,8 @@ class StageUnpack(object):
             source_archive_path = os.path.join(source_location, source_archive)
 
             if not os.path.exists(source_archive_path):
-                return (False, 'Source archive `%s\' does not exist.' % source_archive)
+                out.write('Source archive `%s\' does not exist.' % source_archive)
+                return False
 
         else:
             # If not, guess a few
@@ -46,10 +52,11 @@ class StageUnpack(object):
                     break
 
             if not found:
-                return (False, "No source archive found, tried [ %s ]." % ', '.join(tries))
+                out.write("No source archive found, tried [ %s ]." % ', '.join(tries))
+                return False
             else:
                 spv.set_attribute('source_archive', source_archive)
-                output += ("Guessed source archive name: %s\n" % source_archive)
+                out.write("Guessed source archive name: %s\n" % source_archive)
 
 
         # Look if we are given an unpack command, and if not, guess one.
@@ -61,7 +68,7 @@ class StageUnpack(object):
             unpack_command = [ 'tar', '-xf', '$(SOURCE_ARCHIVE_PATH)' ]
             tmp = ' '.join(unpack_command)
             spv.set_attribute('unpack_command', tmp)
-            output += ("Guessed unpack command to be `%s'\n" % tmp)
+            out.write("Guessed unpack command to be `%s'\n" % tmp)
 
         unpack_command = [ c.replace('$(SOURCE_ARCHIVE_PATH)', source_archive_path) for c in unpack_command ]
 
@@ -71,22 +78,18 @@ class StageUnpack(object):
 
         with lock_X(spv.fs_build_location_lock):
             try:
-                p = subprocess.Popen(unpack_command, cwd=spv.fs_build_location,
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+                ret = subprocess.run(unpack_command, cwd=spv.fs_build_location,
+                        stdout=out.fileno(), stderr=out.fileno())
 
-                o, e = p.communicate()
-                ret = p.returncode
-
-                output += o.decode() + e.decode()
-
-                if ret == 0:
+                if ret.returncode == 0:
                     success = True
 
             except Exception as e:
                 success = False
-                output += str(e) + '\n'
+                out.write(str(e) + '\n')
             except:
                 success = False
+
 
             # Check for the expected unpacked directory
             if spv.has_attribute('unpacked_source_directory'):
@@ -94,8 +97,8 @@ class StageUnpack(object):
                 usdp = os.path.join(spv.fs_build_location, unpacked_source_directory)
 
                 if not os.path.exists(usdp):
-                    output += "The unpacked source directory `%s' does not exist after unpacking." %\
-                        unpacked_source_directory
+                    out.write("The unpacked source directory `%s' does not exist after unpacking.\n" %\
+                        unpacked_source_directory)
 
                     success = False
 
@@ -105,14 +108,14 @@ class StageUnpack(object):
 
                 if l == 0:
                     spv.set_attribute('unpacked_source_directory', None)
-                    output += "Set unpacked_source_directory to None.\n"
+                    out.write("Set unpacked_source_directory to None.\n")
 
                 elif l > 1:
                     spv.set_attribute('unpacked_source_directory', '.')
-                    output += "Set unpacked_source_directory to `.'.\n"
+                    out.write("Set unpacked_source_directory to `.'.\n")
 
                 else:
                     spv.set_attribute('unpacked_source_directory', dirs[0])
-                    output += "Set unpacked_source_directory to `%s'.\n" % dirs[0]
+                    out.write("Set unpacked_source_directory to `%s'.\n" % dirs[0])
 
-        return (success, output)
+        return success

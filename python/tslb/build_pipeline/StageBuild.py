@@ -9,16 +9,21 @@ import subprocess
 class StageBuild(object):
     name = 'build'
 
-    def flow_through(spv):
+    def flow_through(spv, out):
         """
         :param spv: The source package version to let flow through this segment
             of the pipeline.
-        :type spv: SourcePackage.SourcePackageVersion
-        :returns: tuple(successful, output)
-        :rtype: tuple(bool, str)
-        """
-        output = ''
 
+        :type spv: SourcePackage.SourcePackageVersion
+
+        :param out: The (wrapped) fd to send output that shall be recorded in
+            the db to.  Typically all output would go there.
+
+        :type out: Something like sys.stdout
+
+        :returns: successful
+        :rtype: bool
+        """
         with lock_X(spv.fs_build_location_lock):
             # Check if we have a build command.
             if spv.has_attribute('build_command'):
@@ -33,12 +38,12 @@ class StageBuild(object):
                     build_command = [ 'make', '-j', '-l', '$(MAX_PARALLEL_THREADS)' ]
 
                 else:
-                    output += "No build command specified and failed to guess one.\n"
-                    return (False, output)
+                    out.write("No build command specified and failed to guess one.\n")
+                    return False
 
                 tmp = ' '.join(build_command)
                 spv.set_attribute('build_command', tmp)
-                output += ("Guessed build command to be `%s'\n" % tmp)
+                out.write("Guessed build command to be `%s'\n" % tmp)
 
 
             # Add .5 to round up.
@@ -55,26 +60,22 @@ class StageBuild(object):
                 success = False
 
                 try:
-                    output += Color.YELLOW + ' '.join(build_command) + Color.NORMAL + '\n'
-                    p = subprocess.Popen(build_command,
+                    out.write(Color.YELLOW + ' '.join(build_command) + Color.NORMAL + '\n')
+
+                    ret = subprocess.run(build_command,
                             cwd=os.path.join(spv.fs_build_location, spv.get_attribute('unpacked_source_directory')),
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+                            stdout=out.fileno(), stderr=out.fileno())
 
-                    o, e = p.communicate()
-                    ret = p.returncode
-
-                    output += o.decode() + e.decode()
-
-                    if ret == 0:
+                    if ret.returncode == 0:
                         success = True
 
                 except Exception as e:
                     success = False
-                    output += str(e) + '\n'
+                    out.write(str(e) + '\n')
                 except:
                     success = False
 
-                return (success, output)
+                return success
 
             else:
-                return (True, output)
+                return True

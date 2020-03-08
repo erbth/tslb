@@ -93,3 +93,30 @@ def run_bash_in_rootfs_image(img_id):
     finally:
         pb.unmount_pseudo_filesystems(mountpoint, raises=True)
         image.unmount(mount_namespace)
+
+
+class FDWrapper(object):
+    """
+    Wraps an fd into something that behaves like sys.stdout etc.
+    This does NOT close the fd on deletion!
+
+    :param int fd: The fd to wrap
+    """
+    def __init__(self, fd):
+        self._fd = fd
+
+    def fileno(self):
+        return self._fd
+
+    def close(self):
+        os.close(self._fd)
+
+
+    def write(self, data):
+        """
+        :type data: str or bytes
+        """
+        if isinstance(data, str):
+            data = data.encode('utf8')
+
+        os.write(self._fd, data)

@@ -9,15 +9,21 @@ import subprocess
 class StageInstallToDestdir(object):
     name = 'install_to_destdir'
 
-    def flow_through(spv):
+    def flow_through(spv, out):
         """
         :param spv: The source package version to let flow through this segment
             of the pipeline.
+
         :type spv: SourcePackage.SourcePackageVersion
-        :returns: tuple(successful, output)
-        :rtype: tuple(bool, str)
+
+        :param out: The (wrapped) fd to send output that shall be recorded in
+            the db to.  Typically all output would go there.
+
+        :type out: Something like sys.stdout
+
+        :returns: successful
+        :rtype: bool
         """
-        output = ''
         success = True
 
         with lock_X(spv.fs_root_lock):
@@ -27,8 +33,8 @@ class StageInstallToDestdir(object):
                 install_to_destdir_command = parse_utils.split_quotes(install_to_destdir_command)
 
             else:
-                output += "No install-to-destdir command specified and failed to guess one.\n"
-                return (False, output)
+                out.write("No install-to-destdir command specified and failed to guess one.\n")
+                return False
 
 
             # Add .5 to round up.
@@ -45,23 +51,19 @@ class StageInstallToDestdir(object):
             if install_to_destdir_command:
 
                 try:
-                    output += Color.YELLOW + ' '.join(install_to_destdir_command) + Color.NORMAL + '\n'
-                    p = subprocess.Popen(install_to_destdir_command,
+                    out.write(Color.YELLOW + ' '.join(install_to_destdir_command) + Color.NORMAL + '\n')
+
+                    ret = subprocess.run(install_to_destdir_command,
                             cwd=os.path.join(spv.fs_build_location, spv.get_attribute('unpacked_source_directory')),
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+                            stdout=out.fileno(), stderr=out.fileno())
 
-                    o, e = p.communicate()
-                    ret = p.returncode
-
-                    output += o.decode() + e.decode()
-
-                    if ret != 0:
+                    if ret.returncode != 0:
                         success = False
 
                 except Exception as e:
                     success = False
-                    output += str(e) + '\n'
+                    out.write(str(e) + '\n')
                 except:
                     success = False
 
-        return (success, output)
+        return success

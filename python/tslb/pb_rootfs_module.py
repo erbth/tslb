@@ -13,7 +13,7 @@ import sys
 
 def signal_handler(signum, stack_frame):
     """
-    OK, this is bad, but it's better than the default actio anyway ...
+    OK, this is bad, but it's better than the default action anyway ...
     """
     if signum == signal.SIGTERM:
         exit(240)
@@ -33,7 +33,7 @@ def rootfs_module_entry(name, arch, version):
 
     except BaseException as e:
         print(Color.red("ERROR: %s" % e))
-        r = False
+        return 1
 
     return 0 if r else 2
 

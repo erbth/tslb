@@ -44,6 +44,7 @@ def print_status_box(text="", file=sys.stdout):
     file.write(Color.CYAN + "[      ] " + Color.NORMAL + text)
     file.flush()
 
+
 def update_status_box(ok, file=sys.stdout):
     file.write('\r' + Color.CYAN + '[')
     
@@ -51,6 +52,7 @@ def update_status_box(ok, file=sys.stdout):
         print(Color.GREEN + '  OK  ' + Color.NORMAL, file=file)
     else:
         print(Color.RED + 'failed' + Color.NORMAL, file=file)
+
 
 def update_status_box_percent(v, ref, file=sys.stdout):
     p = int(float(v) / float(ref) * 100.)
@@ -61,6 +63,7 @@ def update_status_box_percent(v, ref, file=sys.stdout):
             Color.MAGENTA + '{:4d}%'.format(p) + Color.NORMAL)
 
     file.flush()
+
 
 def print_horizontal_bar(file=sys.stdout):
     c, r = shutil.get_terminal_size((80, 25))

@@ -3,12 +3,19 @@ from tslb.tclm import lock_S, lock_Splus, lock_X
 class StageFindSharedLibraries(object):
     name = 'find_shared_libraries'
 
-    def flow_through(spv):
+    def flow_through(spv, out):
         """
         :param spv: The source package version to let flow through this segment
             of the pipeline.
+
         :type spv: SourcePackage.SourcePackageVersion
-        :returns: tuple(successful, output)
-        :rtype: tuple(bool, str)
+
+        :param out: The (wrapped) fd to send output that shall be recorded in
+            the db to.  Typically all output would go there.
+
+        :type out: Something like sys.stdout
+
+        :returns: successful
+        :rtype: bool
         """
-        return (True, '')
+        return True

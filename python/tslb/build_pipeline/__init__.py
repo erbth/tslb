@@ -1,16 +1,26 @@
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql.expression import or_
+from tslb import BinaryPackage as bp
+from tslb import Console
+from tslb import database as db
+from tslb import timezone
 from tslb.Architecture import architectures
 from tslb.BinaryPackage import BinaryPackage
 from tslb.Console import Color
 from tslb.SourcePackage import SourcePackage, SourcePackageVersion
 from tslb.database import BuildPipeline as dbbp
 from tslb.filesystem import FileOperations as fops
-from sqlalchemy.orm import aliased
-from sqlalchemy.sql.expression import or_
-from tslb import BinaryPackage as bp
-from tslb import Console
-from tslb import database as db
+from tslb.buffers import ConsoleBufferFixedSize
+from tslb.utils import FDWrapper
+import asyncio
+import fcntl
+import os
+import pty
+import select
+import struct
 import sys
-from tslb import timezone
+import termios
+import threading
 
 from .StageUnpack import StageUnpack
 from .StagePatch import StagePatch
@@ -20,7 +30,7 @@ from .StageInstallToDestdir import StageInstallToDestdir
 from .StageFindSharedLibraries import StageFindSharedLibraries
 from .StageDetectManInfo import StageDetectManInfo
 from .StageSplitIntoBinaryPackages import StageSplitIntoBinaryPackages
-from .StageAddREADME import StageAddREADME
+from .StageAddReadme import StageAddReadme
 from .StageAddRdeps import StageAddRdeps
 from .StageCreatePMPackages import StageCreatePMPackages
 
@@ -33,7 +43,7 @@ all_stages = [
         StageFindSharedLibraries,
         StageSplitIntoBinaryPackages,
         StageDetectManInfo,
-        StageAddREADME,
+        StageAddReadme,
         StageAddRdeps,
         StageCreatePMPackages
         ]
@@ -83,6 +93,8 @@ class BuildPipeline(object):
     """
     def __init__(self, out=sys.stdout):
         self.out = out
+        self.output_buffer = ConsoleBufferFixedSize(10 * 1024 * 1024)
+
 
     def build_source_package_version(self, spv):
         """
@@ -249,7 +261,8 @@ class BuildPipeline(object):
                         Console.update_status_box(True, file=self.out)
 
                     else:
-                        raise RuntimeError("No snapshot `%s'." % restore_event.snapshot_path)
+                        raise RuntimeError("No snapshot `%s' at `%s'." % (
+                            restore_event.snapshot_name, restore_event.snapshot_path))
 
 
             else:
@@ -260,41 +273,35 @@ class BuildPipeline(object):
                 Console.update_status_box(True, file=self.out)
 
 
-        # Flow through the required stages
-        for stage in stages_ahead:
-            # Log begin
-            with db.session_scope() as s:
-                s.add(dbbp.BuildPipelineStageEvent(
-                    stage.name,
-                    timezone.now(),
-                    spv.source_package.name,
-                    spv.architecture,
-                    spv.version_number,
-                    dbbp.BuildPipelineStageEvent.status_values.begin))
+        # Only continue if there is something to build.
+        if not stages_ahead:
+            self.out.write(Color.YELLOW + "Nothing to do.\n" + Color.NORMAL)
+            return True
 
-            # Walk through stage
-            Console.print_status_box('Flowing through stage %s' % stage.name, file=self.out)
+        # Flow through the required stages. This requires a pseudo terminal to
+        # catch the stage's output and display it in real time.
+        master, slave = pty.openpty()
 
-            success, output = stage.flow_through(spv)
+        ts = os.get_terminal_size()
 
-            Console.update_status_box(success, file=self.out)
+        fcntl.ioctl(slave, termios.TIOCSWINSZ,
+                struct.pack("HHHH", ts.columns, ts.lines, 0, 0))
 
-            if output:
-                print(output, file=self.out)
 
-            # Make a snapshot
-            if success:
-                snapshot_path = spv.fs_base
-                snapshot_name = "%s-%s" % (stage.name, timezone.now())
+        # Well, now we need someone to read from the pty ...
+        # We have one IO bound task (the reader) and a cpu bound one (the
+        # actual package builder - most of the time it will be waiting for a
+        # subprocess though, but it could be cpu bound ...). So, asyncio works
+        # only with IO bound tasks, multiprocessing is for cpu bound stuff (and
+        # overkill here). There remain threads (app-level, but there is only
+        # one cpu bound task here ...).
+        bg_writer = PipeReaderThread(self.output_buffer, master, self.out)
 
-                fops.make_snapshot(snapshot_path, snapshot_name)
 
-            else:
-                snapshot_path = None
-                snapshot_name = None
-
-            try:
-                # Log result
+        # Actually send some stuff now ...
+        try:
+            for stage in stages_ahead:
+                # Log begin
                 with db.session_scope() as s:
                     s.add(dbbp.BuildPipelineStageEvent(
                         stage.name,
@@ -302,18 +309,125 @@ class BuildPipeline(object):
                         spv.source_package.name,
                         spv.architecture,
                         spv.version_number,
-                        dbbp.BuildPipelineStageEvent.status_values.success if success else
-                            dbbp.BuildPipelineStageEvent.status_values.failed,
-                        output,
-                        snapshot_path,
-                        snapshot_name))
+                        dbbp.BuildPipelineStageEvent.status_values.begin))
 
-            except:
+                # Walk through stage
+                self.out.write(Color.CYAN + 
+                    '[------] Flowing through stage %s\n' % stage.name +
+                    Color.NORMAL)
+
+                self.output_buffer.clear()
+                success = stage.flow_through(spv, FDWrapper(slave))
+
+                Console.print_status_box(Color.CYAN +
+                    'Flowing through stage %s' % stage.name + Color.NORMAL,
+                    file=self.out)
+
+                Console.update_status_box(success, file=self.out)
+
+                # Make a snapshot
                 if success:
-                    fops.remove_snapshot(snapshot_path, snapshot_name)
-                raise
+                    snapshot_path = spv.fs_base
+                    snapshot_name = "%s-%s" % (stage.name, timezone.now())
 
-            if not success:
-                return False
+                    fops.make_snapshot(snapshot_path, snapshot_name)
 
-        return True
+                else:
+                    snapshot_path = None
+                    snapshot_name = None
+
+                try:
+                    # Log result
+                    with db.session_scope() as s:
+                        s.add(dbbp.BuildPipelineStageEvent(
+                            stage.name,
+                            timezone.now(),
+                            spv.source_package.name,
+                            spv.architecture,
+                            spv.version_number,
+                            dbbp.BuildPipelineStageEvent.status_values.success if success else
+                                dbbp.BuildPipelineStageEvent.status_values.failed,
+                            self.output_buffer.read_data(-1).decode('utf8'),
+                            snapshot_path,
+                            snapshot_name))
+
+                except:
+                    if success:
+                        fops.delete_snapshot(snapshot_path, snapshot_name)
+                    raise
+
+                if not success:
+                    return False
+
+            return True
+
+        finally:
+            # Stop the worker thread
+            bg_writer.close()
+
+            # Close the pty
+            os.close(master)
+            os.close(slave)
+
+
+class PipeReaderThread(object):
+    """
+    A class wrapping a thread and required communications machinery for reading
+    from a pipe in the background. The content is stored in a console buffer
+    and can be retrieved as needed. The thread will be a deamon, hence it exits
+    automatically if the program's main thread exits. Moreover it is stopped
+    when the object is deleted (i.e. all references to it are deleted).
+
+    :param buffer: The console buffer to write the data to. Must only have a
+        append_data(bytes) function.
+
+    :param int fd: The fd to read from.
+
+    :param output: If not None the data is tee'd there, too. Must have a
+        .write(str) function then ...
+    """
+    def __init__(self, buf, fd, output=None):
+        self.buf = buf
+        self.fd = fd
+        self.output = output
+
+        self.pread, self.pwrite = os.pipe()
+        self.thread = threading.Thread(target=self._worker_func, daemon=True)
+        self.thread.start()
+        self._closed = False
+
+
+    def _worker_func(self):
+        w_fd = FDWrapper(self.fd)
+        w_pread = FDWrapper(self.pread)
+
+        while True:
+            rset,_,_ = select.select([w_fd, w_pread], [], [])
+
+            if w_fd in rset:
+                data = os.read(self.fd, 10000)
+                self.buf.append_data(data)
+
+                if self.output:
+                    self.output.write(data.decode('utf8'))
+
+
+            if w_pread in rset:
+                cmd = os.read(self.pread, 1)
+                if cmd == b'q':
+                    break
+
+
+    def close(self):
+        if not self._closed:
+            os.write(self.pwrite, b'q')
+
+            self.thread.join()
+            os.close(self.pread)
+            os.close(self.pwrite)
+
+            self._closed = True
+
+
+    def __del__(self):
+        self.close()

@@ -29,11 +29,11 @@ def initially_create_locks(args):
     utils.initially_create_all_locks()
     print (Color.GREEN + "done." + Color.NORMAL)
 
-def list_source_packages(args):
+def list_source_packages(args, arch):
     print ("Source packages:")
     print ("----------------------------------------------------------------")
     
-    for name in SourcePackageList().get_source_packages():
+    for name in SourcePackageList(Architecture.to_int(arch)).list_source_packages():
         print ("%s" % name)
 
 
@@ -143,6 +143,7 @@ def main():
     # Different commands
     parser_icl = subparsers.add_parser('initially-create-locks', help='Initially create locks at the tclm.')
     parser_lsps = subparsers.add_parser('list-source-packages', help='List all source packages.')
+    parser_lsps.add_argument('architecture')
 
     parser_bsp = subparsers.add_parser('build-single-package', help='Build a single source package\'s version.')
     parser_bsp.add_argument('spname')
@@ -174,8 +175,10 @@ def main():
     # Different commands
     if args.command == 'initially-create-locks':
         initially_create_locks(args)
+
     elif args.command == 'list-source-packages':
-        list_source_packages(args)
+        list_source_packages(args, args.architecture)
+
     elif args.command == 'build-single-package':
         build_single_package(args.spname, Architecture.to_str(args.sparch), args.spversion)
     elif args.command == 'sync-buildpipeline-stages':

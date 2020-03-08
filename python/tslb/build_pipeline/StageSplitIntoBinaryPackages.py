@@ -11,18 +11,23 @@ import subprocess
 class StageSplitIntoBinaryPackages(object):
     name = 'split_into_binary_packages'
 
-    def flow_through(spv):
+    def flow_through(spv, out):
         """
         :param spv: The source package version to let flow through this segment
             of the pipeline.
-        :type spv: SourcePackage.SourcePackageVersion
-        :returns: tuple(successful, output)
-        :rtype: tuple(bool, str)
-        """
-        output = ""
 
+        :type spv: SourcePackage.SourcePackageVersion
+
+        :param out: The (wrapped) fd to send output that shall be recorded in
+            the db to.  Typically all output would go there.
+
+        :type out: Something like sys.stdout
+
+        :returns: successful
+        :rtype: bool
+        """
         bpv = bp.generate_version_number()
-        output += Color.MAGENTA + "BP version: %s" % bpv + Color.NORMAL + '\n'
+        out.write(Color.MAGENTA + "BP version: %s" % bpv + Color.NORMAL + '\n')
 
         # Set the binary packages to be built
         spv.set_current_binary_packages([spv.source_package.name])
@@ -45,23 +50,20 @@ class StageSplitIntoBinaryPackages(object):
 
                 for cmd in cmds:
                     try:
-                        output += Color.YELLOW + ' '.join(cmd) + Color.NORMAL + '\n'
-                        p = subprocess.Popen(cmd,
+                        out.write(Color.YELLOW + ' '.join(cmd) + Color.NORMAL + '\n')
+
+                        ret = subprocess.run(cmd,
                                 cwd=b.fs_base,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+                                stdout=out.fileno(), stderr=out.fileno())
 
-                        o, e = p.communicate()
-                        ret = p.returncode
-
-                        output += o.decode() + e.decode()
-
-                        if ret != 0:
-                            output += Color.RED + "Exit code: %s" % ret + Color.NORMAL
+                        if ret.returncode != 0:
+                            out.write(Color.RED + "Exit code: %s" % ret + Color.NORMAL)
                             success = False
 
                     except Exception as e:
                         success = False
-                        output += str(e) + '\n'
+                        out.write(str(e) + '\n')
+
                     except:
                         success = False
 
@@ -78,11 +80,11 @@ class StageSplitIntoBinaryPackages(object):
 
                 except Exception as e:
                     success = False
-                    output += str(e) + '\n'
+                    out.write(str(e) + '\n')
                 except:
                     success = False
 
             if not success:
                 break
 
-        return (success, output)
+        return success
