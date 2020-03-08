@@ -14,11 +14,17 @@ from tslb.VersionNumber import VersionNumber
 # The protocol is composed of messages which are serialized jsons.
 #
 # Master -> Node messages:
-# Each message has an action field. More fields may be added as needed. Unlike
-# in the other direction, the master does currently only request the nodes to
-# do things but does e.g. not broadcast state changes. The nodes have no use for
-# such information.
+# Each message has an action field. More fields may be added as needed. A
+# notable one is the optional 'identity' field. I is not required as with
+# node-master messages but can provide extra safety. A node shall ignore a
+# message with an identity field different from its identity.
+#
+# Unlike in the other direction, the master does currently only request the
+# nodes to do things but does e.g. not broadcast state changes. The nodes have
+# no use for such information.
+#
 #    * action=identify: Request the node to identify itself.
+#
 #
 # Node -> Master messages:
 # Each message has an identity field. Further fields may be added that tell the

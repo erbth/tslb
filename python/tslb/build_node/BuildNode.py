@@ -391,8 +391,14 @@ class BuildNode(object):
             try:
                 j = json.loads(data.decode('utf8'))
 
+                msg_identity = j.get('identity')
+
+                if msg_identity and msg_identity != self.identity:
+                    return
+
                 action = j.get('action')
                 cs = j.get('console_streaming')
+
             except:
                 return
 

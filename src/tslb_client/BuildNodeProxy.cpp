@@ -33,16 +33,7 @@ void BuildNodeProxy::query_state()
 
 	d.AddMember("action", "get_status", d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 
@@ -275,6 +266,24 @@ void BuildNodeProxy::message_received(rapidjson::Document &d)
 }
 
 
+void BuildNodeProxy::send_message_to_node(Document &d)
+{
+	d.AddMember("identity", StringRef(identity.c_str(), identity.size()),
+			d.GetAllocator());
+
+	StringBuffer buffer;
+	Writer<StringBuffer> writer(buffer);
+	d.Accept(writer);
+
+	auto msg = make_unique<yamb_node::stream>();
+	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
+	build_cluster_proxy.build_node_yprotocol->send_message(
+			build_cluster_proxy.ynode.get(),
+			current_yamb_address,
+			move(msg));
+}
+
+
 /* Swallows blob */
 void BuildNodeProxy::console_data_received(
 		vector<pair<uint32_t, uint32_t>> mdata, char *data, size_t data_size)
@@ -362,16 +371,7 @@ void BuildNodeProxy::console_send_request_updates()
 	cs.AddMember("msg", "request_updates", d.GetAllocator());
 	d.AddMember("console_streaming", cs, d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 void BuildNodeProxy::console_send_ack()
@@ -384,16 +384,7 @@ void BuildNodeProxy::console_send_ack()
 	cs.AddMember("msg", "ack", d.GetAllocator());
 	d.AddMember("console_streaming", cs, d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 void BuildNodeProxy::console_send_request(uint32_t start, uint32_t end)
@@ -408,16 +399,7 @@ void BuildNodeProxy::console_send_request(uint32_t start, uint32_t end)
 	cs.AddMember("end", end, d.GetAllocator());
 	d.AddMember("console_streaming", cs, d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 void BuildNodeProxy::console_send_input(const char *data, size_t size)
@@ -440,16 +422,7 @@ void BuildNodeProxy::console_send_input(const char *data, size_t size)
 		cs.AddMember("blob", StringRef(encoded, encoded_size), d.GetAllocator());
 		d.AddMember("console_streaming", cs, d.GetAllocator());
 
-		StringBuffer buffer;
-		Writer<StringBuffer> writer(buffer);
-		d.Accept(writer);
-
-		auto msg = make_unique<yamb_node::stream>();
-		msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-		build_cluster_proxy.build_node_yprotocol->send_message(
-				build_cluster_proxy.ynode.get(),
-				current_yamb_address,
-				move(msg));
+		send_message_to_node(d);
 	}
 	catch(...)
 	{
@@ -521,16 +494,7 @@ void BuildNodeProxy::request_start_build(string name, string arch, string versio
 	d.AddMember("arch", StringRef(arch.c_str()), d.GetAllocator());
 	d.AddMember("version", StringRef(version.c_str()), d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 void BuildNodeProxy::request_abort_build()
@@ -540,16 +504,7 @@ void BuildNodeProxy::request_abort_build()
 
 	d.AddMember("action", "abort_build", d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 void BuildNodeProxy::request_reset()
@@ -559,16 +514,7 @@ void BuildNodeProxy::request_reset()
 
 	d.AddMember("action", "reset", d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 void BuildNodeProxy::request_enable_maintenance()
@@ -578,16 +524,7 @@ void BuildNodeProxy::request_enable_maintenance()
 
 	d.AddMember("action", "enable_maintenance", d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 void BuildNodeProxy::request_disable_maintenance()
@@ -597,16 +534,7 @@ void BuildNodeProxy::request_disable_maintenance()
 
 	d.AddMember("action", "disable_maintenance", d.GetAllocator());
 
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	auto msg = make_unique<yamb_node::stream>();
-	msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-	build_cluster_proxy.build_node_yprotocol->send_message(
-			build_cluster_proxy.ynode.get(),
-			current_yamb_address,
-			move(msg));
+	send_message_to_node(d);
 }
 
 

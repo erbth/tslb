@@ -141,6 +141,11 @@ namespace BuildNodeProxy
 		void set_yamb_addr(uint32_t addr);
 		void message_received(rapidjson::Document&);
 
+	private:
+		/* This will alter the given document. */
+		void send_message_to_node(rapidjson::Document&);
+
+		/* Console streaming */
 		void console_data_received(
 			std::vector<std::pair<uint32_t, uint32_t>> mdata, char *data, size_t data_size);
 
@@ -151,6 +156,7 @@ namespace BuildNodeProxy
 		void console_send_ack();
 		void console_send_request(uint32_t start, uint32_t end);
 
+	public:
 		/* Does NOT free data. */
 		void console_send_input(const char *data, size_t size);
 
