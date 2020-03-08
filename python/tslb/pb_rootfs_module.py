@@ -7,7 +7,16 @@ from tslb.VersionNumber import VersionNumber
 from tslb import SourcePackage
 from tslb.build_pipeline import BuildPipeline
 from tslb.Console import Color
+import signal
 import sys
+
+
+def signal_handler(signum, stack_frame):
+    """
+    OK, this is bad, but it's better than the default actio anyway ...
+    """
+    if signum == signal.SIGTERM:
+        exit(240)
 
 
 def rootfs_module_entry(name, arch, version):
@@ -30,6 +39,8 @@ def rootfs_module_entry(name, arch, version):
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, signal_handler)
+
     print(Color.magenta("Entered the rootfs module"))
 
     if len(sys.argv) != 4:

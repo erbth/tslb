@@ -99,7 +99,7 @@ class BuildNode(object):
             self.worker_monitor.cancel()
 
         if self.worker_process is not None and self.worker_process.returncode is None:
-            self.worker_process.kill()
+            self.worker_process.terminate()
             print(Color.RED + "Killed the worker process." + Color.NORMAL)
 
         # Stop all remaining tasks
@@ -208,7 +208,7 @@ class BuildNode(object):
                         self.worker_monitor_function())
 
                 except:
-                    self.worker_process.kill()
+                    self.worker_process.terminate()
                     await self.worker_process.wait()
                     self.worker_process = None
                     raise
@@ -240,7 +240,7 @@ class BuildNode(object):
         if self.state[0] == STATE_BUILDING:
             if self.worker_process is not None:
                 if self.worker_process.returncode is None:
-                    self.worker_process.kill()
+                    self.worker_process.terminate()
 
         else:
             self.send_message_to_client(dst, {

@@ -36,7 +36,7 @@ class StageCreatePMPackages(object):
 
             b.set_files(files)
 
-            #
+
             # Add files to the TPM package
             cmd = ['tpm', '--add-files']
 
@@ -51,9 +51,6 @@ class StageCreatePMPackages(object):
 
                 success = False
                 break
-
-
-            # Add runtime dependencies
 
 
             # Pack

@@ -1,12 +1,22 @@
 from .BuildNode import FAIL_REASON_NODE_TRY_AGAIN
 from .BuildNode import FAIL_REASON_PACKAGE, FAIL_REASON_NODE_ABORT
 from tslb import Architecture
+from tslb.Console import Color
 from tslb.VersionNumber import VersionNumber
 from tslb.package_builder import PackageBuilder, PkgBuildFailed
+import signal
 import subprocess
 import sys
 import time
-from tslb.Console import Color
+
+
+# Globals (for signal handling)
+package_builder = None
+
+
+def signal_handler(signum, stack_frame):
+    if package_builder:
+        package_builder.stop_build()
 
 
 def worker(name, arch, version_number, identity):
@@ -24,12 +34,17 @@ def worker(name, arch, version_number, identity):
     :type identity: str
     :returns: Error code from FAIL_REASON_* or 255 on success.
     """
+    global package_builder
+
     print("Building Source Package %s:%s@%s" % (name, version_number, Architecture.to_str(arch)))
 
     pb = PackageBuilder(identity)
 
     try:
+        package_builder = pb
         pb.build_package(name, arch, version_number)
+        package_bulder = None
+
         print(Color.GREEN + "Completed successfully." + Color.NORMAL)
         return 255
 
@@ -47,6 +62,8 @@ def worker(name, arch, version_number, identity):
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, signal_handler)
+
     try:
         name = sys.argv[1]
         arch = Architecture.to_int(sys.argv[2])

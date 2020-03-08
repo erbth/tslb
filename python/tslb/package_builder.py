@@ -1,21 +1,22 @@
-import tslb
-from tslb import settings
+from time import sleep
 from tslb import Architecture
-from tslb import rootfs
-from tslb import SourcePackage
-from tslb.VersionNumber import VersionNumber
-from tslb.Constraint import DependencyList, VersionConstraint
-from tslb import Console
-from tslb.Console import Color
 from tslb import CommonExceptions as ce
+from tslb import Console
+from tslb import SourcePackage
+from tslb import rootfs
+from tslb import settings
+from tslb.Console import Color
+from tslb.Constraint import DependencyList, VersionConstraint
+from tslb.VersionNumber import VersionNumber
 from tslb.filesystem import FileOperations as fops
 import multiprocessing
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import sys
-from time import sleep
+import tslb
 
 
 class PackageBuilder(object):
@@ -30,6 +31,18 @@ class PackageBuilder(object):
     def __init__(self, mount_namespace, out=sys.stdout):
         self.out = out
         self.mount_namespace = mount_namespace
+
+        # For terminating a running chroot worker process
+        self.chroot_process = None
+
+
+    def stop_build(self):
+        """
+        Stop a running build. This is intended to be called by a signal handler
+        in the process which calls build_package().
+        """
+        if self.chroot_process is not None and self.chroot_process.is_alive():
+            os.killpg(self.chroot_process.pid, signal.SIGTERM)
 
 
     def build_package(self, name, arch, version=None):
@@ -197,6 +210,10 @@ class PackageBuilder(object):
 
 
             def f(name, arch, version):
+                # Create a new process group so all subprocesses can easily be
+                # terminated.
+                os.setpgrp()
+
                 try:
                     cmd = ['python3', '-m', 'tslb.pb_rootfs_module',
                         spkg.name, Architecture.to_str(spkg.architecture),
@@ -221,7 +238,11 @@ class PackageBuilder(object):
             del spkg
             del spkgv
 
+            # Publish process id class wide to make it terminatable.
+            self.chroot_process = p
             p.join()
+            self.chroot_process = None
+
             if p.exitcode != 0:
                 if p.exitcode == 2:
                     raise PkgBuildFailed(
