@@ -117,8 +117,8 @@ class settings_internal(types.ModuleType):
     # Interpret settings and formulate strings.
     def get_ceph_cmd_conn_params(self):
         """
-        :returns: Like -m <monitors> --name <name> --keyring <keyringfile> as
-            tuple for use with i.e. subprocess.run.
+        :returns: Like -m <monitors> --name <name> --keyring <keyringfile> -c
+            /dev/null as tuple for use with i.e. subprocess.run.
         """
         c = self.get('Ceph')
         if not c:
@@ -136,7 +136,7 @@ class settings_internal(types.ModuleType):
         if not os.path.isfile(keyring):
             raise NoSuchFile('Ceph keyring for %s (file %s)' % (name, keyring))
 
-        return ("-m", monitor, "--name", name, "--keyring", keyring)
+        return ("-m", monitor, "--name", name, "--keyring", keyring, "-c", "/dev/null")
 
 
 
