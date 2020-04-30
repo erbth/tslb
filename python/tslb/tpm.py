@@ -1,67 +1,124 @@
+import re
 import subprocess
 from tslb import CommonExceptions as ces
+from tslb.VersionNumber import VersionNumber
+from tslb import Architecture
 
-class tpm(object):
+
+class Tpm2_pack:
     """
-    A simple wrapper that calls the TPM.
+    A simple wrapper that calls tpm_pack2.
     """
+    def __init__(self, tpm2_pack='tpm2_pack'):
+        self.tpm2_pack = tpm2_pack
 
-    PKG_TYPE_SW = 'sw'
-    PKG_TYPE_CONF = 'conf'
+    def pack(self, directory):
+        """
+        Package the unpacked form in the given directory.
 
-    def __init__(self, tpm = 'tpm'):
+        :param str directory: The root of the unpacked form.
+        :raises `CommonExceptions.CommandFailed`: If packaging fails.
+        """
+        cmd = [self.tpm2_pack, '.']
+
+        res = subprocess.run(cmd, cwd=directory)
+        if (res.returncode != 0):
+            raise ces.CommandFailed(' '.join(cmd))
+
+
+class Tpm2(object):
+    """
+    A simple wrapper that calls TPM version 2.
+
+    :param target: Path to the target system that should be modified. Defaults
+        to a native target ('/').
+
+    :param tpm2: Path to the tpm2 executable
+    """
+    def __init__(self, target=None, tpm2='tpm2'):
         super().__init__
-        self.tpm = tpm
+        self.tpm2 = tpm2
 
-    def create_desc (self, pkg_type):
-        cmd = [self.tpm, '--create-desc', pkg_type]
+    def install(self, pkgs):
+        """
+        Install a set of packages.
 
-        if subprocess.call(cmd) != 0:
+        :param pkg: An iterable of packages to install,
+            like list(tuple(name, architecture, version)) or list(name,
+            architecture), even mixed lists are allowed.
+
+        :raises CommonExceptions.CommandFailed: if installing failes.
+        """
+        cmd = [self.tpm2, '--install', '--assume-yes', '--adopt-all']
+
+        for e in pkgs:
+            if len(e) == 2:
+                n, a = e
+                cmd.append("%s@%s" % (n, Architecture.to_str(a)))
+
+            else:
+                n, a, v = e
+                cmd.append("%s@%s=%s" % (n, Architecture.to_str(a), v))
+
+        if subprocess.run(cmd).returncode != 0:
             raise ces.CommandFailed(' '.join(cmd))
 
-    def set_name(self, name):
-        cmd = [self.tpm, '--set-name', name]
 
-        if subprocess.call(cmd) != 0:
+    def mark_auto(self, pkgs):
+        """
+        Set the given packages' installation reason to automatic.
+
+        :param pkgs: An iterable of packages to mark, like list(tuple(name,
+            architecture)).
+
+        :raises CommonExceptions.CommandFailed: if the operation fails.
+        """
+        cmd = [self.tpm2, '--mark-auto']
+
+        for n,a in pkgs:
+            cmd.append("%s@%s" % (n, Architecture.to_str(a)))
+
+        if subprocess.run(cmd).returncode != 0:
             raise ces.CommandFailed(' '.join(cmd))
 
-    def set_version(self, version):
-        cmd = [self.tpm, '--set-version', version]
 
-        if subprocess.call(cmd) != 0:
+    def list_installed_packages(self):
+        """
+        List the installed packages.
+
+        :returns: list(tuple(name, architecture, version      ))
+        :rtype:   List(Tuple(str , int         , VersionNumber))
+        :raises CommonExceptions.CommandFailed: if the operation fails.
+        """
+        cmd = [self.tpm2, '--list-installed']
+
+        res = subprocess.run(cmd, stdout=subprocess.PIPE)
+        if res.returncode != 0:
             raise ces.CommandFailed(' '.join(cmd))
 
-    def set_arch(self, arch):
-        cmd = [self.tpm, '--set-arch', arch]
+        pkg_list = []
 
-        if subprocess.call(cmd) != 0:
-            raise ces.CommandFailed(' '.join(cmd))
+        for line in res.stdout.split(b'\n'):
+            if not line:
+                continue
 
-    def remove_dependencies(self):
-        cmd = [self.tpm, '--remove-dependencies']
+            m = re.match(r'^(\S+)\s+@\s+(\S+)\s+:\s+(\S+)\s+.*', line.decode('utf8'))
+            pkg_list.append((
+                m.group(1),
+                Architecture.to_int(m.group(2)),
+                    VersionNumber(m.group(3))
+                ))
 
-        if subprocess.call(cmd) != 0:
-            raise ces.CommandFailed(' '.join(cmd))
+        return pkg_list
 
-    def add_dependencies(self, deps):
-        for dep in deps:
-            self.add_dependency(dep)
 
-    def add_dependency(self, dep):
-        cmd = [self.tpm, '--add-dependency', dep]
-        print (' '.join(cmd))
+    def remove_unneeded(self):
+        """
+        Remove unneeded packages.
 
-        if subprocess.call(cmd) != 0:
-            raise ces.CommandFailed(' '.join(cmd))
+        :raises CommonExceptions.CommandFailed: if the oepration fails.
+        """
+        cmd = [self.tpm2, '--remove-unneeded']
 
-    def add_files(self):
-        cmd = [self.tpm, '--add-files']
-
-        if subprocess.call(cmd) != 0:
-            raise ces.CommandFailed(' '.join(cmd))
-
-    def pack(self):
-        cmd = [self.tpm, '--pack']
-
-        if subprocess.call(cmd) != 0:
+        if subprocess.run(cmd).returncode != 0:
             raise ces.CommandFailed(' '.join(cmd))

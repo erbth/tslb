@@ -9,6 +9,7 @@ from tslb.Console import Color
 from tslb.Constraint import DependencyList, VersionConstraint
 from tslb.VersionNumber import VersionNumber
 from tslb.filesystem import FileOperations as fops
+from tslb.tpm import Tpm2
 import multiprocessing
 import os
 import shutil
@@ -83,13 +84,59 @@ class PackageBuilder(object):
 
         # Find a rootfs image that satisfies the package's compiletime
         # dependencies
-        # cdeps is a DependencyList with package names as objects.
+        # cdeps is a DependencyList with source package names as objects.
         cdeps = spkgv.get_cdeps()
 
-        # OK, this is hacky.
-        cdeps.l = {(k, arch): v for k,v in cdeps.l.items()}
 
-        image = rootfs.find_image(cdeps)
+        # The package manager is essential and should be always
+        # installed.
+        # cdeps.add_constring(VersionConstraint('', '0'), ('tpm2', arch))
+
+        # Find the binary packages of the newest source packages that match the
+        # requirements.
+        required_binary_packages = []
+
+        spl = SourcePackage.SourcePackageList(arch)
+        available_source_packages = set(spl.list_source_packages())
+
+        for dep_name in cdeps.get_required():
+            if dep_name not in available_source_packages:
+                raise CannotFulfillDependencies(
+                    'Required source package "%s" does not exist.' % dep_name)
+
+            dep_sp = SourcePackage.SourcePackage(dep_name, arch)
+            available_versions = sorted(dep_sp.list_version_numbers(), reverse=True)
+
+            found = False
+
+            for v in available_versions:
+                if (dep_name, v) in cdeps:
+                    dep_spv = dep_sp.get_version(v)
+
+                    # Find newest binary packages currently built out of this
+                    # source package version.
+                    for bp_name in dep_spv.list_current_binary_packages():
+                        bp_v = max(dep_spv.list_binary_package_version_numbers(bp_name))
+                        required_binary_packages.append((bp_name, arch, bp_v))
+
+                    found = True
+                    break
+
+            if not found:
+                raise CannotFulfillDependencies(
+                    'No version of the required source package "%s" fulfills '
+                    'the requirements.' % dep_name)
+
+
+        # Create a dependency list with equal-dependencies out of the list of
+        # required binary packages.
+        cbpdeps = DependencyList()
+
+        for n,a,v in required_binary_packages:
+            cbpdeps.add_constraint(VersionConstraint('=', v), (n,a))
+
+        # Finally find the best fitting rootfs image.
+        image = rootfs.find_image(cbpdeps)
         if not image:
             raise RuntimeError("No published image available")
 
@@ -99,32 +146,22 @@ class PackageBuilder(object):
 
         # If needed, create and adapt a new rootfs image based on the best
         # fitting one
-        pkgs = set(image.packages)
-
-        # Find disruptive packages
-        disruptive_pkgs = []
-
-        for n,a,v in pkgs:
-            if ((n,a), v) not in cdeps:
-                disruptive_pkgs.append((n,a))
-
-        if len(disruptive_pkgs) > 0:
-            self.out.write("The following packages are disruptive:\n")
-            for n,a in disruptive_pkgs:
-                self.out.write("    %s@%s\n" % (n, Architecture.to_str(a)))
+        installed_pkgs = {(n,a): v for n,a,v in image.packages}
 
         # Find missing packages
         missing_pkgs = []
 
-        for n,a in cdeps.get_required():
-            if (n,a) not in pkgs:
+        for n,a in cbpdeps.get_required():
+            if (n,a) not in installed_pkgs or \
+                    ((n,a), installed_pkgs[(n,a)]) not in cbpdeps:
+
                 missing_pkgs.append((n,a))
 
+        self.out.write("Found %d missing packages.\n" %
+                len(missing_pkgs))
 
-        self.out.write("Found %d disruptive and %d missing packages.\n" %
-            (len(disruptive_pkgs), len(missing_pkgs)))
 
-        if len(disruptive_pkgs) > 0 or len(missing_pkgs) > 0:
+        if len(missing_pkgs) > 0:
             Console.print_status_box("Creating a new COW cloned image ...",
                 self.out)
 
@@ -140,49 +177,176 @@ class PackageBuilder(object):
 
             try:
                 mount_pseudo_filesystems(mountpoint)
+                tpm_native = Tpm2()
 
-                # Remove disruptive packages in a chroot environment
-                Console.print_status_box(
-                    "Removing disruptive packages ...", self.out)
+                # # Remove disruptive packages in a chroot environment
+                # Console.print_status_box(
+                #     "Removing disruptive packages ...", self.out)
+
+                # try:
+                #     # Update the image's package list
+
+                #     Console.update_status_box(True, self.out)
+
+                # except BaseException as e:
+                #     Console.update_status_box(False, self.out)
+                #     self.out.write(Color.RED + "  Error: %s" % e + Color.NORMAL)
+                #     raise e
+
+
+                # # Recalculate missing packages (children may have been removed)
+                # missing_pkgs = []
+
+                # for n,a in cdeps.get_required():
+                #     if (n,a) not in pkgs:
+                #         missing_pkgs.append((n,a))
+
+                # if len(missing_pkgs) > 0:
+                #     self.out.write("The following packages are missing:\n")
+                #     for n,a in missing_pkgs:
+                #         self.out.write("    %s@%s\n" % (n, Architecture.to_str(a)))
+
+
+                # Mark all packages in the image as automatically installed
+                self.out.write(Color.CYAN + 
+                    '[------] Marking installed packages as automatically installed\n' + Color.NORMAL)
 
                 try:
-                    Console.update_status_box(True, self.out)
+                    def _f():
+                        try:
+                            pkgs = [(n,a) for n,a,_ in tpm_native.list_installed_packages()]
+                            tpm_native.mark_auto(pkgs)
+                            return 0
+
+                        except BaseException as e:
+                            print(e)
+                            return 1
+
+                    if execute_in_chroot(mountpoint, _f) != 0:
+                        raise Exception
+
+                    Console.print_finished_status_box(Color.CYAN +
+                        'Marking installed packages as automatically installed' + Color.NORMAL,
+                        True,
+                        file=self.out)
 
                 except BaseException as e:
-                    Console.update_status_box(False, self.out)
-                    self.out.write(Color.RED + "  Error: %s" % e + Color.NORMAL)
+                    Console.print_finished_status_box(Color.CYAN +
+                        'Marking installed packages as automatically installed' + Color.NORMAL,
+                        False,
+                        file=self.out)
+
+                    self.out.write(Color.RED + "Error: %s\n" % e + Color.NORMAL)
                     raise e
 
-                # Update the image's package list
 
-                # Recalculate missing packages (children may have been removed)
-                missing_pkgs = []
-
-                for n,a in cdeps.get_required():
-                    if (n,a) not in pkgs:
-                        missing_pkgs.append((n,a))
-
-                if len(missing_pkgs) > 0:
-                    self.out.write("The following packages are missing:\n")
-                    for n,a in missing_pkgs:
-                        self.out.write("    %s@%s\n" % (n, Architecture.to_str(a)))
-
-                # Install missing packages
-                Console.print_status_box(
-                    "Installing missing packages ...", self.out)
+                # Install missing packages in an chroot environment
+                self.out.write(Color.CYAN + 
+                    '[------] Installing packages\n' + Color.NORMAL)
 
                 try:
-                    Console.update_status_box(True, self.out)
+                    def _f(pkgs):
+                        try:
+                            tpm_native.install(pkgs)
+                            return 0
+
+                        except BaseException as e:
+                            print(e)
+                            return 1
+
+                    ret = execute_in_chroot(mountpoint, _f, required_binary_packages)
+
+                    if ret != 0:
+                        raise Exception("The Package Manager failed.")
+
+                    Console.print_finished_status_box(Color.CYAN +
+                        'Installing packages' + Color.NORMAL,
+                        True,
+                        file=self.out)
 
                 except BaseException as e:
-                    Console.update_status_box(False, self.out)
-                    self.out.write(Color.RED + "  Error: %s" % e + Color.NORMAL)
+                    Console.print_finished_status_box(Color.CYAN +
+                        'Installing packages' + Color.NORMAL,
+                        False,
+                        file=self.out)
+
+                    self.out.write(Color.RED + "Error: %s\n" % e + Color.NORMAL)
                     raise e
+
+
+                # Remove unneeded packages and update the image's package list.
+                self.out.write(Color.CYAN + 
+                    '[------] Removing unneeded packages\n' + Color.NORMAL)
+
+                try:
+                    new_pkg_queue = multiprocessing.Queue()
+
+                    def _f():
+                        try:
+                            tpm_native.remove_unneeded()
+
+                            l = tpm_native.list_installed_packages()
+
+                            new_pkg_queue.put(len(l))
+
+                            for e in l:
+                                new_pkg_queue.put(e)
+
+                            return 0
+
+                        except BaseException as e:
+                            print(e)
+                            return 1
+
+                    if execute_in_chroot(mountpoint, _f) != 0:
+                        raise Exception("The Package Manager failed.")
+
+                    # Get the installed packages from the queue.
+                    new_pkg_list = []
+
+                    l_cnt = new_pkg_queue.get()
+                    for i in range(l_cnt):
+                        new_pkg_list.append(new_pkg_queue.get())
+
+                    image.set_package_list(new_pkg_list)
+
+                    Console.print_finished_status_box(Color.CYAN +
+                        'Removing unneeded packages' + Color.NORMAL,
+                        True,
+                        file=self.out)
+
+                except BaseException as e:
+                    Console.print_finished_status_box(Color.CYAN +
+                        'Removing unneeded packages' + Color.NORMAL,
+                        False,
+                        file=self.out)
+
+                    self.out.write(Color.RED + "Error: %s\n" % e + Color.NORMAL)
+                    raise e
+
 
             except:
                 unmount_pseudo_filesystems(mountpoint, raises=False)
                 image.unmount(self.mount_namespace)
                 raise
+
+
+            # Publish, downgrade lock (for safety) and remount read only.
+            unmount_pseudo_filesystems(mountpoint, raises=False)
+            image.unmount(self.mount_namespace)
+
+            image.publish()
+
+            image.mount(self.mount_namespace)
+            mountpoint = image.get_mountpoint(self.mount_namespace)
+
+            try:
+                mount_pseudo_filesystems(mountpoint)
+            except:
+                unmount_pseudo_filesystems(mountpoint, raises=False)
+                image.unmount(self.mount_namespace)
+                raise
+
 
         else:
             # Mount the rootfs image and some pseudo filesystems for the build
@@ -197,7 +361,7 @@ class PackageBuilder(object):
                 raise
 
 
-        # Invariant here: image points to an rootfs image that satisfies the
+        # Invariant here: image points to a rootfs image that satisfies the
         # package's cdeps and is mounted. The required pseudo-filesystems are
         # mounted, too.
 
@@ -738,6 +902,15 @@ class PkgBuildFailed(Exception):
     """
     To be raised when a package failed to build and the build system worked
     that is no infrastractural problem occured.
+    """
+    def __init__(self, msg):
+        super().__init__(msg)
+
+
+class CannotFulfillDependencies(PkgBuildFailed):
+    """
+    To be raised when a package's cdeps cannot be fulfilled. Usually this is
+    because the dependent packages are not available (yet).
     """
     def __init__(self, msg):
         super().__init__(msg)

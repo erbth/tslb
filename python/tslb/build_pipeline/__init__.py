@@ -319,11 +319,10 @@ class BuildPipeline(object):
                 self.output_buffer.clear()
                 success = stage.flow_through(spv, FDWrapper(slave))
 
-                Console.print_status_box(Color.CYAN +
+                Console.print_finished_status_box(Color.CYAN +
                     'Flowing through stage %s' % stage.name + Color.NORMAL,
+                    success,
                     file=self.out)
-
-                Console.update_status_box(success, file=self.out)
 
                 # Make a snapshot
                 if success:

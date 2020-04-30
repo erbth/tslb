@@ -35,7 +35,7 @@ class StageBuild(object):
                 if os.path.exists(os.path.join(spv.fs_build_location,
                     spv.get_attribute('unpacked_source_directory'), 'Makefile')):
 
-                    build_command = [ 'make', '-j', '-l', '$(MAX_PARALLEL_THREADS)' ]
+                    build_command = [ 'make', '-j', '$(MAX_PARALLEL_THREADS)', '-l', '$(MAX_PARALLEL_THREADS)' ]
 
                 else:
                     out.write("No build command specified and failed to guess one.\n")

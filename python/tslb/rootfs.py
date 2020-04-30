@@ -33,7 +33,7 @@ class Image(object):
         Constructs an Image object if such an image exists in the database.
 
         :param id: The image's id
-        :param acquire_X: Set to true if the image's lock is held in X mode by
+        :param acquired_X: Set to true if the image's lock is held in X mode by
             the caller. Mainly used by functions that create images.
 
         :param db_object: The db object representing this package. Use only of
@@ -96,8 +96,9 @@ class Image(object):
     @property
     def packages(self):
         """
-        Returns a list of packages in this image, order by name, arch, version.
-        This property is essentially a shortcut for self.query_packages().
+        Returns a list of packages in this image, ordered by name, arch,
+        version. This property is essentially a shortcut for
+        self.query_packages().
 
         :returns: A list of tuples like (name, arch integer, version number)
         :rtype: List(Tuple(str, int, VersionNumber))
@@ -195,6 +196,37 @@ class Image(object):
                 db.rootfs.ImageContent.version)
 
             return [ (p,a,v) for p,a,v in q ]
+
+
+    @property
+    def comment(self):
+        """
+        The image's comment if any.
+        """
+        return self.db_object.comment
+
+
+    def set_comment(self, comment):
+        """
+        Set the image's comment. Requires an X lock on the image.
+
+        :raises RuntimeError: If the lock was not acquired in X mode.
+        """
+        if not self.acquired_X:
+            raise RuntimeError(
+                "Cannot alter an Image that is not locked exclusively.")
+
+        with db.session_scope() as s:
+            self.db_object.comment = comment
+            s.add(self.db_object)
+
+        # Read the image back.
+        with db.session_scope() as s:
+            i = s.query(db.rootfs.Image)\
+                .filter(db.rootfs.Image.id == self.id).one_or_none()
+
+            s.expunge(i)
+            self.db_object = i
 
 
     # Actions
@@ -382,6 +414,15 @@ class Image(object):
                     s.delete(ai)
 
 
+    @property
+    def has_ro_base(self):
+        """
+        Queryies RADOS and indicates if the rootfs images has the robase
+        snapshot.
+        """
+        return 'ro_base' in _list_rbd_image_snapshots(self.id)
+
+
     def remove_ro_base(self):
         """
         Remove the ro_base snapshot of the image. This requires an X lock.
@@ -428,13 +469,37 @@ class Image(object):
         :param pkgs: A list of packages to append.
         :type pkgs: List(Tuple(str, int/atr, <convertible to VersionNumber>))
 
-        :raises RuntimeError: If the lock is not acquired in X mode.
+        :raises RuntimeError: If the lock was not acquired in X mode.
         """
         if not self.acquired_X:
             raise RuntimeError(
                 "Cannot alter an Image that is not locked exclusively.")
 
         with db.session_scope() as s:
+            for name, arch, version in pkgs:
+                arch = Architecture.to_int(arch)
+                version = VersionNumber(version)
+                s.add(db.rootfs.ImageContent(self.id, name, arch, version))
+
+
+    def set_package_list(self, pkgs):
+        """
+        Set the list of installed packages. This requires an X lock on the
+        image.
+
+        :param pkgs: A list of packages to set.
+        :type pkgs: List(Typle(str, int/atr, <convertible to VersionNumber>>))
+
+        :raises RuntimeError: If the lock was not acquired in X mode.
+        """
+        if not self.acquired_X:
+            raise RuntimeError(
+                "Cannot alter an Image that is not locked exclusively.")
+
+        with db.session_scope() as s:
+            s.query(db.rootfs.ImageContent).delete(synchronize_session=False)
+            s.expire_all()
+
             for name, arch, version in pkgs:
                 arch = Architecture.to_int(arch)
                 version = VersionNumber(version)
@@ -545,7 +610,7 @@ def _list_rbd_image_snapshots(name):
     ENOENT or whatever.
     
     :param name: The name of the image.
-    :raises CommonExceptions.CommandFailed: If an unerlying rbd command failed.
+    :raises CommonExceptions.CommandFailed: If an underlying rbd command failed.
     """
     cmd = ['rbd', 'snap', 'ls', *settings.get_ceph_cmd_conn_params(),
         settings.get_ceph_rootfs_rbd_pool() + '/' + str(name)]

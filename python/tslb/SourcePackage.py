@@ -458,10 +458,12 @@ class SourcePackage(object):
 class SourcePackageVersion(object):
     def __init__(self, source_package, version_number, create_locks=False, db_session=None):
         """
-        Must be called with the source package be X locked.
+        A source package version.
 
         :param source_package:
         :type source_package: SourcePackage
+        :param create_locks: Create the locks. Must be called with the
+            SourcePackage X locked.
         :param db_session: Optionally specify a db session for i.e.
                            transactionality
         """

@@ -2,6 +2,9 @@ from tslb import Architecture
 from tslb import settings
 from tslb.filesystem import FileOperations as fops
 from tslb.tclm import lock_S, lock_Splus, lock_X
+from tslb import package_utils
+from tslb.tpm import Tpm2_pack
+import tslb.CommonExceptions as ces
 import os
 import shutil
 import subprocess
@@ -26,9 +29,10 @@ class StageCreatePMPackages(object):
         """
         success = True
 
+        tpm2_pack = Tpm2_pack()
+
         for n in spv.list_current_binary_packages():
-            vs = sorted(spv.list_binary_package_version_numbers(n))
-            bv = vs[-1]
+            bv = max(spv.list_binary_package_version_numbers(n))
             b = spv.get_binary_package(n, bv)
 
             # Add files
@@ -43,36 +47,23 @@ class StageCreatePMPackages(object):
             b.set_files(files)
 
 
-            # Add files to the TPM package
-            cmd = ['tpm', '--add-files']
-
-            r = subprocess.run(cmd, cwd=b.fs_base,
-                stdout=out.fileno(), stderr=out.fileno())
-
-            if r.returncode != 0:
-                out.write('"%s" exited with code %d.' % (' '.join(cmd), r.returncode))
-
-                success = False
-                break
-
+            # Create desc.xml
+            with open(os.path.join(b.fs_base, 'desc.xml'), 'w', encoding='utf8') as f:
+                f.write(package_utils.desc_from_binary_package(b))
 
             # Pack
-            cmd = ['tpm', '--pack']
+            try:
+                tpm2_pack.pack(b.fs_base)
 
-            r = subprocess.run(cmd, cwd=b.fs_base,
-                stdout=out.fileno(), stderr=out.fileno())
-
-            if r.returncode != 0:
-                out.write('"%s" exited with code %d.' % (
-                    ' '.join(cmd), r.returncode))
-
+            except ces.CommandFailed as e:
+                out.write(str(e))
                 success = False
                 break
 
 
             # Copy the package to the collecting repo
             transport_form = os.path.join(b.fs_base,
-                '%s-%s_%s.tpm.tar' % (b.name, b.version_number,
+                '%s-%s_%s.tpm2' % (b.name, b.version_number,
                     Architecture.to_str(b.architecture)))
 
             arch_dir = os.path.join(

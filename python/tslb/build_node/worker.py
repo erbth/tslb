@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import time
+import traceback
 
 
 # Globals (for signal handling)
@@ -48,12 +49,14 @@ def worker(name, arch, version_number, identity):
         print(Color.GREEN + "Completed successfully." + Color.NORMAL)
         return 255
 
-    except PkgBuildFailed:
-        print(Color.RED + "FAILED." + Color.NORMAL)
+    except PkgBuildFailed as e:
+        print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + ".")
+        traceback.print_exc()
         return FAIL_REASON_PACKAGE
 
     except BaseException as e:
         print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + ".")
+        traceback.print_exc()
         return FAIL_REASON_NODE_ABORT
 
 

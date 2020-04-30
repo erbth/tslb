@@ -9,6 +9,7 @@ class Image(Base):
     __tablename__ = 'rootfs_images'
 
     id = Column(types.BigInteger, primary_key = True)
+    comment = Column(types.String)
 
     def __repr__(self):
         return f"rootfs.Image {self.id}"

@@ -183,7 +183,8 @@ create table build_pipeline_stage_events (
 
 -- Root filesystems
 create table rootfs_images (
-	id bigserial primary key
+	id bigserial primary key,
+	"comment" varchar
 );
 
 create table rootfs_image_contents (

@@ -10,6 +10,15 @@ class Color(object):
     MAGENTA='\033[35m'
     CYAN='\033[36m'
     WHITE ='\033[37m'
+    BRIGHT_BLACK='\033[90m'
+    BRIGHT_RED='\033[91m'
+    BRIGHT_GREEN='\033[92m'
+    BRIGHT_YELLOW='\033[93m'
+    BRIGHT_BLUE='\033[94m'
+    BRIGHT_MAGENTA='\033[95m'
+    BRIGHT_CYAN='\033[96m'
+    BRIGHT_WHITE='\033[97m'
+
     NORMAL='\033[0m'
 
     def print_color(c, s, reset=True):
@@ -52,6 +61,18 @@ def update_status_box(ok, file=sys.stdout):
         print(Color.GREEN + '  OK  ' + Color.NORMAL, file=file)
     else:
         print(Color.RED + 'failed' + Color.NORMAL, file=file)
+
+
+def print_finished_status_box(text="", ok=False, file=sys.stdout):
+    """
+    Like print_status_box + update_status_box in one call.
+    """
+    if ok:
+        print(Color.CYAN + "[" + Color.GREEN + '  OK  ' + Color.CYAN + "] " +
+            Color.NORMAL + text, file=file)
+    else:
+        print(Color.CYAN + "[" + Color.RED + 'failed' + Color.CYAN + "] " +
+            Color.NORMAL + text, file=file)
 
 
 def update_status_box_percent(v, ref, file=sys.stdout):
