@@ -53,11 +53,9 @@ class StageSplitIntoBinaryPackages(object):
                             spv.fs_install_location,
                             lambda x : fops.copy_from_base(spv.fs_install_location, x, dst_base))
 
-                except Exception as e:
+                except BaseException as e:
                     success = False
                     out.write(str(e) + '\n')
-                except:
-                    success = False
 
             if not success:
                 break

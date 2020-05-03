@@ -317,7 +317,7 @@ class Image(object):
         r = subprocess.run(cmd, stdout=subprocess.PIPE)
 
         if r.returncode != 0:
-            raise os.CommandFailed(cmd, r.returncode)
+            raise CommandFailed(cmd, r.returncode)
 
         lines = r.stdout.decode().split('\n')
 

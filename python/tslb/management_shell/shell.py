@@ -23,8 +23,34 @@ def main(*args):
     readline.set_history_length(1000)
     atexit.register(readline.write_history_file, history_file)
 
+    # Set a completer function
+    def completer(text, state):
+        nonlocal cwd
+
+        try:
+            completions = list(filter(
+                lambda x: x.startswith(text),
+                [d.name for d in cwd.listdir()]
+            ))
+
+            if state >= len(completions):
+                return None
+            else:
+                return completions[state]
+
+        except BaseException as e:
+            print(str(e))
+            return None
+
+    readline.set_completer(completer)
+    readline.set_completer_delims(' \t\r\n')
+
+    # Enable autocompletion when the tab key is pressed
+    readline.parse_and_bind('tab:complete')
+
+    # Main interpreter loop
     while True:
-        prompt = "\033[38;2;190;39;6;1mtslb\033[0m:\033[94;1m%s\033[0m$ " % cwd_path
+        prompt = "\1\033[38;2;190;39;6;1m\2tslb\1\033[0m\2:\1\033[94;1m\2%s\1\033[0m\2$ " % cwd_path
 
         try:
             line = input(prompt)

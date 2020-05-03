@@ -61,13 +61,15 @@ def copy_from_base(base_dir, src_path, dst_dir):
 
 def traverse_directory_tree(base, action, skip_hidden=False, element = ''):
     """
-    With respect to directories, this function does an pre-order traversel.
+    With respect to directories, this function does an pre-order traversal.
     Nothing else would be suitable for general purpose directory structures,
     as they are hierarchical.
 
     action gets a path relative to base.
 
     :param skip_hidden: Skip hidden files and directories and their contents
+    :param element: A parameter that transports information to recursive calls.
+        It should not be used by external users.
     """
 
     if element:

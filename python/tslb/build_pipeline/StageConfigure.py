@@ -56,7 +56,7 @@ class StageConfigure(object):
                 success = False
 
                 try:
-                    out.write(Color.YELLOW + ' '.join(build_command) + Color.NORMAL + '\n')
+                    out.write(Color.YELLOW + ' '.join(configure_command) + Color.NORMAL + '\n')
 
                     ret = subprocess.run(configure_command,
                             cwd=os.path.join(spv.fs_build_location, spv.get_attribute('unpacked_source_directory')),

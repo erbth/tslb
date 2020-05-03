@@ -139,6 +139,17 @@ class settings_internal(types.ModuleType):
         return ("-m", monitor, "--name", name, "--keyring", keyring, "-c", "/dev/null")
 
 
+    def get_ceph_name(self):
+        """
+        Returns the user name to user with ceph.
+
+        :returns str: The user name
+        """
+        try:
+            return self['Ceph']['name']
+        except KeyError:
+            raise NoSuchSettings('Ceph', 'name')
+
 
     def get_ceph_rootfs_rbd_pool(self):
         """
@@ -148,6 +159,16 @@ class settings_internal(types.ModuleType):
             return self['Ceph']['rootfs_rbd_pool']
         except KeyError:
             raise NoSuchSetting('Ceph', 'rootfs_rbd_pool')
+
+
+    def get_ceph_scratch_space_rbd_pool(self):
+        """
+        :raises NoSuchSetting: if required settings are missing.
+        """
+        try:
+            return self['Ceph']['scratch_space_rbd_pool']
+        except KeyError:
+            raise NoSuchSetting('Ceph', 'scratch_space_rbd_pool')
 
 
     def get_temp_location(self):
