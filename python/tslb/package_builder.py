@@ -18,6 +18,7 @@ import stat
 import subprocess
 import sys
 import tslb
+from build_pipeline import BuildPipeline
 
 
 class PackageBuilder(object):
@@ -32,18 +33,6 @@ class PackageBuilder(object):
     def __init__(self, mount_namespace, out=sys.stdout):
         self.out = out
         self.mount_namespace = mount_namespace
-
-        # For terminating a running chroot worker process
-        self.chroot_process = None
-
-
-    def stop_build(self):
-        """
-        Stop a running build. This is intended to be called by a signal handler
-        in the process which calls build_package().
-        """
-        if self.chroot_process is not None and self.chroot_process.is_alive():
-            os.killpg(self.chroot_process.pid, signal.SIGTERM)
 
 
     def build_package(self, name, arch, version=None):
@@ -68,7 +57,7 @@ class PackageBuilder(object):
         arch = Architecture.to_int(arch)
 
         # Create a corresponding source package (version) object
-        spkg = SourcePackage.SourcePackage(name, arch)
+        spkg = SourcePackage.SourcePackage(name, arch, write_intent=True)
 
         if version:
             spkgv = spkg.get_version(version)
@@ -365,61 +354,19 @@ class PackageBuilder(object):
         # package's cdeps and is mounted. The required pseudo-filesystems are
         # mounted, too.
 
-        # Build the package in a chroot environment using a build pipeline
+        # Build the package using the build pipeline
+        self.out.write(Color.YELLOW +
+            "Building the package ...\n" + Color.NORMAL)
+
+        bp = BuildPipeline()
+
         try:
-            self.out.write(Color.YELLOW +
-                "Building package in chroot environment ...\n" + Color.NORMAL)
-
-            self.out.flush()
-
-
-            def f(name, arch, version):
-                # Create a new process group so all subprocesses can easily be
-                # terminated.
-                os.setpgrp()
-
-                try:
-                    cmd = ['python3', '-m', 'tslb.pb_rootfs_module',
-                        spkg.name, Architecture.to_str(spkg.architecture),
-                        str(spkgv.version_number)]
-
-                    r = subprocess.call(cmd, stdout=self.out, stderr=self.out)
-
-                except BaseException as e:
-                    self.out.write(Color.RED + "%s\n" % e + Color.NORMAL)
-                    r = 100
-
-                return r
-
-
-            p = start_in_chroot(mountpoint, f,
-                spkg.name, spkg.architecture, spkgv.version_number)
-
-            # Release the source package so that the other process can take an
-            # X lock on it.
-            # TODO: To behave atomically, the lock must be transfered.
-            sleep(1)
-            del spkg
-            del spkgv
-
-            # Publish process id class wide to make it terminatable.
-            self.chroot_process = p
-            p.join()
-            self.chroot_process = None
-
-            if p.exitcode != 0:
-                if p.exitcode == 2:
-                    raise PkgBuildFailed(
-                        "Failed to build package with error code %d (package)." %
-                        p.exitcode)
-
-                else:
-                    raise Exception(
-                        "Failed to build package with error code %d (system)." %
-                        p.exitcode)
+            r = bp.build_source_package_version(spkgv)
+            if not r:
+                raise PkgBuildFailed("Failed to the build package (the issue is probably at the package).")
 
         except BaseException as e:
-            self.out.write(Color.RED + "FAILED: %s\n" % e + Color.NORMAL)
+            self.out.write(Color.RED + "FAILED: " + Color.NORMAL + str(e) + '\n')
             self.out.flush()
             raise e
 

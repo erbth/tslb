@@ -15,6 +15,7 @@ import pytz
 from tslb import tclm
 from tslb import timezone
 
+
 def generate_version_number(time = None):
     """
     :param time: If not None, it will be used to generate the micro-version.
@@ -28,6 +29,7 @@ def generate_version_number(time = None):
     tdiff = time - datetime.combine(time.date(), dttime())
     msec = tdiff.seconds * 1000 + round(tdiff.microseconds / 1000)
     return VersionNumber(time.year, time.timetuple().tm_yday, msec)
+
 
 class BinaryPackage(object):
     def __init__(self, source_package_version, name, version_number, create_locks=False, db_session=None):
@@ -52,26 +54,24 @@ class BinaryPackage(object):
         self.architecture = self.source_package_version.architecture
 
         # Create locks if requested
-        self.fsrlp = source_package_version.fsrlp + ".binary_packages.%s.%s" %\
-                (self.name, str(self.version_number).replace('.', '_'))
         self.dbrlp = source_package_version.dbrlp + ".binary_packages.%s.%s" %\
                 (self.name, str(self.version_number).replace('.', '_'))
 
-        self.fs_root_lock = tclm.define_lock(self.fsrlp)
         self.db_root_lock = tclm.define_lock(self.dbrlp)
 
         if create_locks:
             self.ensure_write_intent()
-
-            self.fs_root_lock.create(False)
             self.db_root_lock.create(False)
 
         # Bind to the corresponding db tuple
         self.read_from_db(db_session)
 
-        # Fs location
-        self.fs_base = os.path.join(self.source_package_version.fs_binary_packages,
-                self.name, str(self.version_number))
+        # A location for this binary package in the source package version's
+        # scratch space
+        self.fs_base = os.path.join(
+            self.source_package_version.scratch_space.mount_path,
+            self.name, str(self.version_number))
+
 
     # Peripheral methods
     def read_from_db(self, db_session = None):
@@ -103,9 +103,10 @@ class BinaryPackage(object):
             if not db_session:
                 s.close()
 
+
     def ensure_write_intent(self):
         """
-        A convenience method calling self.source_package_version.ensure_write_intent()
+        A convenience method that calls self.source_package_version.ensure_write_intent()
         """
         self.source_package_version.ensure_write_intent()
 
@@ -114,6 +115,7 @@ class BinaryPackage(object):
     # General
     def get_creation_time(self):
         return self.dbo.creation_time
+
 
     # Files
     def set_files(self, files, time=None):
@@ -179,6 +181,7 @@ class BinaryPackage(object):
 
             self.read_from_db()
 
+
     def get_files(self):
         """
         :returns: ordered list(tuple(path, sha512sum))
@@ -195,12 +198,14 @@ class BinaryPackage(object):
 
             return l
 
+
     def get_files_meta(self):
         """
         :returns: tuple(modified_time, reassured_time)
         :rtype: tuple(datetime, datetime)
         """
         return (self.dbo.files_modified_time, self.dbo.files_reassured_time)
+
 
     # Key-Value-Store like attributes
     def list_attributes(self):
@@ -215,7 +220,8 @@ class BinaryPackage(object):
                             pa.version_number == self.version_number)\
                     .all()
 
-            return [ e[0] for e in l]
+            return [e[0] for e in l]
+
 
     def has_attribute(self, key):
         """
@@ -230,6 +236,7 @@ class BinaryPackage(object):
                             pa.version_number == self.version_number,
                             pa.key == key)\
                     .all()) != 0
+
 
     def get_attribute(self, key):
         """
@@ -263,6 +270,7 @@ class BinaryPackage(object):
             else:
                 return None
 
+
     def get_attribute_meta(self, key):
         """
         :param key: The attribute's key
@@ -285,6 +293,7 @@ class BinaryPackage(object):
                             self.version_number), key)
 
             return v[0]
+
 
     def manually_hold_attribute(self, key, remove=False, time=None):
         self.ensure_write_intent()
@@ -314,6 +323,7 @@ class BinaryPackage(object):
                 else:
                     v.manual_hold_time = time
 
+
     def attribute_manually_held(self, key):
         """
         :returns: The time the attribute was manually held or None
@@ -334,6 +344,7 @@ class BinaryPackage(object):
                             self.version_number), key)
 
             return v[0][0]
+
 
     def set_attribute(self, key, value, time = None):
         """
@@ -386,6 +397,7 @@ class BinaryPackage(object):
 
                     a.reassured_time = time
 
+
     def unset_attribute(self, key):
         self.ensure_write_intent()
 
@@ -411,6 +423,7 @@ class BinaryPackage(object):
                     raise AttributeManuallyHeld(key)
 
                 s.delete(a)
+
 
 # Some exceptions for our pleasure
 class NoSuchBinaryPackage(Exception):

@@ -65,12 +65,12 @@ class StageUnpack(object):
             unpack_command = parse_utils.split_quotes(unpack_command)
 
         else:
-            unpack_command = [ 'tar', '-xf', '$(SOURCE_ARCHIVE_PATH)' ]
+            unpack_command = ['tar', '-xf', '$(SOURCE_ARCHIVE_PATH)']
             tmp = ' '.join(unpack_command)
             spv.set_attribute('unpack_command', tmp)
             out.write("Guessed unpack command to be `%s'\n" % tmp)
 
-        unpack_command = [ c.replace('$(SOURCE_ARCHIVE_PATH)', source_archive_path) for c in unpack_command ]
+        unpack_command = [c.replace('$(SOURCE_ARCHIVE_PATH)', source_archive_path) for c in unpack_command]
 
 
         # Unpack the package.

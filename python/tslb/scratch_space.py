@@ -266,10 +266,7 @@ class ScratchSpace:
 
     @property
     def mount_path(self):
-        if self.mounted:
-            return self._mountpoint
-        else:
-            return None
+        return self._mountpoint
 
 
     @property

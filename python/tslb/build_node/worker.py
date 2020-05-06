@@ -4,6 +4,7 @@ from tslb import Architecture
 from tslb.Console import Color
 from tslb.VersionNumber import VersionNumber
 from tslb.package_builder import PackageBuilder, PkgBuildFailed
+import os
 import signal
 import subprocess
 import sys
@@ -11,13 +12,8 @@ import time
 import traceback
 
 
-# Globals (for signal handling)
-package_builder = None
-
-
 def signal_handler(signum, stack_frame):
-    if package_builder:
-        package_builder.stop_build()
+    pass
 
 
 def worker(name, arch, version_number, identity):
@@ -36,6 +32,8 @@ def worker(name, arch, version_number, identity):
     :returns: Error code from FAIL_REASON_* or 255 on success.
     """
     global package_builder
+
+    os.setpgrp()
 
     print("Building Source Package %s:%s@%s" % (name, version_number, Architecture.to_str(arch)))
 

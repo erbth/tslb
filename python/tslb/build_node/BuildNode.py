@@ -10,6 +10,7 @@ import asyncio
 import base64
 import json
 import os
+import signal
 import time
 import yamb_node
 
@@ -97,7 +98,7 @@ class BuildNode(object):
             self.worker_monitor.cancel()
 
         if self.worker_process is not None and self.worker_process.returncode is None:
-            self.worker_process.terminate()
+            os.killpg(self.worker_process.pid, signal.SIGTERM)
             print(Color.RED + "Killed the worker process." + Color.NORMAL)
 
         # Stop all remaining tasks
@@ -206,7 +207,7 @@ class BuildNode(object):
                         self.worker_monitor_function())
 
                 except:
-                    self.worker_process.terminate()
+                    os.killpg(self.worker_process.pid, signal.SIGTERM)
                     await self.worker_process.wait()
                     self.worker_process = None
                     raise
@@ -238,7 +239,7 @@ class BuildNode(object):
         if self.state[0] == STATE_BUILDING:
             if self.worker_process is not None:
                 if self.worker_process.returncode is None:
-                    self.worker_process.terminate()
+                    os.killpg(self.worker_process.pid, signal.SIGTERM)
 
         else:
             self.send_message_to_client(dst, {

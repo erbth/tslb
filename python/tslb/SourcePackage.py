@@ -18,6 +18,7 @@ import os
 import pickle
 from tslb import tclm
 from tslb import timezone
+from scratch_space import ScratchSpacePool
 
 # For convenience methods
 from tslb.Constraint import VersionConstraint, DependencyList
@@ -33,18 +34,13 @@ class SourcePackageList(object):
 
         # Define a few required locks
         self.dbrlp = 'tslb.db.%s.source_packages' % architectures[architecture]
-        self.fsrlp = 'tslb.fs.%s.packaging' % architectures[architecture]
 
         self.db_root_lock = tclm.define_lock(self.dbrlp)
-        self.fs_root_lock = tclm.define_lock(self.fsrlp)
 
         # Create locks if desired
         if create_locks:
-            self.fs_root_lock.create(True)
             self.db_root_lock.create(True)
-
             self.db_root_lock.release_X()
-            self.fs_root_lock.release_X()
 
     def list_source_packages(self):
         """
@@ -68,61 +64,46 @@ class SourcePackageList(object):
         :returns: A source package with write intent
         """
         # Lock the source package list and the fs
-        with lock_X(self.fs_root_lock):
-            with lock_X(self.db_root_lock):
-                s = database.get_session()
+        with lock_X(self.db_root_lock):
+            s = database.get_session()
 
-                try:
-                    # Create the db tuple
-                    p = aliased(dbspkg.SourcePackage)
-                    if s.query(p).filter(p.name == name, p.architecture == self.architecture).first():
-                        raise SourcePackageExists(name, self.architecture)
+            try:
+                # Create the db tuple
+                p = aliased(dbspkg.SourcePackage)
+                if s.query(p).filter(p.name == name, p.architecture == self.architecture).first():
+                    raise SourcePackageExists(name, self.architecture)
 
-                    spkg = dbspkg.SourcePackage()
-                    spkg.initialize_fields(name, self.architecture)
+                spkg = dbspkg.SourcePackage()
+                spkg.initialize_fields(name, self.architecture)
 
-                    s.add(spkg)
-                    del spkg
+                s.add(spkg)
+                del spkg
 
-                    # Create fs location
-                    fs_base = os.path.join(settings.get_packaging_location(), name)
+                # Create locks
+                SourcePackage(name, self.architecture, write_intent = True,
+                        create_locks = True, db_session = s)
 
-                    # Transactionality
-                    try:
-                        fops.mkdir_p (fs_base, 0o755)
+                s.commit()
 
-                        # Create locks
-                        SourcePackage(name, self.architecture, write_intent = True,
-                                create_locks = True, db_session = s)
+                return SourcePackage(name, self.architecture, write_intent = True)
 
-                        s.commit()
-
-                    except:
-                        fops.rm_rf(fs_base)
-                        raise
-
-                    return SourcePackage(name, self.architecture, write_intent = True)
-
-                except:
-                    s.rollback()
-                    raise
-                finally:
-                    s.close()
+            except:
+                s.rollback()
+                raise
+            finally:
+                s.close()
 
     def destroy_source_package(self, name):
-        # Lock the source package list and the fs
-        with lock_X(self.fs_root_lock):
-            with lock_X(self.db_root_lock):
-                # Remove the db tuple(s)
-                with database.session_scope() as s:
-                    spkg = s.query(dbspkg.SourcePackage).\
-                            filter_by(name=name, architecture=self.architecture).first()
+        # Lock the source package list
+        with lock_X(self.db_root_lock):
+            # Remove the db tuple(s)
+            with database.session_scope() as s:
+                spkg = s.query(dbspkg.SourcePackage).\
+                        filter_by(name=name, architecture=self.architecture).first()
 
-                    if spkg:
-                        s.delete(spkg)
+                if spkg:
+                    s.delete(spkg)
 
-                    # Remove the fs location(s)
-                    fops.rm_rf (os.path.join(settings.get_packaging_location(), name))
 
 class SourcePackage(object):
     def __init__(self, name, architecture,
@@ -141,24 +122,16 @@ class SourcePackage(object):
 
         # Define a few required locks
         self.dbrlp = 'tslb.db.%s.source_packages.%s' % (architectures[self.architecture], self.name)
-        self.fsrlp = 'tslb.fs.%s.packaging.%s' % (architectures[self.architecture], self.name)
-
         self.db_root_lock = tclm.define_lock(self.dbrlp)
-
-        self.fs_root_lock = tclm.define_lock(self.fsrlp)
 
         # Create locks if desired
         if create_locks:
-            self.fs_root_lock.create(False)
             self.db_root_lock.create(False)
 
         # Acquire locks in the requested mode
         if write_intent:
-            # Deadlock free locking protocol: First fs, then db.
-            self.fs_root_lock.acquire_Splus()
             self.db_root_lock.acquire_Splus()
         else:
-            self.fs_root_lock.acquire_S()
             self.db_root_lock.acquire_S()
 
         # Download information from the DB. This is like an opaque class, hence
@@ -169,17 +142,12 @@ class SourcePackage(object):
         try:
             self.read_from_db(db_session)
 
-            # The fs location for this source package:
-            self.fs_base = os.path.join(settings.get_packaging_location(), name)
-
         except:
             # Release locks
             if write_intent:
                 self.db_root_lock.release_Splus()
-                self.fs_root_lock.release_Splus()
             else:
                 self.db_root_lock.release_S()
-                self.fs_root_lock.release_S()
 
             raise
 
@@ -187,10 +155,8 @@ class SourcePackage(object):
         try:
             if self.write_intent:
                 self.db_root_lock.release_Splus()
-                self.fs_root_lock.release_Splus()
             else:
                 self.db_root_lock.release_S()
-                self.fs_root_lock.release_S()
 
         except Exception as e:
             print("Failed to __del__ %s: %s." % (repr(self), e))
@@ -199,18 +165,13 @@ class SourcePackage(object):
             print("Failed to __del__ %s." % repr(self))
 
 
-    # Peripheral methods and functions ...
+
+#******************* Peripheral methods and functions *************************
     def ensure_write_intent(self):
         if not self.write_intent:
             # Abort to avoid deadlocks
             raise MissingWriteIntent
-            # self.write_intent = True
 
-            # self.fs_root_lock.acquire_Splus()
-            # self.fs_root_lock.release_S()
-
-            # self.db_root_lock.acquire_Splus()
-            # self.db_root_lock.release_S()
 
     def read_from_db(self, db_session=None):
         s = db_session if db_session else database.conn.get_session()
@@ -329,63 +290,51 @@ class SourcePackage(object):
         if not time:
             time = timezone.now()
 
-        with lock_X(self.fs_root_lock):
-            with lock_X(self.db_root_lock):
-                s = database.get_session()
+        with lock_X(self.db_root_lock):
+            s = database.get_session()
 
-                try:
-                    pvs = aliased(dbspkg.SourcePackageVersion)
-                    if s.query(pvs)\
-                            .filter(pvs.source_package == self.name,
-                                    pvs.architecture == self.architecture,
-                                    pvs.version_number == version_number)\
-                            .first():
-                        raise SourcePackageVersionExists(self.name, self.architecture, version_number)
+            try:
+                pvs = aliased(dbspkg.SourcePackageVersion)
+                if s.query(pvs)\
+                        .filter(pvs.source_package == self.name,
+                                pvs.architecture == self.architecture,
+                                pvs.version_number == version_number)\
+                        .first():
+                    raise SourcePackageVersionExists(self.name, self.architecture, version_number)
 
-                    # Create the fs locations
-                    fs_base = os.path.join(self.fs_base, str(version_number))
+                # Add the db tuple
+                pv = dbspkg.SourcePackageVersion()
+                pv.initialize_fields(self.name, self.architecture, version_number)
+                s.add(pv)
 
-                    try:
-                        os.mkdir (fs_base, 0o755)
+                # Create a version object to create locks
+                SourcePackageVersion(
+                        self, version_number, create_locks=True, db_session=s)
 
-                        for d in [ 'build_location', 'install_location', 'binary_packages' ]:
-                            os.mkdir (os.path.join(fs_base, d), 0o755)
+                self.dbo.versions_modified_time = time
+                self.dbo.versions_reassured_time = time
+                s.add(self.dbo)
 
-                        # Add the db tuple
-                        pv = dbspkg.SourcePackageVersion()
-                        pv.initialize_fields(self.name, self.architecture, version_number)
-                        s.add(pv)
+                # Transactionality
+                s.commit()
 
-                        # Create a version object to create locks
-                        SourcePackageVersion(
-                                self, version_number, create_locks=True, db_session=s)
+                self.read_from_db()
 
-                        self.dbo.versions_modified_time = time
-                        self.dbo.versions_reassured_time = time
-                        s.add(self.dbo)
+                # Create a new version object because the former one was bound
+                # to the former session (for transactionality).
+                return SourcePackageVersion(self, version_number)
 
-                        # Transactionality
-                        s.commit()
+            except:
+                s.rollback()
+                raise
+            finally:
+                s.close()
 
-                    except:
-                        fops.rm_rf (fs_base)
-                        raise
-
-                    self.read_from_db()
-
-                    # Create a new version object because the former one was bound
-                    # to the former session (for transactionality).
-                    return SourcePackageVersion(self, version_number)
-
-                except:
-                    s.rollback()
-                    raise
-                finally:
-                    s.close()
 
     def delete_version(self, version_number, time = None):
         """
-        Delete a version. This may raise (among others) an AttributeManuallyHeld.
+        Delete a version. This may raise (among others) an
+        AttributeManuallyHeld.
         """
         if self.dbo.versions_manual_hold_time:
             raise AttributeManuallyHeld("versions")
@@ -396,45 +345,48 @@ class SourcePackage(object):
         if not time:
             time = timezone.now()
 
-        with lock_X(self.fs_root_lock):
-            with lock_X(self.db_root_lock):
-                # Delete fs locations
-                fops.rm_rf(os.path.join(self.source_package.fs_base, str(self.version_number)))
+        with lock_X(self.db_root_lock):
+            # Delete scratch space
+            ScratchSpacePool().delete_scratch_space("%s@%s:%s" % (
+                self.name,
+                Architecture.to_str(self.architecture),
+                version_number))
 
-                # Delete the db tuple
-                s = database.get_session()
+            # Delete the db tuple
+            s = database.get_session()
 
-                try:
-                    pv = aliased(dbspkg.SourcePackageVersion)
-                    v = s.query(pv)\
-                            .filter(pv.source_package == self.name,
-                                    pv.architecture == self.architecture,
-                                    pv.version_number == version_number)\
-                            .first()
+            try:
+                pv = aliased(dbspkg.SourcePackageVersion)
+                v = s.query(pv)\
+                        .filter(pv.source_package == self.name,
+                                pv.architecture == self.architecture,
+                                pv.version_number == version_number)\
+                        .first()
 
-                    # Could be that something went wrong when creating this package.
-                    # We'd tolerate that.
-                    if v is not None:
-                        s.delete(v)
+                # Could be that something went wrong when creating this package.
+                # We'd tolerate that.
+                if v is not None:
+                    s.delete(v)
 
-                        self.dbo.versions_modified_time = time
-                        self.dbo.versions_reassured_time = time
-                        s.add(self.dbo)
+                    self.dbo.versions_modified_time = time
+                    self.dbo.versions_reassured_time = time
+                    s.add(self.dbo)
 
-                        s.commit()
-                        s.close()
-
-                        self.read_from_db()
-
-                    else:
-                        s.rollback()
-
-                except:
-                    s.rollback()
-                    raise
-
-                finally:
+                    s.commit()
                     s.close()
+
+                    self.read_from_db()
+
+                else:
+                    s.rollback()
+
+            except:
+                s.rollback()
+                raise
+
+            finally:
+                s.close()
+
 
     def get_versions_meta(self):
         """
@@ -472,39 +424,28 @@ class SourcePackageVersion(object):
         self.version_number = version_number
 
         # For convenience:
+        self.name = self.source_package.name
         self.architecture = self.source_package.architecture
 
         # Create locks if requested
         vs = str(self.version_number).replace('.', '_')
-        self.fsrlp = source_package.fsrlp + "." + vs
         self.dbrlp = source_package.dbrlp + "." + vs
-
-        self.fs_root_lock = tclm.define_lock(self.fsrlp)
-        self.fs_build_location_lock = tclm.define_lock(self.fsrlp + '.build_location')
-        self.fs_install_location_lock = tclm.define_lock(self.fsrlp + '.install_location')
-        self.fs_binary_packages_lock = tclm.define_lock(self.fsrlp + '.binary_packages')
 
         self.db_root_lock = tclm.define_lock(self.dbrlp)
         self.db_binary_packages_lock = tclm.define_lock(self.dbrlp + '.binary_packages')
 
         if create_locks:
             self.ensure_write_intent()
-
-            for l in [
-                    self.fs_build_location_lock,
-                    self.fs_install_location_lock,
-                    self.fs_binary_packages_lock,
-                    self.db_binary_packages_lock ]:
-                l.create(False)
+            self.db_binary_packages_lock.create(False)
 
         # Bind a DB object
         self.read_from_db(db_session)
 
-        # Fs locations
-        self.fs_base = os.path.join(self.source_package.fs_base, str(self.version_number))
-        self.fs_build_location = os.path.join(self.fs_base, 'build_location')
-        self.fs_install_location = os.path.join(self.fs_base, 'install_location')
-        self.fs_binary_packages = os.path.join(self.fs_base, 'binary_packages')
+        # A scratch space
+        self.scratch_space = ScratchSpacePool().get_scratch_space(
+            "%s@%s:%s" % (self.name, Architecture.to_str(self.architecture), self.version_number),
+            self.source_package.write_intent,
+            100 * 1024 * 1024 * 1024)
 
 
     # Peripheral methods
@@ -538,26 +479,30 @@ class SourcePackageVersion(object):
             if not db_session:
                 s.close()
 
+
     def ensure_write_intent(self):
         """
         A convenience method that calls self.source_package.ensure_write_intent.
         """
         self.source_package.ensure_write_intent()
 
-    def clean_fs_locations(self):
+
+    def clean_scratch_space(self):
         """
         Delete all content from the build- and install locations on the tslb fs.
         The binary packages are not removed because they'll get new version
         numbers and may still be needed for inspection.
         """
-        fops.clean_directory(self.fs_build_location)
-        fops.clean_directory(self.fs_install_location)
+        self.ensure_write_intent()
+        self.scratch_space.mount()
+        fops.clean_directory(self.scratch_space.mount_path)
 
 
     # Attributes
     # General
     def get_creation_time(self):
         return self.dbo.creation_time
+
 
     # Installed files
     def set_installed_files(self, files, time=None):
@@ -622,6 +567,7 @@ class SourcePackageVersion(object):
 
             self.read_from_db()
 
+
     def get_installed_files(self):
         """
         :returns: list(tuple(path, sha512sum))
@@ -637,12 +583,14 @@ class SourcePackageVersion(object):
 
             return l
 
+
     def get_installed_files_meta(self):
         """
         :returns: tuple(modified_time, reassured_time)
         :rtype: tuple(datetime, datetime)
         """
         return (self.dbo.installed_files_modified_time, self.dbo.installed_files_reassured_time)
+
 
     # Shared libraries
     def get_shared_libraries(self):
@@ -671,6 +619,7 @@ class SourcePackageVersion(object):
                 libs.append(SharedLibrary(dblib, files))
 
             return libs
+
 
     def set_shared_libraries(self, libs):
         """
@@ -707,6 +656,7 @@ class SourcePackageVersion(object):
                             { 'id': id, 'path': f } for f in l.files
                         ]))
 
+
     # Binary packages
     def list_current_binary_packages(self):
         """
@@ -728,6 +678,7 @@ class SourcePackageVersion(object):
 
             return [ e[0] for e in cbps ]
 
+
     def get_current_binary_packages_meta(self):
         """
         No manual hold time is returned because it does not make sense to hold
@@ -738,6 +689,7 @@ class SourcePackageVersion(object):
         """
         return (self.dbo.current_binary_packages_modified_time,
                 self.dbo.current_binary_packages_reassured_time)
+
 
     def set_current_binary_packages(self, names, time = None):
         """
@@ -804,6 +756,7 @@ class SourcePackageVersion(object):
 
             self.read_from_db()
 
+
     def list_all_binary_packages(self):
         """
         List all binary packages that were built from this source package,
@@ -821,7 +774,8 @@ class SourcePackageVersion(object):
                     .distinct()\
                     .all()
 
-            return [ n[0] for n in names ]
+            return [n[0] for n in names]
+
 
     def list_binary_package_version_numbers(self, name):
         """
@@ -842,7 +796,8 @@ class SourcePackageVersion(object):
                     .order_by(bp.version_number)\
                     .all()
 
-            return [ v[0] for v in vs ]
+            return [v[0] for v in vs]
+
 
     def get_binary_package(self, name, version_number):
         """
@@ -855,6 +810,7 @@ class SourcePackageVersion(object):
         version_number = VersionNumber(version_number)
 
         return BinaryPackage(self, name, version_number)
+
 
     def add_binary_package(self, name, version_number):
         """
@@ -869,47 +825,29 @@ class SourcePackageVersion(object):
         self.ensure_write_intent()
         version_number = VersionNumber(version_number)
 
-        with lock_X(self.fs_binary_packages_lock):
-            with lock_X(self.db_root_lock):
-                s = database.get_session()
+        with lock_X(self.db_root_lock):
+            with database.session_scope() as s:
+                # Create db tuple
+                bp = dbbpkg.BinaryPackage()
+                bp.initialize_fields(
+                        self.source_package.name,
+                        self.architecture,
+                        self.version_number,
+                        name,
+                        version_number)
 
-                try:
-                    # Create fs locations
-                    fs_base = os.path.join(self.fs_binary_packages, name, str(version_number))
+                s.add(bp)
 
-                    try:
-                        fops.mkdir_p (fs_base, 0o755)
+                # Create a binary package object to create locks
+                BinaryPackage(self, name, version_number, create_locks=True, db_session=s)
 
-                        # Create db tuple
-                        bp = dbbpkg.BinaryPackage()
-                        bp.initialize_fields(
-                                self.source_package.name,
-                                self.architecture,
-                                self.version_number,
-                                name,
-                                version_number)
+                # Commit
+                s.commit()
 
-                        s.add(bp)
+                # Create a new binary package object that is not bound to the
+                # former session and can therefore be returned.
+                return BinaryPackage(self, name, version_number)
 
-                        # Create a binary package object to create locks
-                        BinaryPackage(self, name, version_number, create_locks=True, db_session=s)
-
-                        # Commit
-                        s.commit()
-
-                    except:
-                        fops.rm_rf (fs_base)
-                        raise
-
-                    # Create a new binary package object that is not bound to the
-                    # former session and can therefore be returned.
-                    return BinaryPackage(self, name, version_number)
-
-                except:
-                    s.rollback()
-                    raise
-                finally:
-                    s.close()
 
     def delete_binary_package(self, name, version_number):
         """
@@ -920,23 +858,24 @@ class SourcePackageVersion(object):
         :param version_number: The binary package's version number
         """
         self.ensure_write_intent()
+        self.scratch_space.mount()
 
         version_number = VersionNumber(version_number)
 
-        with lock_X(self.fs_binary_packages_lock):
-            with lock_X(self.db_root_lock):
-                with database.session_scope() as s:
-                    # Delete db tuple
-                    s.query(dbbpkg.BinaryPackage)\
-                            .filter_by(source_package = self.source_package.name,
-                                    architecture = self.architecture,
-                                    source_package_version_number = self.version_number,
-                                    name = name,
-                                    version_number = version_number)\
-                            .delete()
+        with lock_X(self.db_root_lock):
+            with database.session_scope() as s:
+                # Delete db tuple
+                s.query(dbbpkg.BinaryPackage)\
+                        .filter_by(source_package = self.source_package.name,
+                                architecture = self.architecture,
+                                source_package_version_number = self.version_number,
+                                name = name,
+                                version_number = version_number)\
+                        .delete()
 
-                    # Delete fs location
-                    fops.rm_rf(os.path.join(self.fs_binary_packages, name, str(version_number)))
+                # Delete the binary package's files in the scratch space
+                fops.rm_rf(os.path.join('/binary_packages', name, str(version_number)))
+
 
     # Key-Value-Store like attributes
     def list_attributes(self):
@@ -951,7 +890,8 @@ class SourcePackageVersion(object):
                             pa.version_number == self.version_number)\
                     .all()
 
-            return [ e[0] for e in l]
+            return [e[0] for e in l]
+
 
     def has_attribute(self, key):
         """
@@ -966,6 +906,7 @@ class SourcePackageVersion(object):
                             pa.version_number == self.version_number,
                             pa.key == key)\
                     .all()) != 0
+
 
     def get_attribute(self, key):
         """
@@ -999,6 +940,7 @@ class SourcePackageVersion(object):
             else:
                 return None
 
+
     def get_attribute_meta(self, key):
         """
         :param key: The attribute's key
@@ -1021,6 +963,7 @@ class SourcePackageVersion(object):
                             self.version_number), key)
 
             return v[0]
+
 
     def manually_hold_attribute(self, key, remove=False, time=None):
         self.ensure_write_intent()
@@ -1050,6 +993,7 @@ class SourcePackageVersion(object):
                 else:
                     v.manual_hold_time = time
 
+
     def attribute_manually_held(self, key):
         """
         :returns: The time the attribute was manually held or None
@@ -1070,6 +1014,7 @@ class SourcePackageVersion(object):
                             self.version_number), key)
 
             return v[0][0]
+
 
     def set_attribute(self, key, value, time = None):
         """
@@ -1122,6 +1067,7 @@ class SourcePackageVersion(object):
 
                     a.reassured_time = time
 
+
     def unset_attribute(self, key):
         self.ensure_write_intent()
 
@@ -1159,11 +1105,13 @@ class SourcePackageVersion(object):
         else:
             return None
 
+
     def set_cdeps(self, dl):
         if not isinstance(dl, DependencyList):
             raise TypeError
         else:
             self.set_attribute('cdeps', dl)
+
 
     def add_cdep(self, pkg_name, c='', vn='0'):
         """
@@ -1178,6 +1126,7 @@ class SourcePackageVersion(object):
             dl = DependencyList()
             dl.add_constraint(pkg_name, VersionConstraint(c, vn))
             self.set_attribute('cdeps', dl)
+
 
     def remove_cdep(self, pkg_name):
         if self.has_attribute('cdeps'):
@@ -1203,7 +1152,7 @@ class SourcePackageVersion(object):
                 Architecture.to_str(self.architecture), self.version_number)
 
 
-# Some exceptions for our pleasure.
+# Some exceptions at our pleasure.
 class NoSuchSourcePackage(Exception):
     def __init__(self, name, architecture):
         architecture = architectures[architecture]

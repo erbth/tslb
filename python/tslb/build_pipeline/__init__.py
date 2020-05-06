@@ -251,25 +251,26 @@ class BuildPipeline(object):
 
                     # Restore snapshot if there is one
                     if restore_event.snapshot_name:
-                        Console.print_status_box("Restoring snapshot `%s' at `%s'" %
-                                (restore_event.snapshot_name, restore_event.snapshot_path),
+                        Console.print_status_box("Restoring snapshot `%s'" %
+                                restore_event.snapshot_name,
                                 file=self.out)
 
                         fops.restore_snapshot(restore_event.snapshot_path,
                                 restore_event.snapshot_name)
 
+                        spv.scratch_space.revert_snapshot(restore_event.snapshot_name)
+
                         Console.update_status_box(True, file=self.out)
 
                     else:
-                        raise RuntimeError("No snapshot `%s' at `%s'." % (
-                            restore_event.snapshot_name, restore_event.snapshot_path))
+                        raise RuntimeError("No snapshot for stage `%s'." %
+                            restore_event.stage)
 
 
             else:
-                # Nothing succeeded so far - or before this stage, just clean the
-                # fs locations.
-                Console.print_status_box("Cleaning fs locations.", file=self.out)
-                spv.clean_fs_locations()
+                # Nothing succeeded so far, just clean the scratch space.
+                Console.print_status_box("Cleaning the source package version's scratch space.", file=self.out)
+                spv.clean_scratch_space()
                 Console.update_status_box(True, file=self.out)
 
 
@@ -324,12 +325,12 @@ class BuildPipeline(object):
                     success,
                     file=self.out)
 
-                # Make a snapshot
+                # Make a snapshot if the stage succeeded
                 if success:
-                    snapshot_path = spv.fs_base
+                    snapshot_path = None
                     snapshot_name = "%s-%s" % (stage.name, timezone.now())
 
-                    fops.make_snapshot(snapshot_path, snapshot_name)
+                    spv.create_snapshot(snapshot_name)
 
                 else:
                     snapshot_path = None
@@ -352,7 +353,7 @@ class BuildPipeline(object):
 
                 except:
                     if success:
-                        fops.delete_snapshot(snapshot_path, snapshot_name)
+                        spv.delete_snapshot(snapshot_name)
                     raise
 
                 if not success:
