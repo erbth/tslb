@@ -66,12 +66,6 @@ class BinaryPackage(object):
         # Bind to the corresponding db tuple
         self.read_from_db(db_session)
 
-        # A location for this binary package in the source package version's
-        # scratch space
-        self.fs_base = os.path.join(
-            self.source_package_version.scratch_space.mount_path,
-            self.name, str(self.version_number))
-
 
     # Peripheral methods
     def read_from_db(self, db_session = None):
@@ -109,6 +103,17 @@ class BinaryPackage(object):
         A convenience method that calls self.source_package_version.ensure_write_intent()
         """
         self.source_package_version.ensure_write_intent()
+
+
+    @property
+    def fs_base(self):
+        """
+        A location for this binary package in the source package version's
+        scratch space
+        """
+        return os.path.join(
+            self.source_package_version.scratch_space.mount_path,
+            self.name, str(self.version_number))
 
 
     # Attributes

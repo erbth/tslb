@@ -29,11 +29,12 @@ class cephfs(Fsbase):
                 raise CommandFailed(' '.join(cmd), ret)
 
     def unmount(self):
-        cmd = [ 'umount', self.root ]
+        if self.is_mounted():
+            cmd = [ 'umount', self.root ]
 
-        ret = subprocess.call(cmd)
-        if ret != 0:
-            raise CommandFailed(' '.join(cmd), ret)
+            ret = subprocess.call(cmd)
+            if ret != 0:
+                raise CommandFailed(' '.join(cmd), ret)
 
     def is_mounted(self):
         # Check if it is mounted

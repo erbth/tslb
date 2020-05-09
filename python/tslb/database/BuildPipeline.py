@@ -49,7 +49,7 @@ class BuildPipelineStageEvent(Base):
         success  = 100000
         outdated = 150000
         
-        values = [ failed, begin, success ]
+        values = [ failed, begin, success, outdated ]
 
         str_map = {
                 failed: 'failed',

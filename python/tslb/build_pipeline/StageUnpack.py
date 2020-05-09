@@ -8,12 +8,15 @@ from tslb.tclm import lock_S, lock_Splus, lock_X
 class StageUnpack(object):
     name = 'unpack'
 
-    def flow_through(spv, out):
+    def flow_through(spv, rootfs_mountpoint, out):
         """
         :param spv: The source package version to let flow through this segment
             of the pipeline.
 
         :type spv: SourcePackage.SourcePackageVersion
+
+        :param str rootfs_mountpoint: The mountpoint at which the rootfs image
+            that should be used for the build is mounted.
 
         :param out: The (wrapped) fd to send output that shall be recorded in
             the db to.  Typically all output would go there.
@@ -76,46 +79,45 @@ class StageUnpack(object):
         # Unpack the package.
         success = False
 
-        with lock_X(spv.fs_build_location_lock):
-            try:
-                ret = subprocess.run(unpack_command, cwd=spv.fs_build_location,
-                        stdout=out.fileno(), stderr=out.fileno())
+        try:
+            spv.ensure_build_location()
 
-                if ret.returncode == 0:
-                    success = True
+            ret = subprocess.run(unpack_command, cwd=spv.build_location,
+                    stdout=out.fileno(), stderr=out.fileno())
 
-            except Exception as e:
+            if ret.returncode == 0:
+                success = True
+
+        except BaseException as e:
+            success = False
+            out.write(str(e) + '\n')
+
+
+        # Check for the expected unpacked directory
+        if spv.has_attribute('unpacked_source_directory'):
+            unpacked_source_directory = spv.get_attribute('unpacked_source_directory')
+            usdp = os.path.join(spv.build_location, unpacked_source_directory)
+
+            if not os.path.exists(usdp):
+                out.write("The unpacked source directory `%s' does not exist after unpacking.\n" %\
+                    unpacked_source_directory)
+
                 success = False
-                out.write(str(e) + '\n')
-            except:
-                success = False
 
+        else:
+            dirs = os.listdir(spv.build_location)
+            l = len(dirs)
 
-            # Check for the expected unpacked directory
-            if spv.has_attribute('unpacked_source_directory'):
-                unpacked_source_directory = spv.get_attribute('unpacked_source_directory')
-                usdp = os.path.join(spv.fs_build_location, unpacked_source_directory)
+            if l == 0:
+                spv.set_attribute('unpacked_source_directory', None)
+                out.write("Set unpacked_source_directory to None.\n")
 
-                if not os.path.exists(usdp):
-                    out.write("The unpacked source directory `%s' does not exist after unpacking.\n" %\
-                        unpacked_source_directory)
-
-                    success = False
+            elif l > 1:
+                spv.set_attribute('unpacked_source_directory', '.')
+                out.write("Set unpacked_source_directory to `.'.\n")
 
             else:
-                dirs = os.listdir(spv.fs_build_location)
-                l = len(dirs)
-
-                if l == 0:
-                    spv.set_attribute('unpacked_source_directory', None)
-                    out.write("Set unpacked_source_directory to None.\n")
-
-                elif l > 1:
-                    spv.set_attribute('unpacked_source_directory', '.')
-                    out.write("Set unpacked_source_directory to `.'.\n")
-
-                else:
-                    spv.set_attribute('unpacked_source_directory', dirs[0])
-                    out.write("Set unpacked_source_directory to `%s'.\n" % dirs[0])
+                spv.set_attribute('unpacked_source_directory', dirs[0])
+                out.write("Set unpacked_source_directory to `%s'.\n" % dirs[0])
 
         return success

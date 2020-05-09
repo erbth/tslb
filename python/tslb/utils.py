@@ -10,7 +10,7 @@ from tslb import tclm
 from tslb.tclm import lock_X
 from tslb import tclm
 from tslb import rootfs
-from tslb import package_builder as pb
+from tslb import scratch_space
 import multiprocessing
 import os
 
@@ -20,22 +20,25 @@ def initially_create_all_locks():
     Creates all locks at the tclm. Useful to populate them when starting the
     system.
     """
+    # Create locks for scratch spaces
+    scratch_space.create_locks()
+
+    # Create locks for packages
     for arch in architectures.keys():
         spl = SourcePackageList(arch, create_locks = True)
 
         sps = spl.list_source_packages()
 
-        with lock_X(spl.fs_root_lock):
-            with lock_X(spl.db_root_lock):
-                for n in sps:
-                    p = SourcePackage(n, arch, create_locks=True, write_intent=True)
+        with lock_X(spl.db_root_lock):
+            for n in sps:
+                p = SourcePackage(n, arch, create_locks=True, write_intent=True)
 
-                    for v in p.list_version_numbers():
-                        spv = SourcePackageVersion(p, v, create_locks=True)
+                for v in p.list_version_numbers():
+                    spv = SourcePackageVersion(p, v, create_locks=True)
 
-                        for bn in spv.list_all_binary_packages():
-                            for bv in spv.list_binary_package_version_numbers(bn):
-                                BinaryPackage(spv, bn, bv, create_locks=True)
+                    for bn in spv.list_all_binary_packages():
+                        for bv in spv.list_binary_package_version_numbers(bn):
+                            BinaryPackage(spv, bn, bv, create_locks=True)
 
 
     # Create locks for rootfs images
@@ -81,6 +84,9 @@ def run_bash_in_rootfs_image(img_id):
 
     image.mount(mount_namespace)
     mountpoint = image.get_mountpoint(mount_namespace)
+
+    # Avoid a cyclic import dependency
+    from tslb import package_builder as pb
 
     try:
         pb.mount_pseudo_filesystems(mountpoint)

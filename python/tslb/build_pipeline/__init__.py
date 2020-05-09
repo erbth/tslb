@@ -1,3 +1,15 @@
+import asyncio
+from datetime import datetime
+import fcntl
+import os
+import pty
+import select
+import struct
+import subprocess
+import sys
+import termios
+import threading
+
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.expression import or_
 from tslb import BinaryPackage as bp
@@ -12,15 +24,6 @@ from tslb.database import BuildPipeline as dbbp
 from tslb.filesystem import FileOperations as fops
 from tslb.buffers import ConsoleBufferFixedSize
 from tslb.utils import FDWrapper
-import asyncio
-import fcntl
-import os
-import pty
-import select
-import struct
-import sys
-import termios
-import threading
 
 from .StageUnpack import StageUnpack
 from .StagePatch import StagePatch
@@ -96,10 +99,12 @@ class BuildPipeline(object):
         self.output_buffer = ConsoleBufferFixedSize(10 * 1024 * 1024)
 
 
-    def build_source_package_version(self, spv):
+    def build_source_package_version(self, spv, rootfs_mountpoint):
         """
         :param spv: The source package version to build
         :type spv: SourcePackage.SourcePackage
+        :param str rootfs_mountpoint: The root of the mounted root file system
+            image that should be used for building the package.
         :returns: True on success else False.
         """
         self.out.write(Color.YELLOW + "Building source package version " + Color.NORMAL +
@@ -255,10 +260,18 @@ class BuildPipeline(object):
                                 restore_event.snapshot_name,
                                 file=self.out)
 
-                        fops.restore_snapshot(restore_event.snapshot_path,
-                                restore_event.snapshot_name)
+                        if subprocess.run(['umount', os.path.join(rootfs_mountpoint, 'tmp/tslb/scratch_space')]).returncode != 0:
+                            raise RuntimeError("Failed to un-bind-mount the scratch space")
 
                         spv.scratch_space.revert_snapshot(restore_event.snapshot_name)
+
+                        if subprocess.run([
+                                'mount', '--bind',
+                                spv.scratch_space.mount_path,
+                                os.path.join(rootfs_mountpoint, 'tmp/tslb/scratch_space')
+                            ]).returncode != 0:
+
+                            raise RuntimeError("Failed to bind-mount the scratch space")
 
                         Console.update_status_box(True, file=self.out)
 
@@ -318,7 +331,7 @@ class BuildPipeline(object):
                     Color.NORMAL)
 
                 self.output_buffer.clear()
-                success = stage.flow_through(spv, FDWrapper(slave))
+                success = stage.flow_through(spv, rootfs_mountpoint, FDWrapper(slave))
 
                 Console.print_finished_status_box(Color.CYAN +
                     'Flowing through stage %s' % stage.name + Color.NORMAL,
@@ -328,9 +341,9 @@ class BuildPipeline(object):
                 # Make a snapshot if the stage succeeded
                 if success:
                     snapshot_path = None
-                    snapshot_name = "%s-%s" % (stage.name, timezone.now())
+                    snapshot_name = "%s-%s" % (stage.name, datetime.utcnow().isoformat())
 
-                    spv.create_snapshot(snapshot_name)
+                    spv.scratch_space.create_snapshot(snapshot_name)
 
                 else:
                     snapshot_path = None

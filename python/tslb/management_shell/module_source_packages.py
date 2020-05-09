@@ -1,11 +1,18 @@
 import datetime
 import locale
+import subprocess
+import tslb.database as db
+import tslb.database.BuildPipeline
+from sqlalchemy.orm import aliased
+from tslb.Console import Color
 from tslb import Architecture
 from tslb import CommonExceptions as ces
 from tslb import SourcePackage as spkg
 from tslb.management_shell import *
 from tslb.VersionNumber import VersionNumber
 from tslb.timezone import localtime
+from tslb.build_state import outdate_package_stage
+import tslb.build_pipeline as bpp
 
 
 class RootDirectory(Directory):
@@ -171,7 +178,7 @@ class SourcePackageVersionsManuallyHold(SourcePackageBaseAction):
                 print("Unheld versions manually.")
 
 
-# Presenting a single source package version
+#*************** Presenting a single source package version *******************
 class SourcePackageVersionDirectory(Directory):
     """
     One directory per source package version.
@@ -191,8 +198,10 @@ class SourcePackageVersionDirectory(Directory):
             SourcePackageVersionAttributesDirectory(self.pkg_name, self.arch, self.version),
             SourcePackageVersionBinaryPackagesDirectory(self.pkg_name, self.arch, self.version, False),
             SourcePackageVersionBinaryPackagesDirectory(self.pkg_name, self.arch, self.version, True),
+            SourcePackageVersionBuildStateDirectory(self.pkg_name, self.arch, self.version),
             SourcePackageVersionGenericAction(self.pkg_name, self.arch, self.version, "get_creation_time"),
             SourcePackageListAttributesAction(self.pkg_name, self.arch, self.version),
+            SourcePackageVersionInspectScratchSpaceAction(self.pkg_name, self.arch, self.version)
         ]
 
 
@@ -268,6 +277,33 @@ class SourcePackageListAttributesAction(Action, SourcePackageVersionFactoryBase)
                 val = str(val)
 
             print("%s: %s" % (attr, val))
+
+
+class SourcePackageVersionInspectScratchSpaceAction(Action, SourcePackageVersionFactoryBase):
+    """
+    Run a tools-system bash shell rooted in the package's scratch space. The
+    scratch space is mounted read- and writable and thus the source package
+    version locked in S+ mode.
+    """
+    def __init__(self, name, arch, version):
+        super().__init__(writes=True)
+
+        self.pkg_name = name
+        self.arch = arch
+        self.version = version
+
+        self.name = 'inspect_scratch_space'
+
+
+    def run(self, *args):
+        try:
+            spv = self.create_spv(True)
+            spv.mount_scratch_space()
+
+            subprocess.run(['bash'], cwd=spv.scratch_space.mount_path)
+
+        except BaseException as e:
+            print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + "\n")
 
 
 #************** Presenting a source package version's attributes **************
@@ -660,3 +696,108 @@ class BinaryPackageVersionUnsetAttributeAction(Action):
             self.bpvd.create_bp(True).unset_attribute(args[1])
         except ces.NoSuchAttribute:
             print("No such attribute.")
+
+
+#******************************** Build events ********************************
+class SourcePackageVersionBuildStateDirectory(Directory, SourcePackageVersionFactoryBase):
+    """
+    A directory that interfaces with the build pipeline and events that it
+    generates.
+    """
+    def __init__(self, name, arch, version):
+        super().__init__()
+
+        self.pkg_name = name
+        self.arch = arch
+        self.version = version
+
+        self.name = 'build_state'
+
+
+    def listdir(self):
+        return [
+            SourcePackageVersionBuildStateListAction(self),
+            SourcePackageVersionBuildStateOutdateAction(self),
+            SourcePackageVersionBuildStateListStagesAction()
+        ]
+
+
+class SourcePackageVersionBuildStateListAction(Action):
+    """
+    List a source package version's last build events
+    """
+    def __init__(self, build_state_directory):
+        super().__init__()
+
+        self.build_state_directory = build_state_directory
+        self.name = 'list'
+
+
+    def run(self, *args):
+        events = []
+
+        with db.session_scope() as s:
+            se = aliased(db.BuildPipeline.BuildPipelineStageEvent)
+            events = s.query(se)\
+                .filter(se.source_package == self.build_state_directory.pkg_name,
+                        se.architecture == self.build_state_directory.arch,
+                        se.version_number == self.build_state_directory.version)\
+                .order_by(se.time)
+
+
+        for event in events[-60:]:
+            print("[%s] %-10s %-30s (%s)" % (
+                event.time.strftime(locale.nl_langinfo(locale.D_T_FMT)),
+                db.BuildPipeline.BuildPipelineStageEvent.status_values.str_map[event.status],
+                event.stage,
+                event.snapshot_name))
+
+
+class SourcePackageVersionBuildStateOutdateAction(Action):
+    """
+    Outdate a specific stage of the source package version.
+    """
+    def __init__(self, build_state_directory):
+        super().__init__()
+
+        self.build_state_directory = build_state_directory
+        self.name = 'outdate'
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <stage name>" % args[0])
+            return
+
+        try:
+            outdate_package_stage(
+                self.build_state_directory.pkg_name,
+                self.build_state_directory.arch,
+                self.build_state_directory.version,
+                args[1])
+
+            print(Color.GREEN + "finished." + Color.NORMAL)
+
+        except ValueError as e:
+            print(str(e))
+
+        except BaseException as e:
+            print(Color.RED + "FAILED." + Color.NORMAL)
+
+
+class SourcePackageVersionBuildStateListStagesAction(Action):
+    """
+    List the stages of which the build pipeline is composed. It is convenient
+    to have such an action in the source package version's build events
+    directory, because it makes manually outdating the source package version
+    easier.
+    """
+    def __init__(self):
+        super().__init__()
+        self.name = 'list_buildpipeline_stages'
+
+
+    def run(self, *args):
+
+        for stage in bpp.all_stages:
+            print(stage.name)

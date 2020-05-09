@@ -18,7 +18,7 @@ import stat
 import subprocess
 import sys
 import tslb
-from build_pipeline import BuildPipeline
+from tslb.build_pipeline import BuildPipeline
 
 
 class PackageBuilder(object):
@@ -165,7 +165,7 @@ class PackageBuilder(object):
             mountpoint = image.get_mountpoint(self.mount_namespace)
 
             try:
-                mount_pseudo_filesystems(mountpoint)
+                mount_pseudo_filesystems(mountpoint, spkgv)
                 tpm_native = Tpm2()
 
                 # # Remove disruptive packages in a chroot environment
@@ -330,7 +330,7 @@ class PackageBuilder(object):
             mountpoint = image.get_mountpoint(self.mount_namespace)
 
             try:
-                mount_pseudo_filesystems(mountpoint)
+                mount_pseudo_filesystems(mountpoint, spkgv)
             except:
                 unmount_pseudo_filesystems(mountpoint, raises=False)
                 image.unmount(self.mount_namespace)
@@ -343,7 +343,7 @@ class PackageBuilder(object):
             mountpoint = image.get_mountpoint(self.mount_namespace)
 
             try:
-                mount_pseudo_filesystems(mountpoint)
+                mount_pseudo_filesystems(mountpoint, spkgv)
             except:
                 unmount_pseudo_filesystems(mountpoint, raises=False)
                 image.unmount(self.mount_namespace)
@@ -361,7 +361,7 @@ class PackageBuilder(object):
         bp = BuildPipeline()
 
         try:
-            r = bp.build_source_package_version(spkgv)
+            r = bp.build_source_package_version(spkgv, mountpoint)
             if not r:
                 raise PkgBuildFailed("Failed to the build package (the issue is probably at the package).")
 
@@ -397,7 +397,7 @@ def start_in_chroot(root, f, *args, **kwargs):
 
     :param root: The root to change to
     :param f: A function to call there
-    :type f: MUST return int or NoneType
+    :type f: MUST return int, NoneType or `subprocess.CompletedProcess`.
     :param *args: are passed to f
     :param **kwargs: are passed to f, too
     :returns: The started (but not joined) process.
@@ -415,11 +415,14 @@ def start_in_chroot(root, f, *args, **kwargs):
         os.environ['PATH'] = '/bin:/usr/bin:/sbin:/usr/sbin'
 
         # Special python path for dynamically copied code
-        os.environ['PYTHONPATH'] = '/tmp/tslb/lib/python3/dist-packages'
+        # os.environ['PYTHONPATH'] = '/tmp/tslb/lib/python3/dist-packages'
 
         os.chroot(root)
         os.chdir('/')
         r = f(*args, **kwargs)
+
+        if isinstance(r, subprocess.CompletedProcess):
+            r = r.returncode
 
         exit(0 if r is None else r)
 
@@ -431,7 +434,7 @@ def start_in_chroot(root, f, *args, **kwargs):
 
 
 # Mounting- and unmounting pseudo filesystems
-def mount_pseudo_filesystems(root):
+def mount_pseudo_filesystems(root, spv=None):
     """
     Mount all pseudo filesystems under root. Additionally a run/shm or dev/shm
     directory is created as needed.
@@ -440,7 +443,8 @@ def mount_pseudo_filesystems(root):
 
     :param root: The root of the directory tree in which the pseudo filesystems
         shall be mounted
-
+    :param SourcePackageVersion: The source package version whose scratch space
+        to mount if any.
     :raises RuntimeError: If root does not exist
     """
     _mount_procfs(root)
@@ -448,7 +452,7 @@ def mount_pseudo_filesystems(root):
     _mount_devtmpfs(root)
     _mount_run(root)
     _mount_tmp(root)
-    _mount_tslb_aux(root)
+    _mount_tslb_aux(root, spv)
 
     if os.path.islink(os.path.join(root, 'dev', 'shm')):
         if os.path.readlink(os.path.join(root, 'dev', 'shm')) == '/run/shm':
@@ -459,8 +463,8 @@ def mount_pseudo_filesystems(root):
     #         os.path.join('..', 'dev', 'shm'),
     #         os.path.join(root, 'run', 'shm'))
 
-    _copy_python_packages(root)
-    _copy_config_file(root)
+    # _copy_python_packages(root)
+    # _copy_config_file(root)
 
 
 def unmount_pseudo_filesystems(root, raises=True):
@@ -611,15 +615,16 @@ def _mount_tmp(root):
         raise ce.CommandFailed(cmd, r)
 
 
-def _mount_tslb_aux(root):
+def _mount_tslb_aux(root, spv):
     """
-    For internal use only; bind mount the packaging, source_location and
+    For internal use only; bind mount the scratch_space, source_location and
     collecting_repo at root/tmp/tslb/. Creates the tslb/* mountpoint if
     required, but not root or tmp.
 
     :param root: The root of the directory tree in which the directories shall
         be mounted.
-
+    :param SourcePackageVersion spv: The source package version whose scratch
+        space to mount if any.
     :raises RuntimeError: If root or tmp does not exist
     """
     if not os.path.isdir(root) or not os.path.isdir(os.path.join(root, 'tmp')):
@@ -632,22 +637,29 @@ def _mount_tslb_aux(root):
         os.chmod(base, 0o755)
         os.chown(base, 0, 0)
 
-    mountpoint_packaging = os.path.join(base, 'packaging')
+    if spv:
+        mountpoint_scratch_space = os.path.join(base, 'scratch_space')
+
     mountpoint_collecting_repo = os.path.join(base, 'collecting_repo')
     mountpoint_source_location = os.path.join(base, 'source_location')
 
-    for mountpoint in [mountpoint_packaging, mountpoint_collecting_repo, mountpoint_source_location]:
+    mountpoints = [mountpoint_collecting_repo, mountpoint_source_location]
+    if spv:
+        mountpoints.append(mountpoint_scratch_space)
+
+    for mountpoint in mountpoints:
         if not os.path.isdir(mountpoint):
             os.mkdir(mountpoint)
             os.chmod(mountpoint, 0o755)
             os.chown(mountpoint, 0, 0)
 
-    cmd = ['mount', '--bind',
-        os.path.join(settings.get_fs_root(), 'packaging'), mountpoint_packaging]
+    if spv:
+        spv.mount_scratch_space()
+        cmd = ['mount', '--bind', spv.scratch_space.mount_path , mountpoint_scratch_space]
 
-    r = subprocess.call(cmd)
-    if r != 0:
-        raise ce.CommandFailed(cmd, r)
+        r = subprocess.call(cmd)
+        if r != 0:
+            raise ce.CommandFailed(cmd, r)
 
     cmd = ['mount', '--bind',
         settings.get_collecting_repo_location(), mountpoint_collecting_repo]
@@ -739,7 +751,7 @@ def _unmount_run(root, raises=True):
 def _unmount_tslb_aux(root, raises=True):
     """
     For internal use only; unmount
-    tmp/tslb/{packaging,collecting_repo,source_location} under root.
+    tmp/tslb/{scratch_space,collecting_repo,source_location} under root.
 
     :param root: The root of the directory tree in which the directories shall
         be unmounted.
@@ -750,7 +762,7 @@ def _unmount_tslb_aux(root, raises=True):
     """
     _unmount(os.path.join(root, 'tmp', 'tslb', 'source_location'), raises)
     _unmount(os.path.join(root, 'tmp', 'tslb', 'collecting_repo'), raises)
-    _unmount(os.path.join(root, 'tmp', 'tslb', 'packaging'), raises)
+    _unmount(os.path.join(root, 'tmp', 'tslb', 'scratch_space'), raises)
 
 
 def _unmount(target, raises=True):

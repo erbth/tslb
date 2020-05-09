@@ -28,11 +28,12 @@ class RootDirectory(Directory):
         self.name = ""
 
         # Avoid any cyclic import on load
-        from . import module_rootfs, module_source_packages
+        from . import module_rootfs, module_source_packages, module_tslb
 
         self.dirs = [
                 module_rootfs.RootDirectory(),
-                module_source_packages.RootDirectory()
+                module_source_packages.RootDirectory(),
+                module_tslb.RootDirectory()
             ]
 
 

@@ -42,9 +42,8 @@ def create_locks(rbd_pool=None):
     try:
         pool = ScratchSpacePool(rbd_pool)
         for name in pool.list_scratch_spaces():
-            lk = tclm.define_lock(spaces_lock_path + '.' + name)
-            lk.create()
-            lk.release_X()
+            lk = tclm.define_lock(spaces_lock_path + '.' + name.replace('.', '_'))
+            lk.create(False)
 
     finally:
         spaces_lock.release_X()
@@ -221,7 +220,7 @@ class ScratchSpace:
         self._pool = scratch_space_pool
         self._name = name
         self._rw = rw
-        self._lk = tclm.define_lock(self._pool.space_lock_base + self._name)
+        self._lk = tclm.define_lock(self._pool.space_lock_base + self._name.replace('.', '_'))
         self._mountpoint = os.path.join(
             settings.get_temp_location(), 'scratch_space', self._name)
 

@@ -18,7 +18,7 @@ import os
 import pickle
 from tslb import tclm
 from tslb import timezone
-from scratch_space import ScratchSpacePool
+from tslb.scratch_space import ScratchSpacePool
 
 # For convenience methods
 from tslb.Constraint import VersionConstraint, DependencyList
@@ -347,7 +347,7 @@ class SourcePackage(object):
 
         with lock_X(self.db_root_lock):
             # Delete scratch space
-            ScratchSpacePool().delete_scratch_space("%s@%s:%s" % (
+            ScratchSpacePool().delete_scratch_space("%s_%s_%s" % (
                 self.name,
                 Architecture.to_str(self.architecture),
                 version_number))
@@ -442,10 +442,7 @@ class SourcePackageVersion(object):
         self.read_from_db(db_session)
 
         # A scratch space
-        self.scratch_space = ScratchSpacePool().get_scratch_space(
-            "%s@%s:%s" % (self.name, Architecture.to_str(self.architecture), self.version_number),
-            self.source_package.write_intent,
-            100 * 1024 * 1024 * 1024)
+        self.scratch_space = None
 
 
     # Peripheral methods
@@ -487,6 +484,17 @@ class SourcePackageVersion(object):
         self.source_package.ensure_write_intent()
 
 
+    def mount_scratch_space(self):
+        """This method ensures that the scratch space exists and mounts it."""
+        if not self.scratch_space:
+            self.scratch_space = ScratchSpacePool().get_scratch_space(
+                "%s_%s_%s" % (self.name, Architecture.to_str(self.architecture), self.version_number),
+                self.source_package.write_intent,
+                100 * 1024 * 1024 * 1024)
+
+        self.scratch_space.mount()
+
+
     def clean_scratch_space(self):
         """
         Delete all content from the build- and install locations on the tslb fs.
@@ -494,7 +502,7 @@ class SourcePackageVersion(object):
         numbers and may still be needed for inspection.
         """
         self.ensure_write_intent()
-        self.scratch_space.mount()
+        self.mount_scratch_space()
         fops.clean_directory(self.scratch_space.mount_path)
 
 
@@ -858,7 +866,7 @@ class SourcePackageVersion(object):
         :param version_number: The binary package's version number
         """
         self.ensure_write_intent()
-        self.scratch_space.mount()
+        self.mount_scratch_space()
 
         version_number = VersionNumber(version_number)
 
@@ -1139,6 +1147,24 @@ class SourcePackageVersion(object):
                         ndl.add_constraint(pn, c)
 
             self.set_attribute('cdeps', ndl)
+
+
+    #************** Convenience methods for the scratch space *****************
+    @property
+    def build_location(self):
+        """
+        The directory in the scratch space where the source tree is unpacked
+        to.
+        """
+        return os.path.join(self.scratch_space.mount_path, 'build_location')
+
+
+    def ensure_build_location(self):
+        """
+        Create the build location if it does not exist.
+        """
+        self.scratch_space.mount()
+        os.mkdir(self.build_location)
 
 
     def __str__(self):
