@@ -30,35 +30,36 @@ class StageSplitIntoBinaryPackages(object):
         :rtype: bool
         """
         bpv = bp.generate_version_number()
-        out.write(Color.MAGENTA + "BP version: %s" % bpv + Color.NORMAL + '\n')
-
-        # Set the binary packages to be built
-        spv.set_current_binary_packages([spv.source_package.name])
+        out.write(Color.MAGENTA + "Binary packages' version: %s" % bpv + Color.NORMAL + '\n')
 
         # For now, generate one binary package only.
         b = spv.add_binary_package(spv.source_package.name, bpv)
         bs = [b]
 
+        # Set the binary packages to be built
+        spv.set_current_binary_packages([spv.source_package.name])
+
         success = True
 
         for b in bs:
-            with lock_X(b.fs_root_lock):
-                # Create destdir
-                dst_base = os.path.join(b.fs_base, 'destdir')
-                fops.mkdir_p(dst_base)
-                os.chmod(dst_base, 0o755)
-                os.chown(dst_base, 0, 0)
+            # Create destdir
+            b.ensure_scratch_space_base()
+
+            dst_base = os.path.join(b.scratch_space_base, 'destdir')
+            fops.mkdir_p(dst_base)
+            os.chmod(dst_base, 0o755)
+            os.chown(dst_base, 0, 0)
 
 
-                # Copy files
-                try:
-                    fops.traverse_directory_tree (
-                            spv.fs_install_location,
-                            lambda x : fops.copy_from_base(spv.fs_install_location, x, dst_base))
+            # Copy files
+            try:
+                fops.traverse_directory_tree (
+                        spv.install_location,
+                        lambda x : fops.copy_from_base(spv.install_location, x, dst_base))
 
-                except BaseException as e:
-                    success = False
-                    out.write(str(e) + '\n')
+            except BaseException as e:
+                success = False
+                out.write(str(e) + '\n')
 
             if not success:
                 break

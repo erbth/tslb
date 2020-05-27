@@ -87,7 +87,7 @@ def outdate_package(name, arch, version, stage):
 
 
 def sync_buildpipeline_stages(args):
-    bpp.sync_stages_with_db()
+    bpp.sync_stages_with_db(report=True)
 
 def mount(args):
     Console.print_status_box('Mounting filesystem')

@@ -1,10 +1,8 @@
-from tslb.tclm import lock_S, lock_Splus, lock_X
-from tslb.Console import Color
 import multiprocessing
 import os
-from tslb import parse_utils
-from tslb import settings
 import subprocess
+from tslb.Console import Color
+from tslb.build_pipeline.utils import PreparedBuildCommand
 
 class StageInstallToDestdir(object):
     name = 'install_to_destdir'
@@ -29,10 +27,12 @@ class StageInstallToDestdir(object):
         """
         success = True
 
+        chroot_build_location = '/tmp/tslb/scratch_space/build_location'
+        chroot_install_location = '/tmp/tslb/scratch_space/install_location'
+
         # Check if we have a install to destdir command.
         if spv.has_attribute('install_to_destdir_command'):
             install_to_destdir_command = spv.get_attribute('install_to_destdir_command')
-            install_to_destdir_command = parse_utils.split_quotes(install_to_destdir_command)
 
         else:
             out.write("No install-to-destdir command specified and failed to guess one.\n")
@@ -43,29 +43,39 @@ class StageInstallToDestdir(object):
         max_parallel_threads = round(multiprocessing.cpu_count() * 1.2 + 0.5)
 
         if install_to_destdir_command:
-            install_to_destdir_command = [
-                    e.replace('$(MAX_PARALLEL_THREADS)', str(max_parallel_threads))\
-                            .replace('$(DESTDIR)', os.path.join(spv.fs_install_location))
-                    for e in install_to_destdir_command ]
+            install_to_destdir_command = PreparedBuildCommand(
+                install_to_destdir_command,
+                {
+                    'MAX_PARALLEL_THREADS': str(max_parallel_threads),
+                    'DESTDIR': chroot_install_location
+                },
+                chroot=rootfs_mountpoint)
 
 
         # Install the package.
+        spv.ensure_install_location()
+
         if install_to_destdir_command:
 
             try:
-                out.write(Color.YELLOW + ' '.join(install_to_destdir_command) + Color.NORMAL + '\n')
+                out.write(Color.YELLOW + str(install_to_destdir_command) + Color.NORMAL + '\n')
 
-                ret = subprocess.run(install_to_destdir_command,
-                        cwd=os.path.join(spv.fs_build_location, spv.get_attribute('unpacked_source_directory')),
-                        stdout=out.fileno(), stderr=out.fileno())
+                from tslb.package_builder import execute_in_chroot
 
-                if ret.returncode != 0:
+                with install_to_destdir_command as cmd:
+                    ret = execute_in_chroot(
+                        rootfs_mountpoint,
+                        subprocess.run,
+                        cmd,
+                        cwd=os.path.join(chroot_build_location, spv.get_attribute('unpacked_source_directory')),
+                        stdout=out.fileno(),
+                        stderr=out.fileno())
+
+                if ret != 0:
                     success = False
 
             except Exception as e:
                 success = False
                 out.write(str(e) + '\n')
-            except:
-                success = False
 
         return success

@@ -348,8 +348,12 @@ class SourcePackageVersionAttributeProperty(Property, SourcePackageVersionFactor
         self.name = property_key
 
 
+    def read_raw(self):
+        return self.create_spv().get_attribute(self.name)
+
+
     def read(self):
-        val = self.create_spv().get_attribute(self.name)
+        val = self.read_raw()
 
         if isinstance(val, str):
             return 'str: "%s"' % val
@@ -610,9 +614,13 @@ class BinaryPackageVersionIsCurrentProperty(Property):
         self.name = 'currently_built'
 
 
-    def read(self):
+    def read_raw(self):
         bp = self.bpvd.create_bp()
-        built = bp.name in bp.source_package_version.list_current_binary_packages()
+        return bp.name in bp.source_package_version.list_current_binary_packages()
+
+
+    def read(self):
+        build = self.read_raw
         return "Yes" if built else "No"
 
 
@@ -631,8 +639,12 @@ class BinaryPackageVersionAttributeProperty(Property):
         self.name = name
 
 
+    def read_raw(self):
+        return self.bpvd.create_bp().get_attribute(self.name)
+
+
     def read(self):
-        val = self.bpvd.create_bp().get_attribute(self.name)
+        val = self.read_raw()
 
         if isinstance(val, str):
             return 'str: "%s"' % val
@@ -798,6 +810,5 @@ class SourcePackageVersionBuildStateListStagesAction(Action):
 
 
     def run(self, *args):
-
         for stage in bpp.all_stages:
             print(stage.name)

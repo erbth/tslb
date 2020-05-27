@@ -45,27 +45,40 @@ class StageCreatePMPackages(object):
                 nonlocal files
                 files.append((os.path.join('/', p), ''))
 
-            fops.traverse_directory_tree(os.path.join(b.fs_base, 'destdir'), file_function)
+            fops.traverse_directory_tree(os.path.join(b.scratch_space_base, 'destdir'), file_function)
 
             b.set_files(files)
 
 
             # Create desc.xml
-            with open(os.path.join(b.fs_base, 'desc.xml'), 'w', encoding='utf8') as f:
+            with open(os.path.join(b.scratch_space_base, 'desc.xml'), 'w', encoding='utf8') as f:
                 f.write(package_utils.desc_from_binary_package(b))
 
             # Pack
-            try:
-                tpm2_pack.pack(b.fs_base)
+            from tslb.package_builder import execute_in_chroot
 
-            except ces.CommandFailed as e:
-                out.write(str(e))
+            def chroot_func(scratch_space_base, out):
+                try:
+                    tpm2_pack.pack(scratch_space_base)
+                    return 0
+
+                except ces.CommandFailed as e:
+                    out.write(str(e))
+                    return 1
+
+            chroot_scratch_space_base = '/tmp/tslb/scratch_space/binary_packages/%s/%s' % (
+                b.name, b.version_number)
+
+            ret = execute_in_chroot(rootfs_mountpoint, chroot_func,
+                                    chroot_scratch_space_base, out)
+
+            if ret != 0:
                 success = False
                 break
 
 
             # Copy the package to the collecting repo
-            transport_form = os.path.join(b.fs_base,
+            transport_form = os.path.join(b.scratch_space_base,
                 '%s-%s_%s.tpm2' % (b.name, b.version_number,
                     Architecture.to_str(b.architecture)))
 

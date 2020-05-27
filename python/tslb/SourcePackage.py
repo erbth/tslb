@@ -1163,8 +1163,50 @@ class SourcePackageVersion(object):
         """
         Create the build location if it does not exist.
         """
-        self.scratch_space.mount()
-        os.mkdir(self.build_location)
+        self.mount_scratch_space()
+
+        if not os.path.isdir(self.build_location):
+            os.mkdir(self.build_location)
+
+
+    @property
+    def install_location(self):
+        """
+        The directory in the scratch space where to which the package will be
+        installed.
+        """
+        self.mount_scratch_space()
+        return os.path.join(self.scratch_space.mount_path, 'install_location')
+
+
+    def ensure_install_location(self):
+        """
+        Create the install location if it does not exist.
+        """
+        self.mount_scratch_space()
+
+        if not os.path.isdir(self.install_location):
+            os.mkdir(self.install_location)
+
+
+    @property
+    def binary_packages_location(self):
+        """
+        The directory in the scratch space that houses the binary packages'
+        subdirectories.
+        """
+        self.mount_scratch_space()
+        return os.path.join(self.scratch_space.mount_path, 'binary_packages')
+
+
+    def ensure_binary_packages_location(self):
+        """
+        Create the binary packages' location if it does not exist.
+        """
+        self.mount_scratch_space()
+
+        if not os.path.isdir(self.binary_packages_location):
+            os.mkdir(self.binary_packages_location)
 
 
     def __str__(self):

@@ -30,6 +30,8 @@ from .StagePatch import StagePatch
 from .StageConfigure import StageConfigure
 from .StageBuild import StageBuild
 from .StageInstallToDestdir import StageInstallToDestdir
+from .StageStrip import StageStrip
+from .StageAdapt import StageAdapt
 from .StageFindSharedLibraries import StageFindSharedLibraries
 from .StageDetectManInfo import StageDetectManInfo
 from .StageSplitIntoBinaryPackages import StageSplitIntoBinaryPackages
@@ -43,6 +45,8 @@ all_stages = [
         StageConfigure,
         StageBuild,
         StageInstallToDestdir,
+        StageStrip,
+        StageAdapt,
         StageFindSharedLibraries,
         StageSplitIntoBinaryPackages,
         StageDetectManInfo,
@@ -51,9 +55,12 @@ all_stages = [
         StageCreatePMPackages
         ]
 
-def sync_stages_with_db():
+def sync_stages_with_db(report=False):
     """
     Add missing stages to the db and remove extra ones.
+
+    :param bool report: If True, the function will print its procedure to
+        stdout, otherwise not.
     """
     with db.session_scope() as s:
         # Delete excess stages
@@ -62,6 +69,9 @@ def sync_stages_with_db():
 
         for stage in stages:
             if stage.name not in all_stage_names:
+                if report:
+                    print('Deleting stage "%s"' % stage.name)
+
                 s.delete(stage)
 
 
@@ -77,6 +87,10 @@ def sync_stages_with_db():
             p = parent_stage_names[st.name]
 
             if st.parent != p:
+                if report:
+                    print('Changing parent of stage "%s" from "%s" to "%s"' %(
+                        st.name, st.parent, p))
+
                 st.parent = p
 
 
@@ -85,7 +99,10 @@ def sync_stages_with_db():
 
         for n in all_stage_names:
             if n not in stage_names:
-                s.add(dbbp.BuildPipelineStage(stage.name, parent_stage_names[n]))
+                if report:
+                    print('Adding stage "%s"' % n)
+
+                s.add(dbbp.BuildPipelineStage(n, parent_stage_names[n]))
 
 
 class BuildPipeline(object):

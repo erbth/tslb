@@ -10,6 +10,7 @@ from tslb.Constraint import DependencyList, VersionConstraint
 from tslb.VersionNumber import VersionNumber
 from tslb.filesystem import FileOperations as fops
 from tslb.tpm import Tpm2
+from tslb.utils import is_mounted
 import multiprocessing
 import os
 import shutil
@@ -371,7 +372,7 @@ class PackageBuilder(object):
             raise e
 
         finally:
-            unmount_pseudo_filesystems(mountpoint, raises=True)
+            unmount_pseudo_filesystems(mountpoint, raises=False)
             image.unmount(self.mount_namespace)
 
         self.out.write(Color.GREEN + "succeeded.\n" + Color.NORMAL)
@@ -762,7 +763,10 @@ def _unmount_tslb_aux(root, raises=True):
     """
     _unmount(os.path.join(root, 'tmp', 'tslb', 'source_location'), raises)
     _unmount(os.path.join(root, 'tmp', 'tslb', 'collecting_repo'), raises)
-    _unmount(os.path.join(root, 'tmp', 'tslb', 'scratch_space'), raises)
+
+    spm = os.path.join(root, 'tmp', 'tslb', 'scratch_space')
+    if is_mounted(spm):
+        _unmount(spm, raises)
 
 
 def _unmount(target, raises=True):

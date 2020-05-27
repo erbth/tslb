@@ -126,3 +126,16 @@ class FDWrapper(object):
             data = data.encode('utf8')
 
         os.write(self._fd, data)
+
+
+def is_mounted(path):
+    """
+    Returns true if the specified path exists and something is mounted there
+    i.e. it is a mountpoint.
+    """
+    with open('/proc/mounts', 'r', encoding='UTF-8') as f:
+        for mountpoint in f:
+            if mountpoint.split()[1] == path:
+                return True
+
+    return False

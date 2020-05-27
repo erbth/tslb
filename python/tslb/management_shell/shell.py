@@ -6,6 +6,8 @@ import os
 import re
 import readline
 import shlex
+import subprocess
+import tempfile
 from tslb.Console import Color
 from . import *
 
@@ -100,7 +102,10 @@ def main(*args):
                     else:
                         s += "\033[33m"
 
-                    postfix = ': %s' % e.read()
+                    postfix = ': %s' % e.read().replace('\n', '\\n')
+
+                    if len(postfix) > 80:
+                        postfix = postfix[:80] + " <truncated>"
 
                 s += e.name + Color.NORMAL + postfix
                 print(s)
@@ -157,6 +162,67 @@ def main(*args):
 
             else:
                 print('There is no directory with path "%s".' % dst)
+
+
+        elif cmd == 'edit':
+            if len(elems) != 2:
+                print("Usage: edit <property>")
+                continue
+
+            prop = None
+
+            for elem in cwd.listdir():
+                if elem.name == elems[1] and isinstance(elem, Property):
+                    prop = elem
+                    break
+
+            if not prop:
+                print("No such property.")
+                continue
+
+            try:
+                val = prop.read_raw()
+            except NotImplemented:
+                print("This property does not implement `read_raw`.")
+                continue
+
+            # If the property value's type is not string and it is not None,
+            # refuse editing.
+            if val is not None and not isinstance(val, str):
+                print("Only string properties and those which are None can be edited interactively.")
+                continue
+
+            if val is None:
+                val = ""
+
+            # Create a temporary file
+            fd, path = tempfile.mkstemp()
+
+            try:
+                os.write(fd, val.encode('UTF-8'))
+                os.close(fd)
+
+                if not prop.writable:
+                    os.chmod(path, 0o400)
+
+                # Run an editor on it
+                ret = subprocess.run(['editor', path])
+
+                if ret.returncode == 0 and prop.writable:
+                    # Save the content if it changed
+                    with open(path, 'rb') as f:
+                        content = f.read().decode('UTF-8')
+
+                    if content == val or content == "" and val is None:
+                        print("Value not modified.")
+
+                    else:
+                        prop.write(content)
+                        print("Stored the new value.")
+
+            finally:
+                # Delete the temporary file again
+                os.unlink(path)
 
 
         else:

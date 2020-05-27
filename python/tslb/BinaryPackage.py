@@ -106,14 +106,30 @@ class BinaryPackage(object):
 
 
     @property
-    def fs_base(self):
+    def scratch_space_base(self):
         """
         A location for this binary package in the source package version's
         scratch space
         """
         return os.path.join(
-            self.source_package_version.scratch_space.mount_path,
+            self.source_package_version.binary_packages_location,
             self.name, str(self.version_number))
+
+
+    def ensure_scratch_space_base(self):
+        """
+        Create this binary package's subdirectory in the source package
+        version's scratch space if it does not exist.
+        """
+        self.source_package_version.ensure_binary_packages_location()
+
+        if not os.path.isdir(self.scratch_space_base):
+            comp1 = self.scratch_space_base.rsplit('/', 1)[0]
+
+            if not os.path.isdir(comp1):
+                os.mkdir(comp1)
+
+            os.mkdir(self.scratch_space_base)
 
 
     # Attributes

@@ -77,13 +77,21 @@ class Property(Element):
         self.writable = writable
 
 
+    def read_raw(self):
+        """
+        Returns the attribute's raw value.
+        """
+        raise NotImplemented
+
+
     def read(self):
         """
-        Prints the propertie's value.
+        Returns the attribute's value in a form that is suitable for displaying
+        it to a user.
 
         :returns: The propertie's value.
         """
-        return None
+        raise NotImplemented
 
 
     def write(self, value):
@@ -94,3 +102,5 @@ class Property(Element):
         """
         if not self.writable:
             raise RuntimeError("This property is read only")
+
+        raise NotImplemented

@@ -1,0 +1,375 @@
+#!/bin/bash
+
+set -e
+
+declare -a tools_hosts
+
+tools_hosts=(
+	"Releeshan"
+)
+
+PYTHON_PACKAGE=../python
+
+
+# Auxiliary functions
+function ping_host() {
+	if ping -c1 -w1 "$1" > /dev/zero 2>&1
+	then
+		return 0
+	else
+		return 1
+	fi
+}
+
+
+function deploy_host() {
+	host=$1
+
+	printf "Pinging $host ... "
+
+	if ! ping_host "$1"
+	then
+		printf "\033[31mdown\033[0m\n"
+		return 0
+	fi
+
+	printf "\033[32mreachable\033[0m\n"
+	echo "  Deploying ..."
+
+
+	ssh tslb@$host "bash -c 'sudo mkdir -p /srv/tslb && { findmnt /srv/tslb >/dev/zero || sudo mount -t tmpfs tmpfs /srv/tslb -ouid=tslb,gid=tslb,mode=0755; }'"
+
+	rsync -qr --exclude __pycache__ $PYTHON_PACKAGE tslb@$host:/srv/tslb/
+
+	cat << "EOF" | ssh tslb@$host "cat > /srv/tslb/setup.sh && bash /srv/tslb/setup.sh"
+#!/bin/bash
+
+cat > /srv/tslb/tslb-build-node.service << EOF2
+[Unit]
+Description=Simple TSLB build node service file
+
+[Service]
+Type=simple
+Environment="PYTHONPATH=/srv/tslb/python"
+ExecStart=/srv/tslb/python/tslb/build_node/tslb_build_node
+EOF2
+
+if ! [ -f /run/systemd/system/tslb-build-node.service ] || \
+	! cmp /srv/tslb/tslb-build-node.service /run/systemd/system/tslb-build-node.service
+then
+	sudo cp /srv/tslb/tslb-build-node.service /run/systemd/system/tslb-build-node.service
+	sudo systemctl daemon-reload
+fi
+EOF
+
+
+	echo "  finished."
+	return 0
+}
+
+
+function status_node_host() {
+	host=$1
+
+	printf "$host: "
+
+	if ! ping_host "$1"
+	then
+		printf "\033[31mdown\033[0m\n"
+		return 0
+	fi
+
+
+	if ssh tslb@$host "systemctl is-active -q tslb-build-node.service"
+	then
+		printf "\033[32mactive\033[0m\n"
+	else
+		printf "\033[33minactive\033[0m\n"
+	fi
+}
+
+
+function start_node_host() {
+	host=$1
+
+	printf "$host: "
+
+	if ! ping_host "$1"
+	then
+		printf "\033[31mdown\033[0m\n"
+		return 0
+	fi
+
+	printf "\033[32mreachable\033[0m\n"
+	echo "  Starting ..."
+
+	ssh tslb@$host "sudo systemctl start tslb-build-node.service"
+
+	echo "  Finished."
+}
+
+
+function stop_node_host() {
+	host=$1
+
+	printf "$host: "
+
+	if ! ping_host "$1"
+	then
+		printf "\033[31mdown\033[0m\n"
+		return 0
+	fi
+
+	printf "\033[32mreachable\033[0m\n"
+	echo "  Stopping ..."
+
+	ssh tslb@$host "sudo systemctl stop tslb-build-node.service"
+
+	echo "  Finished."
+}
+
+
+function mount_cephfs_host() {
+	host=$1
+
+	printf "$host: "
+
+	if ! ping_host "$1"
+	then
+		printf "\033[31mdown\033[0m\n"
+		return 0
+	fi
+
+	printf "\033[32mreachable\033[0m\n"
+	echo "  Mounting ..."
+
+	ssh tslb@$host "bash -c 'mkdir -p /srv/tslb/fs && sudo PYTHONPATH=/srv/tslb/python /srv/tslb/python/tslb/tslb mount'"
+
+	echo "  Finished."
+}
+
+
+function unmount_cephfs_host() {
+	host=$1
+
+	printf "$host: "
+
+	if ! ping_host "$1"
+	then
+		printf "\033[31mdown\033[0m\n"
+		return 0
+	fi
+
+	printf "\033[32mreachable\033[0m\n"
+	echo "  Unmounting ..."
+
+	ssh tslb@$host "sudo PYTHONPATH=/srv/tslb/python /srv/tslb/python/tslb/tslb unmount"
+
+	echo "  Finished."
+}
+
+
+# Different commands
+function print_help() {
+	echo "ping            Ping all hosts in the cluster to determine if they are up."
+	echo "deploy          Copy the python modules of tslb to the specified host, or all if none is specified."
+	echo "start           Start the build node on the specified host, or on all if none is specified."
+	echo "stop            Stop the build node on the specified host, or on all if none is specified."
+	echo "status          Show the status of the build node on the specified host, or on all if none is specified."
+	echo "mount_cephfs    Mount cephfs on the specified host, or on all if none is specified."
+	echo "unmount_cephfs  Unmount cephfs on the specified host, or on all if none is specified."
+	echo "help            Show this help text."
+}
+
+
+function ping_hosts() {
+	for host in "${tools_hosts[@]}"
+	do
+		printf "$host: "
+
+		if ping_host "$host"
+		then
+			printf "\033[32mreachable\033[0m\n"
+		else
+			printf "\033[31mdown\033[0m\n"
+		fi
+	done
+}
+
+
+function deploy() {
+	if [ -n "$1" ]
+	then
+		for host in "${tools_hosts[@]}"
+		do
+			if [ "$host" == "$1" ]
+			then
+				deploy_host "$host"
+				return 0
+			fi
+		done
+		echo "Unknown host \"$1\"."
+		return 1
+	else
+		for host in "${tools_hosts[@]}"
+		do
+			deploy_host "$host"
+		done
+		return 0
+	fi
+}
+
+
+function start_node() {
+	if [ -n "$1" ]
+	then
+		for host in "${tools_hosts[@]}"
+		do
+			if [ "$host" == "$1" ]
+			then
+				start_node_host "$host"
+				return 0
+			fi
+		done
+		echo "Unknown host \"$1\"."
+		return 1
+	else
+		for host in "${tools_hosts[@]}"
+		do
+			start_node_host "$host"
+		done
+		return 0
+	fi
+}
+
+
+function stop_node() {
+	if [ -n "$1" ]
+	then
+		for host in "${tools_hosts[@]}"
+		do
+			if [ "$host" == "$1" ]
+			then
+				stop_node_host "$host"
+				return 0
+			fi
+		done
+		echo "Unknown host \"$1\"."
+		return 1
+	else
+		for host in "${tools_hosts[@]}"
+		do
+			stop_node_host "$host"
+		done
+		return 0
+	fi
+}
+
+
+function status_node() {
+	if [ -n "$1" ]
+	then
+		for host in "${tools_hosts[@]}"
+		do
+			if [ "$host" == "$1" ]
+			then
+				status_node_host "$host"
+				return 0
+			fi
+		done
+		echo "Unknown host \"$1\"."
+		return 1
+	else
+		for host in "${tools_hosts[@]}"
+		do
+			status_node_host "$host"
+		done
+		return 0
+	fi
+}
+
+
+function mount_cephfs() {
+	if [ -n "$1" ]
+	then
+		for host in "${tools_hosts[@]}"
+		do
+			if [ "$host" == "$1" ]
+			then
+				mount_cephfs_host "$host"
+				return 0
+			fi
+		done
+		echo "Unknown host \"$1\"."
+		return 1
+	else
+		for host in "${tools_hosts[@]}"
+		do
+			mount_cephfs_host "$host"
+		done
+		return 0
+	fi
+}
+
+
+function unmount_cephfs() {
+	if [ -n "$1" ]
+	then
+		for host in "${tools_hosts[@]}"
+		do
+			if [ "$host" == "$1" ]
+			then
+				unmount_cephfs_host "$host"
+				return 0
+			fi
+		done
+		echo "Unknown host \"$1\"."
+		return 1
+	else
+		for host in "${tools_hosts[@]}"
+		do
+			unmount_cephfs_host "$host"
+		done
+		return 0
+	fi
+}
+
+
+# Commandline parser
+case "$1" in
+	ping)
+		ping_hosts
+		;;
+
+	deploy)
+		deploy "$2"
+		;;
+
+	start)
+		start_node "$2"
+		;;
+
+	stop)
+		stop_node "$2"
+		;;
+
+	status)
+		status_node "$2"
+		;;
+
+	mount_cephfs)
+		mount_cephfs "$2"
+		;;
+
+	unmount_cephfs)
+		unmount_cephfs "$2"
+		;;
+
+	help)
+		print_help
+		;;
+
+	*)
+		echo "Invalid argument, try 'help'." >&2
+		exit 2
+esac

@@ -50,7 +50,7 @@ def find_config_file():
         config_file_path = os.path.abspath('tslb_system.ini')
     elif os.path.exists('/tmp/tslb/system.ini'):
         config_file_path = '/tmp/tslb/system.ini'
-    elif os.path.exists(os.path.join(os.getenv('HOME'), '.tslb_system.ini')):
+    elif os.getenv('HOME') and os.path.exists(os.path.join(os.getenv('HOME'), '.tslb_system.ini')):
         config_file_path = os.path.join(os.getenv('HOME'), '.tslb_system.ini')
     elif os.path.exists('/etc/tslb/system.ini'):
         config_file_path = '/etc/tslb/system.ini'

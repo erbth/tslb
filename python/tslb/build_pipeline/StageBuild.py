@@ -1,10 +1,8 @@
 import multiprocessing
 import os
 import subprocess
-from tslb.tclm import lock_S, lock_Splus, lock_X
 from tslb.Console import Color
-from tslb import parse_utils
-from tslb import settings
+from tslb.build_pipeline.utils import PreparedBuildCommand
 
 class StageBuild(object):
     name = 'build'
@@ -30,7 +28,6 @@ class StageBuild(object):
         # Check if we have a build command.
         if spv.has_attribute('build_command'):
             build_command = spv.get_attribute('build_command')
-            build_command = parse_utils.split_quotes(build_command)
 
         else:
             # Guess one.
@@ -52,9 +49,12 @@ class StageBuild(object):
         max_parallel_threads = round(multiprocessing.cpu_count() * 1.2 + 0.5)
 
         if build_command:
-            build_command = [
-                    e.replace('$(MAX_PARALLEL_THREADS)', str(max_parallel_threads))
-                    for e in build_command ]
+            build_command = PreparedBuildCommand(
+                build_command,
+                {
+                    'MAX_PARALLEL_THREADS': str(max_parallel_threads)
+                },
+                chroot=rootfs_mountpoint)
 
 
         # Build the package.
@@ -62,21 +62,23 @@ class StageBuild(object):
             success = False
 
             try:
-                out.write(Color.YELLOW + ' '.join(build_command) + Color.NORMAL + '\n')
+                out.write(Color.YELLOW + str(build_command) + Color.NORMAL + '\n')
 
                 # Avoid a cylic import
                 from tslb.package_builder import execute_in_chroot
 
-                ret = execute_in_chroot(
-                    rootfs_mountpoint,
-                    subprocess.call,
-                    build_command,
-                    cwd=os.path.join('/tmp/tslb/scratch_space/build_location', spv.get_attribute('unpacked_source_directory')),
-                    stdout=out.fileno(),
-                    stderr=out.fileno())
+                with build_command as cmd:
+                    ret = execute_in_chroot(
+                        rootfs_mountpoint,
+                        subprocess.run,
+                        cmd,
+                        cwd=os.path.join('/tmp/tslb/scratch_space/build_location',
+                            spv.get_attribute('unpacked_source_directory')),
+                        stdout=out.fileno(),
+                        stderr=out.fileno())
 
-                if ret == 0:
-                    success = True
+                    if ret == 0:
+                        success = True
 
             except Exception as e:
                 success = False
@@ -84,7 +86,6 @@ class StageBuild(object):
             except:
                 success = False
 
-            return False
             return success
 
         else:

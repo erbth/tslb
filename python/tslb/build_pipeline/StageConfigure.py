@@ -1,9 +1,10 @@
-from tslb.tclm import lock_S, lock_Splus, lock_X
-from tslb.Console import Color
+import multiprocessing
 import os
-from tslb import parse_utils
-from tslb import settings
 import subprocess
+from tslb.Console import Color
+from tslb.tclm import lock_S, lock_Splus, lock_X
+from tslb import settings
+from tslb.build_pipeline.utils import PreparedBuildCommand
 
 class StageConfigure(object):
     name = 'configure'
@@ -32,7 +33,6 @@ class StageConfigure(object):
         # Check if we have a configure command.
         if spv.has_attribute('configure_command'):
             configure_command = spv.get_attribute('configure_command')
-            configure_command = parse_utils.split_quotes(configure_command)
 
         else:
             # Guess one.
@@ -58,17 +58,34 @@ class StageConfigure(object):
 
         # Configure the package.
         if configure_command:
+            # Prepare the configure command
+            configure_command = PreparedBuildCommand(
+                configure_command,
+                {
+                    'MAX_PARALLEL_THREADS': str(round(multiprocessing.cpu_count() * 1.2 + 0.5))
+                },
+                chroot=rootfs_mountpoint)
+        
+
+            # Run the configure command / script
             success = False
-            raise Exception
 
             try:
-                out.write(Color.YELLOW + ' '.join(configure_command) + Color.NORMAL + '\n')
+                out.write(Color.YELLOW + str(configure_command) + Color.NORMAL + '\n')
 
-                ret = subprocess.run(configure_command,
-                        cwd=os.path.join(spv.fs_build_location, spv.get_attribute('unpacked_source_directory')),
-                        stdout=out.fileno(), stderr=out.fileno())
+                from tslb.package_builder import execute_in_chroot
 
-                if ret.returncode == 0:
+                with configure_command as cmd:
+                    ret = execute_in_chroot(
+                        rootfs_mountpoint,
+                        subprocess.run,
+                        cmd,
+                        cwd=os.path.join('/tmp/tslb/scratch_space/build_location',
+                            spv.get_attribute('unpacked_source_directory')),
+                        stdout=out.fileno(),
+                        stderr=out.fileno())
+
+                if ret == 0:
                     success = True
 
             except Exception as e:

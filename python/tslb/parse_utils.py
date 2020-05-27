@@ -76,3 +76,25 @@ def split_on_number_edge(text):
     l.append(buf)
 
     return l
+
+
+def stringify_escapes(s):
+    """
+    Convert escape sequences to string representation, i.e. '\n' -> '\\n'.
+
+    :param str s: Input string
+    :returns str: Output string with escape sequences replaced.
+    """
+    output = ""
+
+    for c in s:
+        if c == '\n':
+            output += '\\n'
+        elif c == '\r':
+            output += '\\r'
+        elif c == '\033':
+            output += '\\033'
+        else:
+            output += c
+
+    return output
