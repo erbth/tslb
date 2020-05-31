@@ -50,8 +50,9 @@ create table source_package_shared_libraries (
 	source_package varchar,
 	"architecture" integer,
 	source_package_version_number integer[],
+
 	name varchar,
-	version_number integer[] not null,
+	version_number integer[],
 	abi_version_number integer[],
 	soname varchar,
 	"id" bigserial not null unique,
@@ -61,13 +62,14 @@ create table source_package_shared_libraries (
 		on update cascade on delete cascade,
 
 	primary key (source_package, "architecture", source_package_version_number,
-		name, abi_version_number)
+		name, soname)
 );
 
 create table source_package_shared_library_files (
 	source_package_id bigint
 		references source_package_shared_libraries("id") on update cascade on delete cascade,
 	"path" varchar,
+	"is_dev_symlink" boolean not null,
 
 	primary key(source_package_id, "path")
 );

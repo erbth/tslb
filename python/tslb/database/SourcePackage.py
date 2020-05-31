@@ -1,5 +1,6 @@
 from sqlalchemy import Column, types, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.schema import FetchedValue
 from tslb import timezone
 from tslb.VersionNumber import VersionNumberColumn
 from . import Attribute
@@ -107,18 +108,22 @@ class SourcePackageSharedLibrary(Base):
     source_package_version_number = Column(VersionNumberColumn, primary_key = True)
 
     name = Column(types.String, primary_key = True)
-    version_number = Column(VersionNumberColumn, nullable = False)
-    abi_version_number = Column(VersionNumberColumn, primary_key = True)
-    soname = Column(types.String)
+    version_number = Column(VersionNumberColumn, nullable=True)
+    abi_version_number = Column(VersionNumberColumn, nullable=True)
+    soname = Column(types.String, primary_key=True)
 
     # I don't want too large foreign keys ...
-    id = Column(types.BigInteger, unique=True, nullable = False)
+    id = Column(types.BigInteger, unique=True, nullable=False, server_default=FetchedValue())
+
 
     __table_args__ = (ForeignKeyConstraint(
         (source_package, architecture, source_package_version_number),
         (SourcePackageVersion.source_package, SourcePackageVersion.architecture,
             SourcePackageVersion.version_number),
-        onupdate='CASCADE', ondelete = 'CASCADE'),)
+        onupdate='CASCADE', ondelete='CASCADE'),)
+
+    __mapper_args__ = {'eager_defaults': True}
+
 
     def __init__(self, source_package, architecture, source_package_version_number, sl):
         """
@@ -133,7 +138,8 @@ class SourcePackageSharedLibrary(Base):
         self.abi_version_number = sl.abi_version_number
         self.soname = sl.soname
 
-class SourcePackageSharedLibaryFile(Base):
+
+class SourcePackageSharedLibraryFile(Base):
     __tablename__ = 'source_package_shared_library_files'
 
     source_package_id = Column(types.BigInteger,
@@ -141,10 +147,12 @@ class SourcePackageSharedLibaryFile(Base):
         primary_key = True)
 
     path = Column(types.String, primary_key=True)
+    is_dev_symlink = Column(types.Boolean, nullable=False)
 
-    def __init__(self, source_package_id, path):
+    def __init__(self, source_package_id, path, is_dev_symlink):
         self.source_package_id = source_package_id
         self.path = path
+        self.is_dev_symlink = is_dev_symlink
 
 # Current binary packages
 class SourcePackageVersionCurrentBinaryPackage(Base):

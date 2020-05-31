@@ -277,3 +277,21 @@ def list_snapshots(path):
 
 def restore_snapshot(path, name):
     return fs.restore_snapshot(path, name)
+
+
+def simplify_path_static(path):
+    """
+    Simplify a path without touching the filesystem. This essentially removes
+    double slashes. Hence it's static because it does not require dynamic
+    information only available from filesystems being online.
+    """
+    result = ''
+    last_char = None
+
+    for char in path:
+        if last_char != '/' or char != '/':
+            result += char
+
+        last_char = char
+
+    return result

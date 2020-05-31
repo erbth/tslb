@@ -13,24 +13,28 @@ class StageSplitIntoBinaryPackages(object):
 
     def flow_through(spv, rootfs_mountpoint, out):
         """
-        :param spv: The source package version to let flow through this segment
+        :param spv: The source package version that flows though this segment
             of the pipeline.
-
         :type spv: SourcePackage.SourcePackageVersion
-
         :param str rootfs_mountpoint: The mountpoint at which the rootfs image
             that should be used for the build is mounted.
-
-        :param out: The (wrapped) fd to send output that shall be recorded in
-            the db to.  Typically all output would go there.
-
+        :param out: The (wrapped) fs to which the stage should send output that
+            shall be recorded in the db. Typically all output would go there.
         :type out: Something like sys.stdout
-
         :returns: successful
         :rtype: bool
         """
         bpv = bp.generate_version_number()
         out.write(Color.MAGENTA + "Binary packages' version: %s" % bpv + Color.NORMAL + '\n')
+
+
+        # First, generate two binary packages for each library: One with the
+        # library itself, and the other one with its debugging symbols.
+
+        return False
+
+
+
 
         # For now, generate one binary package only.
         b = spv.add_binary_package(spv.source_package.name, bpv)

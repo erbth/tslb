@@ -66,8 +66,7 @@ class PackageBuilder(object):
             spkgv = spkg.get_latest_version()
 
         self.out.write(Color.YELLOW + "Building package %s:%s@%s\n" %
-            (spkg.name, Architecture.to_str(spkg.architecture),
-                spkgv.version_number))
+            (spkg.name, spkgv.version_number, Architecture.to_str(spkg.architecture)))
 
         Console.print_horizontal_bar(self.out)
         self.out.write(Color.NORMAL)

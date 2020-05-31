@@ -4,7 +4,7 @@ from tslb.Architecture import architectures
 from tslb.BinaryPackage import BinaryPackage, NoSuchBinaryPackage
 from tslb.CommonExceptions import NoSuchAttribute, MissingWriteIntent, AttributeManuallyHeld
 from tslb.filesystem import FileOperations as fops
-from tslb.SharedLibraryTools import SharedLibrary
+from tslb.program_analysis.shared_library_tools import SharedLibrary
 from tslb.VersionNumber import VersionNumber
 from sqlalchemy.orm import aliased
 from tslb.tclm import lock_S, lock_Splus, lock_X
@@ -618,11 +618,11 @@ class SourcePackageVersion(object):
 
             for dblib in dblibs:
                 fs = aliased(dbspkg.SourcePackageSharedLibraryFile)
-                files = s.query(fs.name)\
-                        .filter(fs.id == dblib.id)\
+                files = s.query(fs.path, fs.is_dev_symlink)\
+                        .filter(fs.source_package_id == dblib.id)\
                         .all()
 
-                files = [ e[0] for e in files ]
+                files = [ (e[0], e[1]) for e in files ]
 
                 libs.append(SharedLibrary(dblib, files))
 
@@ -637,11 +637,10 @@ class SourcePackageVersion(object):
         with lock_X(self.db_root_lock):
             with database.session_scope() as s:
                 # Delete all currently stored shared libraries
-                sl = aliased(dbspkg.SourcePackageSharedLibrary)
-                s.query(sl)\
-                        .filter(sl.source_package == self.source_package.name,
-                                sl.architecture == self.architecture,
-                                sl.source_package_version_number == self.version_number)\
+                s.query(dbspkg.SourcePackageSharedLibrary)\
+                        .filter(dbspkg.SourcePackageSharedLibrary.source_package == self.source_package.name,
+                                dbspkg.SourcePackageSharedLibrary.architecture == self.architecture,
+                                dbspkg.SourcePackageSharedLibrary.source_package_version_number == self.version_number)\
                         .delete()
 
                 # Store the new ones
@@ -656,12 +655,16 @@ class SourcePackageVersion(object):
 
                     # Make sure we have an id
                     s.flush()
-                    id = s.id
+                    _id = lib.id
 
                     # Insert files
                     s.execute(dbspkg.SourcePackageSharedLibraryFile.__table__.insert(
                         [
-                            { 'id': id, 'path': f } for f in l.files
+                            {
+                                'source_package_id': _id,
+                                'path': f,
+                                'is_dev_symlink': f in l.get_dev_symlinks()
+                            } for f in l.get_files()
                         ]))
 
 

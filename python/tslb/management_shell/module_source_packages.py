@@ -200,7 +200,8 @@ class SourcePackageVersionDirectory(Directory):
             SourcePackageVersionBinaryPackagesDirectory(self.pkg_name, self.arch, self.version, True),
             SourcePackageVersionBuildStateDirectory(self.pkg_name, self.arch, self.version),
             SourcePackageVersionGenericAction(self.pkg_name, self.arch, self.version, "get_creation_time"),
-            SourcePackageListAttributesAction(self.pkg_name, self.arch, self.version),
+            SourcePackageVersionListAttributesAction(self.pkg_name, self.arch, self.version),
+            SourcePackageVersionListSharedLibrariesAction(self.pkg_name, self.arch, self.version),
             SourcePackageVersionInspectScratchSpaceAction(self.pkg_name, self.arch, self.version)
         ]
 
@@ -248,7 +249,7 @@ class SourcePackageVersionGenericAction(Action, SourcePackageVersionFactoryBase)
             print_element(ret)
 
 
-class SourcePackageListAttributesAction(Action, SourcePackageVersionFactoryBase):
+class SourcePackageVersionListAttributesAction(Action, SourcePackageVersionFactoryBase):
     """
     List a source package version's attributes and values.
     """
@@ -708,6 +709,39 @@ class BinaryPackageVersionUnsetAttributeAction(Action):
             self.bpvd.create_bp(True).unset_attribute(args[1])
         except ces.NoSuchAttribute:
             print("No such attribute.")
+
+
+#******************************* Shared libraries *****************************
+class SourcePackageVersionListSharedLibrariesAction(Action, SourcePackageVersionFactoryBase):
+    """
+    List a source package version's shared libraries.
+    """
+    def __init__(self, name, arch, version):
+        super().__init__()
+
+        self.pkg_name = name
+        self.arch = arch
+        self.version= version
+
+        self.name = "list_shared_libraries"
+
+
+    def run(self, *args):
+        spv = self.create_spv()
+
+        for lib in sorted(spv.get_shared_libraries(), key=lambda lib: lib.soname):
+            print("%s (ABI-version: %s / Version: %s):" % (
+                lib.get_name(),
+                lib.get_abi_version_number(),
+                lib.get_version_number()))
+
+            print("  files:")
+            for _file in lib.get_files():
+                print("    `%s'" % _file)
+
+            print("  dev symlinks:")
+            for _dev_symlink in lib.get_dev_symlinks():
+                print("    `%s'" % _dev_symlink)
 
 
 #******************************** Build events ********************************
