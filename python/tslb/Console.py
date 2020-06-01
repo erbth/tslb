@@ -88,4 +88,4 @@ def update_status_box_percent(v, ref, file=sys.stdout):
 
 def print_horizontal_bar(file=sys.stdout):
     c, r = shutil.get_terminal_size((80, 25))
-    print(c * '-', file=sys.stdout)
+    print(c * '-', file=file)

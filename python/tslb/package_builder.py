@@ -363,7 +363,7 @@ class PackageBuilder(object):
         try:
             r = bp.build_source_package_version(spkgv, mountpoint)
             if not r:
-                raise PkgBuildFailed("Failed to the build package (the issue is probably at the package).")
+                raise PkgBuildFailed("Failed to build the package (the issue is probably at the package).")
 
         except BaseException as e:
             self.out.write(Color.RED + "FAILED: " + Color.NORMAL + str(e) + '\n')

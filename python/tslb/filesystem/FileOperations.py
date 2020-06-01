@@ -4,6 +4,7 @@ import shutil
 from tslb import CommonExceptions as es
 from . import fs
 
+
 def copy_from_base(base_dir, src_path, dst_dir):
     """
     Copies base_dir/src_path to dst_dir/src_path
@@ -14,8 +15,12 @@ def copy_from_base(base_dir, src_path, dst_dir):
     """
     path_components = []
 
-    while src_path and src_path != base_dir:
+    while src_path and src_path != '/' and src_path != base_dir:
         src_path, last = os.path.split(src_path)
+
+        if not last:
+            continue
+
         path_components.append(last)
 
     path_components.reverse()
@@ -27,21 +32,20 @@ def copy_from_base(base_dir, src_path, dst_dir):
         src = os.path.join(base_dir, gradual_path)
         dst = os.path.join(dst_dir, gradual_path)
 
-        s = os.stat(src, follow_symlinks = False)
+        s = os.lstat(src)
 
         if stat.S_ISDIR(s.st_mode):
             if not os.path.isdir(dst):
                 os.mkdir(dst)
-                shutil.copystat(src, dst)
-                os.chown(dst, uid=s.st_uid, gid=s.st_gid)
-        else:
-            copy_attributes = True
 
+            shutil.copystat(src, dst)
+            os.chown(dst, uid=s.st_uid, gid=s.st_gid)
+
+        else:
             if stat.S_ISLNK(s.st_mode):
                 os.symlink (os.readlink(src), dst)
-                copy_attributes = False
             elif stat.S_ISREG(s.st_mode):
-                shutil.copy(src, dst)
+                shutil.copyfile(src, dst)
             elif stat.S_ISBLK(s.st_mode):
                 os.mknod(dst, mode=stat.S_IFBLK, device=s.st_rdev)
             elif stat.S_ISCHR(s.st_mode):
@@ -55,9 +59,8 @@ def copy_from_base(base_dir, src_path, dst_dir):
             else:
                 raise es.NotImplemented("Unknown filetype of '%s'." % src)
 
-            if copy_attributes:
-                shutil.copystat(src, dst)
-                os.chown(dst, uid=s.st_uid, gid=s.st_gid)
+            shutil.copystat(src, dst, follow_symlinks=False)
+            os.chown(dst, uid=s.st_uid, gid=s.st_gid, follow_symlinks=False)
 
 def traverse_directory_tree(base, action, skip_hidden=False, element = ''):
     """
@@ -77,14 +80,11 @@ def traverse_directory_tree(base, action, skip_hidden=False, element = ''):
 
     abs_element = os.path.join(base, element)
 
-    try:
-        s = os.stat(abs_element, follow_symlinks = False)
-    except FileNotFoundError:
-        return
+    s = os.lstat(abs_element)
 
     if stat.S_ISDIR(s.st_mode):
         for e in os.listdir (abs_element):
-            if not e.startswith('.'):
+            if not skip_hidden or not e.startswith('.'):
                 traverse_directory_tree(base, action, skip_hidden, os.path.join(element, e))
 
 

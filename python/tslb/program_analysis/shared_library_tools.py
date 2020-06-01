@@ -1,5 +1,6 @@
 import os
 import re
+import stat
 import subprocess
 import sys
 from tslb import CommonExceptions as ces
@@ -135,12 +136,17 @@ class SharedLibrary(object):
         """
         return self._dev_symlinks
 
-
     def get_version_number(self):
         return self.version_number
 
     def get_abi_version_number(self):
         return self.abi_version_number
+
+    def get_library_dir(self):
+        """
+        Return the directory in which this library's runtime files are located.
+        """
+        return os.path.dirname(min((self.files - self._dev_symlinks)))
 
 
     def add_file(self, f):
@@ -255,5 +261,110 @@ class SharedLibrary(object):
         self._dev_symlinks -= to_remove
 
 
+    def get_regular_file(self, base):
+        """
+        This functions determines the library's regular file. For this it needs
+        access to the library's files, but only to check which of them are
+        symlinks and which are not.
+
+        :param base: A root filesystem base in which this library is located.
+        :raises ces.AnalyzeError: if the library appears to have no regular
+            file.
+        """
+        for _file in self.files - self._dev_symlinks:
+            st_buf = os.lstat(simplify_path_static(base + '/' + _file))
+
+            if not stat.S_ISREG(st_buf.st_mode):
+                continue
+
+            return _file
+
+        raise ces.AnalyzeError("The library `%s' appears to have no regular file." % self.name)
+
+    def get_gnu_debug_link(self, base, out=sys.stdout):
+        """
+        Returns the GNU debug link if the shared object has one. This function
+        requires access to the library's files, however it reads only the
+        regular file and does not rely on symlinks to point to it. Hence it can
+        safely be run from outside an chroot environment.
+
+        :param base: A root filesystem base in which this library is located.
+        :param out: A file descriptor to write error-output to.
+        :returns: tuple(debug link, crc32 checksum) or None
+        """
+        cmd = [
+                'objdump',
+                '--dwarf=links',
+                simplify_path_static(base + '/' + self.get_regular_file(base))]
+
+        ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=out)
+        if ret.returncode != 0:
+            raise ces.CommandFailed(cmd)
+
+        debug_link = None
+        crc32 = None
+
+        for line in ret.stdout.decode('UTF-8').splitlines():
+            match = re.match(r'^\s*Separate debug info file:\s*(.+)$', line)
+
+            if match:
+                debug_link = match.group(1)
+
+            elif debug_link:
+                match = re.match(r'^\s*CRC value:\s*0x([0-9a-fA-F]+)$', line)
+                if match:
+                    crc32 = int(match.group(1), base=16)
+                    break
+
+                debug_link = None
+
+        if debug_link and crc32:
+            return (debug_link, crc32)
+
+        return None
+
+
     def __str__(self):
         return self.name
+
+
+def get_gnu_debug_link(path, out=sys.stdout):
+    """
+    Retrieve the GNU debug link for the given file if it is an ELF file and has
+    a debug link.
+
+    :param str path: The path to the file.
+    :param out: A file descriptor to write error-output to.
+    :returns: tuple(debug link, crc32 checksum) or None
+    """
+    with open(path, 'rb') as f:
+        if f.read(4) != b'\x7fELF':
+            return None
+
+    cmd = ['objdump', '--dwarf=links', path]
+
+    ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=out)
+    if ret.returncode != 0:
+        raise ces.CommandFailed(cmd)
+
+    debug_link = None
+    crc32 = None
+
+    for line in ret.stdout.decode('UTF-8').splitlines():
+        match = re.match(r'^\s*Separate debug info file:\s*(.+)$', line)
+
+        if match:
+            debug_link = match.group(1)
+
+        elif debug_link:
+            match = re.match(r'^\s*CRC value:\s*0x([0-9a-fA-F]+)$', line)
+            if match:
+                crc32 = int(match.group(1), base=16)
+                break
+
+            debug_link = None
+
+    if debug_link and crc32:
+        return (debug_link, crc32)
+
+    return None

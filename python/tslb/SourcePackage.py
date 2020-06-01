@@ -441,7 +441,7 @@ class SourcePackageVersion(object):
         # Bind a DB object
         self.read_from_db(db_session)
 
-        # A scratch space
+        # A scratch space and caches for directories in it
         self.scratch_space = None
 
 
@@ -1175,10 +1175,8 @@ class SourcePackageVersion(object):
     @property
     def install_location(self):
         """
-        The directory in the scratch space where to which the package will be
-        installed.
+        The directory in the scratch space where the package will be installed.
         """
-        self.mount_scratch_space()
         return os.path.join(self.scratch_space.mount_path, 'install_location')
 
 
@@ -1198,7 +1196,6 @@ class SourcePackageVersion(object):
         The directory in the scratch space that houses the binary packages'
         subdirectories.
         """
-        self.mount_scratch_space()
         return os.path.join(self.scratch_space.mount_path, 'binary_packages')
 
 
