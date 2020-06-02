@@ -28,7 +28,6 @@ class StageSplitIntoBinaryPackages(object):
                 "Binary packages' version: %s" % bp_version_number +
                 Color.NORMAL + '\n')
 
-        bps = []
         copied_files = set()
 
         # Read the package's installed files and directories.
@@ -53,6 +52,9 @@ class StageSplitIntoBinaryPackages(object):
                 (len(installed_files), len(installed_directories)))
 
 
+        # Map each file to a binary package
+        package_file_map = {}
+
         # First, create two binary packages for each library: One with the
         # library itself, and one with its debug symbols.
         shared_libraries = spv.get_shared_libraries()
@@ -64,25 +66,13 @@ class StageSplitIntoBinaryPackages(object):
 
             out.write("  Adding binary package `%s' for shared library ...\n" % bp_name)
 
-            bp = spv.add_binary_package(bp_name, bp_version_number)
-            bps.append(bp)
+            if bp_name not in package_file_map:
+                package_file_map[bp_name] = set()
 
-            # Copy files
-            bp.ensure_scratch_space_base()
-
-            dst_base = os.path.join(bp.scratch_space_base, 'destdir')
-            fops.mkdir_p(dst_base)
-            os.chmod(dst_base, 0o755)
-            os.chown(dst_base, 0, 0)
-
-            try:
-                for _file in lib.get_files() - lib.get_dev_symlinks():
-                    fops.copy_from_base(spv.install_location, _file, dst_base)
-                    copied_files.add(_file)
-
-            except BaseException as e:
-                out.write(str(e) + '\n')
-                return False
+            # Assign files
+            for _file in lib.get_files() - lib.get_dev_symlinks():
+                package_file_map[bp_name].add(_file)
+                copied_files.add(_file)
 
 
             # Eventually create a debug package
@@ -119,25 +109,13 @@ class StageSplitIntoBinaryPackages(object):
             if bp_dbg_name:
                 out.write("    Adding debug package `%s' ...\n" % bp_dbg_name)
 
-                bp_dbg = spv.add_binary_package(bp_dbg_name, bp_version_number)
-                bps.append(bp_dbg)
+                if bp_dbg_name not in package_file_map:
+                    package_file_map[bp_dbg_name] = set()
 
-                # Copy files
-                bp_dbg.ensure_scratch_space_base()
-
-                dst_base = os.path.join(bp_dbg.scratch_space_base, 'destdir')
-                fops.mkdir_p(dst_base)
-                os.chmod(dst_base, 0o755)
-                os.chown(dst_base, 0, 0)
-
-                try:
-                    for _file in (dbg_link_path,):
-                        fops.copy_from_base(spv.install_location, _file, dst_base)
-                        copied_files.add(_file)
-
-                except BaseException as e:
-                    out.write(str(e) + '\n')
-                    return False
+                # Assign files
+                for _file in (dbg_link_path,):
+                    package_file_map[bp_dbg_name].add(_file)
+                    copied_files.add(_file)
 
 
         # If shared objects are left after packaging shared libraries, move
@@ -159,24 +137,13 @@ class StageSplitIntoBinaryPackages(object):
             out.write("\n  Adding a package `%s' for other shared objects ...\n" %
                     bp_other_so_name)
 
-            bp_other_so = spv.add_binary_package(bp_other_so_name, bp_version_number)
-            bps.append(bp_other_so)
+            if bp_other_so_name not in package_file_map:
+                package_file_map[bp_other_so_name] = set()
 
-            # Copy files
-            bp_other_so.ensure_scratch_space_base()
+            s = package_file_map[bp_other_so_name]
 
-            dst_base = os.path.join(bp_other_so.scratch_space_base, 'destdir')
-            fops.mkdir_p(dst_base)
-            os.chmod(dst_base, 0o755)
-            os.chown(dst_base, 0, 0)
-
-            try:
-                for _file in other_so_files:
-                    fops.copy_from_base(spv.install_location, _file, dst_base)
-
-            except BaseException as e:
-                out.write(str(e) + '\n')
-                return False
+            for _file in other_so_files:
+                s.add(_file)
 
         # Eventually add a debug package for other shared objects.
         other_so_dbg_files = set()
@@ -217,24 +184,13 @@ class StageSplitIntoBinaryPackages(object):
             out.write("  Adding a debug package `%s' for other shared objects ...\n" %
                     bp_other_so_dbg_name)
 
-            bp_other_so_dbg = spv.add_binary_package(bp_other_so_dbg_name, bp_version_number)
-            bps.append(bp_other_so_dbg)
+            if bp_other_so_dbg_name not in package_file_map:
+                package_file_map[bp_other_so_dbg_name] = set()
 
-            # Copy files
-            bp_other_so_dbg.ensure_scratch_space_base()
+            s = package_file_map[bp_other_so_dbg_name]
 
-            dst_base = os.path.join(bp_other_so_dbg.scratch_space_base, 'destdir')
-            fops.mkdir_p(dst_base)
-            os.chmod(dst_base, 0o755)
-            os.chown(dst_base, 0, 0)
-
-            try:
-                for _file in other_so_dbg_files:
-                    fops.copy_from_base(spv.install_location, _file, dst_base)
-
-            except BaseException as e:
-                out.write(str(e) + '\n')
-                return False
+            for _file in other_so_dbg_files:
+                s.add(_file)
 
 
         # If required, create a development package that contains development
@@ -270,24 +226,13 @@ class StageSplitIntoBinaryPackages(object):
             bp_dev_name = spv.name + '-dev'
             out.write("\n  Adding a development package `%s' ...\n" % bp_dev_name)
 
-            bp_dev = spv.add_binary_package(bp_dev_name, bp_version_number)
-            bps.append(bp_dev)
+            if bp_dev_name not in package_file_map:
+                package_file_map[bp_dev_name] = set()
 
-            # Copy files
-            bp_dev.ensure_scratch_space_base()
+            s = package_file_map[bp_dev_name]
 
-            dst_base = os.path.join(bp_dev.scratch_space_base, 'destdir')
-            fops.mkdir_p(dst_base)
-            os.chmod(dst_base, 0o755)
-            os.chown(dst_base, 0, 0)
-
-            try:
-                for _file in dev_files:
-                    fops.copy_from_base(spv.install_location, _file, dst_base)
-
-            except BaseException as e:
-                out.write(str(e) + '\n')
-                return False
+            for _file in dev_files:
+                s.add(_file)
 
 
         # If required, create a doc package that contains the package's
@@ -311,24 +256,13 @@ class StageSplitIntoBinaryPackages(object):
             bp_doc_name = spv.name + '-doc'
             out.write("\n  Adding a documentation package `%s' ...\n" % bp_doc_name)
 
-            bp_doc = spv.add_binary_package(bp_doc_name, bp_version_number)
-            bps.append(bp_doc)
+            if bp_doc_name not in package_file_map:
+                package_file_map[bp_doc_name] = set()
 
-            # Copy files
-            bp_doc.ensure_scratch_space_base()
+            s = package_file_map[bp_doc_name]
 
-            dst_base = os.path.join(bp_doc.scratch_space_base, 'destdir')
-            fops.mkdir_p(dst_base)
-            os.chmod(dst_base, 0o755)
-            os.chown(dst_base, 0, 0)
-
-            try:
-                for _file in doc_files:
-                    fops.copy_from_base(spv.install_location, _file, dst_base)
-
-            except BaseException as e:
-                out.write(str(e) + '\n')
-                return False
+            for _file in doc_files:
+                s.add(_file)
 
 
         # Put all remaining .dbg files into a generic debug package
@@ -344,24 +278,13 @@ class StageSplitIntoBinaryPackages(object):
             bp_generic_dbg_name = spv.name + '-dbgsym'
             out.write("\n  Adding a generic debug package `%s' ...\n" % bp_generic_dbg_name)
 
-            bp_generic_dbg = spv.add_binary_package(bp_generic_dbg_name, bp_version_number)
-            bps.append(bp_generic_dbg)
+            if bp_generic_dbg_name not in package_file_map:
+                package_file_map[bp_generic_dbg_name] = set()
 
-            # Copy files
-            bp_generic_dbg.ensure_scratch_space_base()
+            s = package_file_map[bp_generic_dbg_name]
 
-            dst_base = os.path.join(bp_generic_dbg.scratch_space_base, 'destdir')
-            fops.mkdir_p(dst_base)
-            os.chmod(dst_base, 0o755)
-            os.chown(dst_base, 0, 0)
-
-            try:
-                for _file in remaining_dbg_files:
-                    fops.copy_from_base(spv.install_location, _file, dst_base)
-
-            except BaseException as e:
-                out.write(str(e) + '\n')
-                return False
+            for _file in remaining_dbg_files:
+                s.add(_file)
 
 
         # If files remain, put them into a generic package.
@@ -371,25 +294,14 @@ class StageSplitIntoBinaryPackages(object):
             bp_generic_name = spv.name
             out.write("\n  Adding a generic package `%s' ...\n" % bp_generic_name)
 
-            bp_generic = spv.add_binary_package(bp_generic_name, bp_version_number)
-            bps.append(bp_generic)
+            if bp_generic_name not in package_file_map:
+                package_file_map[bp_generic_name] = set()
 
-            # Copy files
-            bp_generic.ensure_scratch_space_base()
+            s = package_file_map[bp_generic_name]
 
-            dst_base = os.path.join(bp_generic.scratch_space_base, 'destdir')
-            fops.mkdir_p(dst_base)
-            os.chmod(dst_base, 0o755)
-            os.chown(dst_base, 0, 0)
-
-            try:
-                for _file in remaining_files:
-                    fops.copy_from_base(spv.install_location, _file, dst_base)
-                    copied_files.add(_file)
-
-            except BaseException as e:
-                out.write(str(e) + '\n')
-                return False
+            for _file in remaining_files:
+                s.add(_file)
+                copied_files.add(_file)
 
 
         # If directories remain, put them into a common package.
@@ -410,19 +322,35 @@ class StageSplitIntoBinaryPackages(object):
             bp_common_name = spv.name + '-common'
             out.write("\n  Adding a common package `%s' ...\n" % bp_common_name)
 
-            bp_common = spv.add_binary_package(bp_common_name, bp_version_number)
-            bps.append(bp_common)
+            if bp_common_name not in package_file_map:
+                package_file_map[bp_common_name] = set()
+
+            s = package_file_map[bp_common_name]
+
+            for _file in remaining_directories:
+                s.add(_file)
+
+
+        # Create binary packages and copy files
+        bps = []
+
+        out.write("\nCreating Packages and copying files ...\n")
+        for bp_name, bp_files in package_file_map.items():
+            out.write("  %s (%d files)\n" % (bp_name, len(bp_files)))
+
+            bp = spv.add_binary_package(bp_name, bp_version_number)
+            bps.append(bp)
 
             # Copy files
-            bp_common.ensure_scratch_space_base()
+            bp.ensure_scratch_space_base()
 
-            dst_base = os.path.join(bp_common.scratch_space_base, 'destdir')
+            dst_base = os.path.join(bp.scratch_space_base, 'destdir')
             fops.mkdir_p(dst_base)
             os.chmod(dst_base, 0o755)
             os.chown(dst_base, 0, 0)
 
             try:
-                for _file in remaining_directories:
+                for _file in bp_files:
                     fops.copy_from_base(spv.install_location, _file, dst_base)
 
             except BaseException as e:
