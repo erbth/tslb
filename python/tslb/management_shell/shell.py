@@ -6,10 +6,9 @@ import os
 import re
 import readline
 import shlex
-import subprocess
-import tempfile
 from tslb.Console import Color
 from . import *
+from . import object_editor
 
 
 root_directory = RootDirectory()
@@ -186,43 +185,19 @@ def main(*args):
                 print("This property does not implement `read_raw`.")
                 continue
 
-            # If the property value's type is not string and it is not None,
-            # refuse editing.
-            if val is not None and not isinstance(val, str):
-                print("Only string properties and those which are None can be edited interactively.")
-                continue
-
-            if val is None:
-                val = ""
-
-            # Create a temporary file
-            fd, path = tempfile.mkstemp()
-
             try:
-                os.write(fd, val.encode('UTF-8'))
-                os.close(fd)
+                new_val = object_editor.edit_object(val, prop.writable)
 
-                if not prop.writable:
-                    os.chmod(path, 0o400)
+                # Save the content if it changed
+                if new_val == val:
+                    print("\nValue not modified.")
 
-                # Run an editor on it
-                ret = subprocess.run(['editor', path])
+                else:
+                    prop.write(new_val)
+                    print("\nStored the new value.")
 
-                if ret.returncode == 0 and prop.writable:
-                    # Save the content if it changed
-                    with open(path, 'rb') as f:
-                        content = f.read().decode('UTF-8')
-
-                    if content == val or content == "" and val is None:
-                        print("Value not modified.")
-
-                    else:
-                        prop.write(content)
-                        print("Stored the new value.")
-
-            finally:
-                # Delete the temporary file again
-                os.unlink(path)
+            except object_editor.UnsupportedObject as e:
+                print(str(e) + '\n')
 
 
         else:
