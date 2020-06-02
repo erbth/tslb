@@ -1,4 +1,5 @@
 import os
+import re
 import stat
 import subprocess
 import zlib
@@ -329,6 +330,69 @@ class StageSplitIntoBinaryPackages(object):
 
             for _file in remaining_directories:
                 s.add(_file)
+
+
+        # Apply additional file assignments specified as attributes
+        if spv.has_attribute('additional_file_placement'):
+            additional_file_placement = spv.get_attribute('additional_file_placement')
+
+            if not isinstance(additional_file_placement):
+                out.write("Attribute `additional_file_placement' is not of type Dict.\n")
+                return False
+
+            # Build reverse package-file map to remove files from current
+            # placement.
+            file_package_map = {}
+            for bp_name, bp_files in package_file_map:
+                for _file in bp_files:
+                    file_package_map[_file] = bp_name
+
+            # Apply additional placement patterns.
+            for bp_name, bp_patterns in additional_file_placement.items():
+                if isinstance(bp_patterns, str):
+                    patterns = [bp_patterns]
+                elif isinstance(bp_patterns, list) or isinstance(bp_patterns, tuple):
+                    patterns = bp_patterns
+                else:
+                    out.write("Attribute `additional_file_placement[%s]' is neither list, tuple nor str.\n" %
+                            bp_name)
+
+                    return False
+
+                try:
+                    patterns = [re.compile(patterns)]
+                except re.error as e:
+                    out.write("Attribute `additional_file_placement[%s]': Invalid regex: %s.\n" %
+                            (bp_name, e))
+                    return False
+
+                # Find matching files
+                files = set()
+
+                installed_items = installed_files | installed_directories
+
+                for pattern in patterns:
+                    for _file in installed_items:
+                        if re.match(pattern, _file):
+                            files.add(_file)
+
+                # Reassign files
+                if bp_name not in package_file_map:
+                    package_file_map[bp_name] = set()
+
+                s = package_file_map[bp_name]
+
+                for _file in files:
+                    package_file_map[file_package_map[_file]].remove(_file)
+                    package_file_map[bp_name].add(_file)
+                    file_package_map[_file] = bp_name
+
+
+            # Remove empty packages
+            bp_names = package_file_map.keys()
+            for name in bp_names:
+                if not package_file_map[bp_names]:
+                    del package_file_map[bp_names]
 
 
         # Create binary packages and copy files
