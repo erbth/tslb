@@ -189,12 +189,13 @@ def main(*args):
                 new_val = object_editor.edit_object(val, prop.writable)
 
                 # Save the content if it changed
-                if new_val == val:
-                    print("\nValue not modified.")
+                if prop.writable:
+                    if new_val == val:
+                        print("\nValue not modified.")
 
-                else:
-                    prop.write(new_val)
-                    print("\nStored the new value.")
+                    else:
+                        prop.write(new_val)
+                        print("\nStored the new value.")
 
             except object_editor.UnsupportedObject as e:
                 print(str(e) + '\n')

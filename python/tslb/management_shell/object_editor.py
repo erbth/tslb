@@ -1,6 +1,9 @@
 import os
 import subprocess
 import tempfile
+from tslb import Constraint
+from tslb.Constraint import DependencyList
+from tslb.VersionNumber import VersionNumber
 from . import config_file_utils as cfu
 
 
@@ -26,6 +29,7 @@ def edit_object_None(rw):
         print("The current value is `None'.\nChoose a new type from the list below or input nothing to abort.")
         print("  (1) str")
         print("  (2) list(tuple(str, str|list(str)))")
+        print("  (3) DependencyList with str objects")
 
         _type = input("> ")
 
@@ -37,6 +41,9 @@ def edit_object_None(rw):
 
         elif _type == '2':
             return edit_object_list_pair_of_str_str_list([], rw)
+
+        elif _type == '3':
+            return edit_object_dependency_list_str(DependencyList(), rw)
 
 
 def edit_object_str(string, rw):
@@ -111,14 +118,93 @@ def edit_object_list_pair_of_str_str_list(obj, rw):
         # Let the user view / edit the string
         string = edit_object_str(string, rw)
 
+        if not rw:
+            return obj
+
         # Parse the string back to a list
         try:
             tmp = cfu.preprocess(string)
-            tmp = cfu.tokenize(tmp)
+            tmp = cfu.tokenize_list_pair_of_str_str_list(tmp)
             tmp = cfu.parse_list_pair_of_str_str_list(tmp)
             return tmp
 
         except cfu.CFUSyntaxError as e:
+            print(str(e))
+            print("Press return to continue")
+            input()
+
+
+def edit_object_dependency_list_str(obj, rw):
+    # Convert the list to a config-file like string
+    string = "# You are editing a DependencyList with str objects.\n" \
+             "# \n" \
+             "# This is a comment. A backslash ('\\') in it has not special meaning.\n" \
+             "# \n" \
+             "# These are a few examples of the syntax used in this file:\n" \
+             "# \n" \
+             "# \"Package 1\" >= 1.3                # Require `Package 1' in version 1.3 or higher\n" \
+             "# \"Package 1\" < 4.9 != 3.7          # Additional requirements\n" \
+             "# \n" \
+             "# package2==3.3                     # Spaces are not important, quotes are optional \n" \
+             "#                                   # if Literals have no spaces.\n" \
+             "# \n" \
+             "#     \"Package 3\"   !=  4           # Arbitrary spaces are allowed\n" \
+             "# \n" \
+             "# \"Package 4\" \\\n" \
+             "#    \"= 5.5\"                        # '\\' continues lines\n" \
+             "# \n" \
+             "# \"Package 5\": \\     # A comment behind a backslash has no special meaning\n" \
+             "#    \"> 1a\"          # <- Accepted normally\n" \
+             "# \n" \
+             "# Order does not matter, multiple lines with the same key will be collated.\n" \
+             "# Allowed version predicates are < > >= <= != == and = (the latter two are identical).\n"
+
+    for package, constraints in obj.get_object_constraint_list():
+        values = []
+
+        for c in constraints:
+            if c.constraint_type != Constraint.CONSTRAINT_TYPE_NONE:
+                values.append("%s%s" % (Constraint.constraint_type_string[
+                    c.constraint_type], c.version_number))
+
+        string += '"' + cfu.escape_string(package) + '"'
+
+        if values:
+            string += ' ' + ' '.join(values)
+
+        string += '\n'
+
+
+    # Edit and parse back
+    while True:
+        # Let the user view / edit the string
+        string = edit_object_str(string, rw)
+        if not rw:
+            return obj
+
+        # Parse the string back to a list
+        try:
+            tmp = cfu.preprocess(string)
+            tmp = cfu.tokenize_dependency_list_str(tmp)
+            tmp = cfu.parse_dependency_list_str(tmp)
+
+            new_list = DependencyList()
+
+            for package, constraints in tmp:
+                if constraints:
+                    for c in constraints:
+                        new_list.add_constraint(c, package)
+
+                else:
+                    new_list.add_constraint(
+                            Constraint.VersionConstraint(
+                                Constraint.CONSTRAINT_TYPE_NONE,
+                                VersionNumber(0)),
+                            package)
+
+            return new_list
+
+        except (cfu.CFUSyntaxError, Constraint.ConstraintContradiction) as e:
             print(str(e))
             print("Press return to continue")
             input()
@@ -143,7 +229,7 @@ def edit_object(obj, rw):
     if isinstance(obj, str):
         return edit_object_str(obj, rw)
 
-    if isinstance(obj, list):
+    elif isinstance(obj, list):
         # Look for list(tuple(str, str|list(str)))
         valid = True
 
@@ -169,6 +255,12 @@ def edit_object(obj, rw):
 
         if valid:
             return edit_object_list_pair_of_str_str_list(obj, rw)
+
+    elif isinstance(obj, DependencyList):
+        # Check if objects are strings
+        req = obj.get_required()
+        if all(isinstance(e, str) for e in req):
+            return edit_object_dependency_list_str(obj, rw)
 
     raise UnsupportedObject(type(obj))
 

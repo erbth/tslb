@@ -4,6 +4,10 @@ to edit python objects. Moreover parses for some object types are here, too.
 
 Additionally escaped characters are defined in this module.
 """
+from tslb.VersionNumber import VersionNumber
+from tslb.Constraint import VersionConstraint
+
+
 character_escape_map = {
     '"': '\\"',
     '\\': '\\\\',
@@ -85,7 +89,7 @@ def preprocess(s):
     return output
 
 
-def tokenize(s):
+def tokenize_list_pair_of_str_str_list(s):
     """
     :param List(Tuple(int, int, str)): Preprocessed input string
     :returns list(int, int, str, bool): Token string of 4-tuples
@@ -226,6 +230,160 @@ def parse_list_pair_of_str_str_list(ts):
 
             else:
                 raise CFUSyntaxError(line, col, "Expected non-literal `\\n'")
+
+    if state != 1:
+        raise CFUSyntaxError(line, col, "Unexpected end of file")
+
+    return _list
+
+
+def tokenize_dependency_list_str(s):
+    """
+    :param List(Tuple(int, int, str)): Preprocessed input string
+    :returns list(int, int, str, bool): Token string of 4-tuples
+        (line, column, token, is_literal).
+    """
+    ts = []
+
+    c1 = None
+    c2 = None
+    current_literal = None
+    current_quoted = False
+    start_line = 0
+    start_column = 0
+
+    line = 0
+    col = 0
+    line1 = 0
+    col1 = 0
+
+    for line, col, c in s:
+        if current_literal is not None:
+            if c1 == '\\':
+                # Escape sequence
+                if c not in ('"', '\\', 'n', 'r', 't'):
+                    raise CFUSyntaxError(line, col, "Invalid escape sequence `\\%s'" % c)
+
+                current_literal += c1 + c
+
+            elif (current_quoted and c == '"') or (not current_quoted and c.isspace()):
+                ts.append((start_line, start_column, current_literal, True))
+                current_literal = None
+
+                if c == '\n':
+                    ts.append((line, col, c, False))
+
+            elif c == '"':
+                raise CFUSyntaxError(line, col, "Unescaped quote in unquoted literal")
+
+            else:
+                current_literal += c
+
+        else:
+            if c1 in ('<', '>', '=') and c != '=' and c2 not in ('<', '>', '=', '!'):
+                ts.append((line1, col1, c1, False))
+
+            if c == '"' or (not c.isspace() and c not in ('<', '>', '=', '!')):
+                if c == '"':
+                    current_quoted = True
+                    current_literal = ''
+                else:
+                    current_quoted = False
+                    current_literal = c
+
+                start_line = line
+                start_column = col
+
+            elif c.isspace() and not c == '\n':
+                pass
+
+            elif (c1 and (c1 + c) in ('<=', '>=', '!=', '==')):
+                ts.append((line, col, c1 + c, False))
+
+            elif c == '\n':
+                ts.append((line, col, c, False))
+
+            elif c in ('<', '>', '!', '='):
+                pass
+
+            else:
+                raise CFUSyntaxError(line, col,
+                        "Invalid character `%s', expected a non-literal token (#\\:,[]\\n)" %
+                        c)
+
+        # Prepare for next character
+        c2 = c1
+        c1 = c
+        line1 = line
+        col1 = col
+
+
+    # The input text must not end with an open literal
+    if current_literal is not None and current_quoted:
+        raise CFUSyntaxError(line, col, "The input text must not end with an open quote")
+
+    return ts
+
+
+def parse_dependency_list_str(ts):
+    """
+    :param list(int, int, str, bool) ts: Token string
+    :returns list(tuple(str, list(VersionConstraint))): The parsed constraint
+        list
+    """
+    # Power set constructed DFA parser
+    state = 1
+    line = 0
+    col = 0
+
+    _list = []
+
+    name = None
+    constraints = None
+    constraint_type = None
+
+    for line, col, token, is_literal in ts:
+        if state == 1:
+            if is_literal:
+                name = token
+                constraints = []
+                state = 2
+
+            elif token == '\n':
+                state = 1
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected literal or non-literal `\\n'")
+
+        elif state == 2:
+            if not is_literal and token in ('<', '>', '<=', '>=', '!=', '==', '='):
+                constraint_type = token
+                state = 3
+
+            elif not is_literal and token == '\n':
+                _list.append((name, constraints))
+                state = 1
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected non-literal from (< > <= >= != == = \\n)")
+
+        elif state == 3:
+            if is_literal:
+                try:
+                    v = VersionNumber(token)
+                except Exception as e:
+                    raise CFUSyntaxError(line, col, "Invalid version number `%s': %s" %
+                            token, e)
+
+                if constraint_type == '=':
+                    constraint_type = '=='
+
+                constraints.append(VersionConstraint(constraint_type, v))
+                state = 2
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected literal")
+
 
     if state != 1:
         raise CFUSyntaxError(line, col, "Unexpected end of file")

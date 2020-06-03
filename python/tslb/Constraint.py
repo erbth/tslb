@@ -270,7 +270,7 @@ class DependencyList(object):
                         self.l[o].append(vc)
                         self.l[o] = list(filter(lambda ovc:\
                                 ovc.constraint_type != CONSTRAINT_TYPE_NONE and\
-                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number)), self.l[o]))
+                                (vc.constraint_type != CONSTRAINT_TYPE_NEQ or vc.fulfilled(ovc.version_number) or vc is ovc), self.l[o]))
 
                 # (-inf, x)]
                 elif gt is None:
@@ -428,10 +428,28 @@ class DependencyList(object):
     def get_constraint_list(self, o):
         return self.l.get(o, [])
 
+    def get_object_constraint_list(self):
+        """
+        DO NOT alter the returned objects and VersionConstraints!
+
+        :returns list(object, list(VersionConstraint)): All objects with their
+            version constraints.
+        """
+        _list = []
+
+        for o, vcs in self.l.items():
+            # Copy the list.
+            _list.append((o, list(vcs)))
+
+        return _list
+
     def __hash__(self):
         return hash(tuple(self.l.items()))
 
     def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return None
+
         return self.l == other.l
 
     def __ne__(self, other):
