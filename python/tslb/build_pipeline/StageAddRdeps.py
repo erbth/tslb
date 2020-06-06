@@ -21,6 +21,8 @@ class StageAddRdeps(object):
         :returns: successful
         :rtype: bool
         """
+        return False
+
         for n in spv.list_current_binary_packages():
             vs = sorted(spv.list_binary_package_version_numbers(n))
             bv = vs[-1]

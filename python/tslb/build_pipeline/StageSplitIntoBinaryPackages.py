@@ -334,6 +334,7 @@ class StageSplitIntoBinaryPackages(object):
 
         # Apply additional file assignments specified as attributes
         if spv.has_attribute('additional_file_placement'):
+            out.write("\nProcessing additional file placement rules ...\n")
             additional_file_placement = spv.get_attribute('additional_file_placement')
 
             if not isinstance(additional_file_placement, list):
@@ -343,11 +344,12 @@ class StageSplitIntoBinaryPackages(object):
             # Build reverse package-file map to remove files from current
             # placement.
             file_package_map = {}
-            for bp_name, bp_files in package_file_map:
+            for bp_name, bp_files in package_file_map.items():
                 for _file in bp_files:
                     file_package_map[_file] = bp_name
 
             # Apply additional placement patterns.
+            assigned_files = set()
             for bp_name, bp_patterns in additional_file_placement:
                 if isinstance(bp_patterns, str):
                     patterns = [bp_patterns]
@@ -360,11 +362,19 @@ class StageSplitIntoBinaryPackages(object):
                     return False
 
                 try:
-                    patterns = [re.compile(patterns)]
+                    patterns = [re.compile(p) for p in patterns]
                 except re.error as e:
                     out.write("Attribute `additional_file_placement[%s]': Invalid regex: %s.\n" %
                             (bp_name, e))
                     return False
+
+                # Create a binary package with the requested name if it does
+                # not exist yet.
+                if bp_name not in package_file_map:
+                    out.write("  Adding additional binary package `%s' ...\n" % bp_name)
+                    package_file_map[bp_name] = set()
+
+                s = package_file_map[bp_name]
 
                 # Find matching files
                 files = set()
@@ -372,27 +382,25 @@ class StageSplitIntoBinaryPackages(object):
                 installed_items = installed_files | installed_directories
 
                 for pattern in patterns:
-                    for _file in installed_items:
-                        if re.match(pattern, _file):
+                    for _file in installed_items - assigned_files:
+                        m = re.match(pattern, _file)
+                        if m:
                             files.add(_file)
 
                 # Reassign files
-                if bp_name not in package_file_map:
-                    package_file_map[bp_name] = set()
-
-                s = package_file_map[bp_name]
-
                 for _file in files:
                     package_file_map[file_package_map[_file]].remove(_file)
                     package_file_map[bp_name].add(_file)
                     file_package_map[_file] = bp_name
+                    assigned_files.add(_file)
 
 
             # Remove empty packages
-            bp_names = package_file_map.keys()
+            bp_names = list(package_file_map.keys())
             for name in bp_names:
-                if not package_file_map[bp_names]:
-                    del package_file_map[bp_names]
+                if not package_file_map[name]:
+                    out.write("  Removing empty binary package `%s'.\n" % name)
+                    del package_file_map[name]
 
 
         # Create binary packages and copy files
@@ -426,4 +434,4 @@ class StageSplitIntoBinaryPackages(object):
         # the source package.
         spv.set_current_binary_packages([bp.name for bp in bps])
 
-        return False
+        return True
