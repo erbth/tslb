@@ -336,8 +336,8 @@ class StageSplitIntoBinaryPackages(object):
         if spv.has_attribute('additional_file_placement'):
             additional_file_placement = spv.get_attribute('additional_file_placement')
 
-            if not isinstance(additional_file_placement):
-                out.write("Attribute `additional_file_placement' is not of type Dict.\n")
+            if not isinstance(additional_file_placement, list):
+                out.write("Attribute `additional_file_placement' is not of type list.\n")
                 return False
 
             # Build reverse package-file map to remove files from current
@@ -348,7 +348,7 @@ class StageSplitIntoBinaryPackages(object):
                     file_package_map[_file] = bp_name
 
             # Apply additional placement patterns.
-            for bp_name, bp_patterns in additional_file_placement.items():
+            for bp_name, bp_patterns in additional_file_placement:
                 if isinstance(bp_patterns, str):
                     patterns = [bp_patterns]
                 elif isinstance(bp_patterns, list) or isinstance(bp_patterns, tuple):

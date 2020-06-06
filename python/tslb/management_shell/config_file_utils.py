@@ -21,9 +21,6 @@ escape_character_map = {v: k for k,v in character_escape_map.items()}
 def escape_string(s):
     return ''.join(character_escape_map.get(c, c) for c in s)
 
-def unescape_string(s):
-    return ''.join(escape_character_map.get(c, c) for c in s)
-
 
 def preprocess(s):
     """
@@ -33,7 +30,7 @@ def preprocess(s):
     """
     output = []
 
-    c1 = None
+    escape = False
     in_literal = False
     comment_detected = False
     line_continuation_detected = False
@@ -59,8 +56,14 @@ def preprocess(s):
 
         else:
             if in_literal:
-                if c == '"' and c1 != '\\':
+                if c == '"' and not escape:
                     in_literal = False
+
+                if escape:
+                    escape = False
+                else:
+                    if c == '\\':
+                        escape = True
 
                 output.append((line, col, c))
 
@@ -76,11 +79,10 @@ def preprocess(s):
 
                     if c == '"':
                         in_literal = True
+                        escape = False
 
 
-        # Prepare for next input character
-        c1 = c
-
+        # Advance column and line counters
         col += 1
         if c == '\n':
             col = 1
@@ -97,7 +99,7 @@ def tokenize_list_pair_of_str_str_list(s):
     """
     ts = []
 
-    c1 = None
+    escape = False
     current_literal = None
     start_line = 0
     start_column = 0
@@ -107,16 +109,21 @@ def tokenize_list_pair_of_str_str_list(s):
 
     for line, col, c in s:
         if current_literal is not None:
-            if c1 == '\\':
+            if escape:
                 # Escape sequence
-                if c not in ('"', '\\', 'n', 'r', 't'):
+                try:
+                    current_literal += escape_character_map['\\' + c]
+                except KeyError:
                     raise CFUSyntaxError(line, col, "Invalid escape sequence `\\%s'" % c)
 
-                current_literal += c1 + c
+                escape = False
 
             elif c == '"':
                 ts.append((start_line, start_column, current_literal, True))
                 current_literal = None
+
+            elif c == '\\':
+                escape = True
 
             else:
                 current_literal += c
@@ -126,6 +133,7 @@ def tokenize_list_pair_of_str_str_list(s):
                 start_line = line
                 start_column = col
                 current_literal = ''
+                escape = False
 
             elif c.isspace() and not c == '\n':
                 pass
@@ -137,9 +145,6 @@ def tokenize_list_pair_of_str_str_list(s):
                 raise CFUSyntaxError(line, col,
                         "Invalid character `%s', expected a non-literal token (#\\:,[]\\n)" %
                         c)
-
-        # Prepare for next character
-        c1 = c
 
 
     # The input text must not end with an open literal
@@ -249,6 +254,7 @@ def tokenize_dependency_list_str(s):
     c2 = None
     current_literal = None
     current_quoted = False
+    escape = False
     start_line = 0
     start_column = 0
 
@@ -259,12 +265,14 @@ def tokenize_dependency_list_str(s):
 
     for line, col, c in s:
         if current_literal is not None:
-            if c1 == '\\':
+            if escape:
                 # Escape sequence
-                if c not in ('"', '\\', 'n', 'r', 't'):
+                try:
+                    current_literal += escape_character_map['\\' + c]
+                except KeyError:
                     raise CFUSyntaxError(line, col, "Invalid escape sequence `\\%s'" % c)
 
-                current_literal += c1 + c
+                escape = False
 
             elif (current_quoted and c == '"') or (not current_quoted and c.isspace()):
                 ts.append((start_line, start_column, current_literal, True))
@@ -275,6 +283,9 @@ def tokenize_dependency_list_str(s):
 
             elif c == '"':
                 raise CFUSyntaxError(line, col, "Unescaped quote in unquoted literal")
+
+            elif c == '\\':
+                escape = True
 
             else:
                 current_literal += c
@@ -293,6 +304,7 @@ def tokenize_dependency_list_str(s):
 
                 start_line = line
                 start_column = col
+                escape = False
 
             elif c.isspace() and not c == '\n':
                 pass
@@ -308,7 +320,7 @@ def tokenize_dependency_list_str(s):
 
             else:
                 raise CFUSyntaxError(line, col,
-                        "Invalid character `%s', expected a non-literal token (#\\:,[]\\n)" %
+                        "Invalid character `%s', expected a non-literal token" %
                         c)
 
         # Prepare for next character
@@ -319,8 +331,11 @@ def tokenize_dependency_list_str(s):
 
 
     # The input text must not end with an open literal
-    if current_literal is not None and current_quoted:
-        raise CFUSyntaxError(line, col, "The input text must not end with an open quote")
+    if current_literal is not None:
+        if current_quoted:
+            raise CFUSyntaxError(line, col, "The input text must not end with an open quote")
+
+        ts.append((start_line, start_column, current_literal, True))
 
     return ts
 
