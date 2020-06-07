@@ -888,6 +888,43 @@ class SourcePackageVersion(object):
                 fops.rm_rf(os.path.join('/binary_packages', name, str(version_number)))
 
 
+    def remove_old_binary_packages(self):
+        """
+        This method removes all binary packages that are not currently built
+        out of the source package version. Moreover it removes all but the
+        latest version of binary packages that are built.
+
+        This operation requires that the source package version has write
+        intent announced.
+        """
+        self.ensure_write_intent()
+
+        # Delete packages that are not built anymore
+        all_bp_names = self.list_all_binary_packages()
+        current_bps = set(self.list_current_binary_packages())
+
+        to_delete = []
+
+        for bp_name in all_bp_names:
+            if bp_name not in current_bps:
+                for v in self.list_binary_package_version_numbers(bp_name):
+                    to_delete.append((bp_name, v))
+
+        for name, version in to_delete:
+            self.delete_binary_package(name, version)
+
+        # Delete old versions of packages that are built
+        all_bp_names = self.list_all_binary_packages()
+
+        for bp_name in all_bp_names:
+            versions = self.list_binary_package_version_numbers(bp_name)
+            newest = max(versions)
+
+            for v in versions:
+                if v != newest:
+                    self.delete_binary_package(bp_name, v)
+
+
     # Key-Value-Store like attributes
     def list_attributes(self):
         """

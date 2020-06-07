@@ -1,32 +1,25 @@
 from tslb import Architecture
 from tslb import settings
-from tslb.filesystem import FileOperations as fops
-from tslb.tclm import lock_S, lock_Splus, lock_X
 from tslb import package_utils
 from tslb.tpm import Tpm2_pack
+from tslb.build_pipeline.common_functions import update_binary_package_files
 import tslb.CommonExceptions as ces
 import os
 import shutil
-import subprocess
 
 class StageCreatePMPackages(object):
     name = 'create_pm_packages'
 
     def flow_through(spv, rootfs_mountpoint, out):
         """
-        :param spv: The source package version to let flow through this segment
+        :param spv: The source package version that flows though this segment
             of the pipeline.
-
         :type spv: SourcePackage.SourcePackageVersion
-
         :param str rootfs_mountpoint: The mountpoint at which the rootfs image
             that should be used for the build is mounted.
-
-        :param out: The (wrapped) fd to send output that shall be recorded in
-            the db to.  Typically all output would go there.
-
+        :param out: The (wrapped) fd to which the stage should send output that
+            shall be recorded in the db. Typically all output would go there.
         :type out: Something like sys.stdout
-
         :returns: successful
         :rtype: bool
         """
@@ -38,19 +31,14 @@ class StageCreatePMPackages(object):
             bv = max(spv.list_binary_package_version_numbers(n))
             b = spv.get_binary_package(n, bv)
 
-            # Add files
-            files = []
 
-            def file_function(p):
-                nonlocal files
-                files.append((os.path.join('/', p), ''))
-
-            fops.traverse_directory_tree(os.path.join(b.scratch_space_base, 'destdir'), file_function)
-
-            b.set_files(files)
-
+            # Update files
+            out.write("Updating files of binary package `%s' ...\n" % b.name)
+            update_binary_package_files(b)
 
             # Create desc.xml
+            out.write("Packing ...\n")
+
             with open(os.path.join(b.scratch_space_base, 'desc.xml'), 'w', encoding='utf8') as f:
                 f.write(package_utils.desc_from_binary_package(b))
 
@@ -78,9 +66,12 @@ class StageCreatePMPackages(object):
 
 
             # Copy the package to the collecting repo
-            transport_form = os.path.join(b.scratch_space_base,
-                '%s-%s_%s.tpm2' % (b.name, b.version_number,
-                    Architecture.to_str(b.architecture)))
+            transport_form = '%s-%s_%s.tpm2' % (b.name, b.version_number,
+                    Architecture.to_str(b.architecture))
+
+            out.write("Copying transport form `%s' to the collecting repo ...\n" % transport_form)
+
+            transport_form = os.path.join(b.scratch_space_base, transport_form)
 
             arch_dir = os.path.join(
                     settings.get_collecting_repo_location(),
@@ -93,6 +84,8 @@ class StageCreatePMPackages(object):
 
             shutil.copy(transport_form,
                 os.path.join(arch_dir, ''))
+
+            out.write("\n")
 
 
         return success

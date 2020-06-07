@@ -368,3 +368,38 @@ def get_gnu_debug_link(path, out=sys.stdout):
         return (debug_link, crc32)
 
     return None
+
+
+def determine_required_shared_objects(path, out=sys.stdout):
+    """
+    Retrieve all shared objects that are required by an ELF file. These are
+    required shared libraries and the interpreter, if any.
+
+    If the file is not a shared object, an empty list is returned.
+
+    :returns Set(str): The list of required shared objects.
+    """
+    with open(path, 'rb') as f:
+        if f.read(4) != b'\x7fELF':
+            return set()
+
+    cmd = ['readelf', '-d', '-l', path]
+    ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=out)
+    if ret.returncode != 0:
+        raise ces.CommandFailed(cmd)
+
+    required_sos = set()
+
+    for line in ret.stdout.decode('UTF-8').splitlines():
+        match = re.match(r'^.*\(NEEDED\)\s+Shared library:\s*\[([^\[\]]+)\]$', line)
+        if match:
+            required_sos.add(match.group(1))
+            continue
+
+        match = re.match(r'^\s*\[Requesting program interpreter:\s*(\S*)\]$', line)
+        if match:
+            interpreter = match.group(1)
+            if interpreter.endswith('.so'):
+                required_sos.add(interpreter)
+
+    return required_sos

@@ -30,6 +30,7 @@ def edit_object_None(rw):
         print("  (1) str")
         print("  (2) list(tuple(str, str|list(str)))")
         print("  (3) DependencyList with str objects")
+        print("  (4) list(tuple(str, DependencyList(str)))")
 
         _type = input("> ")
 
@@ -44,6 +45,9 @@ def edit_object_None(rw):
 
         elif _type == '3':
             return edit_object_dependency_list_str(DependencyList(), rw)
+
+        elif _type == '4':
+            return edit_object_list_pair_of_str_dependency_list_str(list(), rw)
 
 
 def edit_object_str(string, rw):
@@ -159,7 +163,7 @@ def edit_object_dependency_list_str(obj, rw):
              "# Order does not matter, multiple lines with the same key will be collated.\n" \
              "# Allowed version predicates are < > >= <= != == and = (the latter two are identical).\n"
 
-    for package, constraints in obj.get_object_constraint_list():
+    for package, constraints in sorted(obj.get_object_constraint_list(), key=lambda t: t[0]):
         values = []
 
         for c in constraints:
@@ -182,7 +186,7 @@ def edit_object_dependency_list_str(obj, rw):
         if not rw:
             return obj
 
-        # Parse the string back to a list
+        # Parse the string back to a DependencyList
         try:
             tmp = cfu.preprocess(string)
             tmp = cfu.tokenize_dependency_list_str(tmp)
@@ -201,6 +205,76 @@ def edit_object_dependency_list_str(obj, rw):
                                 Constraint.CONSTRAINT_TYPE_NONE,
                                 VersionNumber(0)),
                             package)
+
+            return new_list
+
+        except (cfu.CFUSyntaxError, Constraint.ConstraintContradiction) as e:
+            print(str(e))
+            print("Press return to continue")
+            input()
+
+
+def edit_object_list_pair_of_str_dependency_list_str(obj, rw):
+    # Convert the list to a config-file like string
+    string = "# You are editing an object of type list(pair(str, DependencyList(str))).\n" \
+             "# \n" \
+             "# This is a comment. A backslash ('\\') in it has not special meaning.\n" \
+             "# A literal can be enclosed in quotes to allow for spaces in it.\n" \
+             "# \n" \
+             "# This file's syntax follows these examples:\n" \
+             "# bash -> glibc >= 2.24 <= 3.0\n" \
+             "# bash -> \"libreadline 1\"\n" \
+             "# \n" \
+             "# Order does not matter, multiple lines with the same dependency will be collated.\n" \
+             "# Allowed version predicates are < > >= <= != == and = (the latter two are identical).\n"
+
+    for bp_name, dl in obj:
+        for dep, constraints in sorted(dl.get_object_constraint_list(), key=lambda t: t[0]):
+            values = []
+
+            for c in constraints:
+                if c.constraint_type != Constraint.CONSTRAINT_TYPE_NONE:
+                    values.append("%s%s" % (
+                        Constraint.constraint_type_string[c.constraint_type],
+                        c.version_number))
+
+            string += '"' + cfu.escape_string(bp_name) + '" -> "' + cfu.escape_string(dep) + '"'
+            if values:
+                string += ' ' + ' '.join(values)
+
+            string += '\n'
+
+
+    # Edit and parse back
+    while True:
+        # Let the user view / edit the string
+        string = edit_object_str(string, rw)
+        if not rw:
+            return obj
+
+        # Parse the string back to a list
+        try:
+            tmp = cfu.preprocess(string)
+            tmp = cfu.tokenize_list_pair_of_str_dependency_list_str(tmp)
+            tmp = cfu.parse_list_pair_of_str_dependency_list_str(tmp)
+
+            new_list = []
+
+            for bp_name, dep, constraints in tmp:
+                dl = DependencyList()
+
+                if constraints:
+                    for c in constraints:
+                        dl.add_constraint(c, dep)
+
+                else:
+                    dl.add_constraint(
+                            Constraint.VersionConstraint(
+                                Constraint.CONSTRAINT_TYPE_NONE,
+                                VersionNumber(0)),
+                            dep)
+
+                new_list.append((bp_name, dl))
 
             return new_list
 
@@ -255,6 +329,26 @@ def edit_object(obj, rw):
 
         if valid:
             return edit_object_list_pair_of_str_str_list(obj, rw)
+
+        # Look for list(tuple(str, DependencyList(str)))
+        valid = True
+
+        for e in obj:
+            if not isinstance(e, tuple) or len(e) != 2 or \
+                    not isinstance(e[0], str) or not isinstance(e[1], DependencyList):
+                valid = False
+                break
+
+            for o in e[1].get_required():
+                if not isinstance(o, str):
+                    valid = False
+                    break
+
+            if not valid:
+                break
+
+        if valid:
+            return edit_object_list_pair_of_str_dependency_list_str(obj, rw)
 
     elif isinstance(obj, DependencyList):
         # Check if objects are strings

@@ -18,7 +18,7 @@ class StageFindSharedLibraries(object):
         :type spv: SourcePackage.SourcePackageVersion
         :param str rootfs_mountpoint: The mountpoint at which the rootfs image
             that should be used for the build is mounted.
-        :param out: The (wrapped) fs to which the stage should send output that
+        :param out: The (wrapped) fd to which the stage should send output that
             shall be recorded in the db. Typically all output would go there.
         :type out: Something like sys.stdout
         :returns: successful

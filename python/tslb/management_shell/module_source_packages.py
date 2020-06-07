@@ -202,7 +202,9 @@ class SourcePackageVersionDirectory(Directory):
             SourcePackageVersionGenericAction(self.pkg_name, self.arch, self.version, "get_creation_time"),
             SourcePackageVersionListAttributesAction(self.pkg_name, self.arch, self.version),
             SourcePackageVersionListSharedLibrariesAction(self.pkg_name, self.arch, self.version),
-            SourcePackageVersionInspectScratchSpaceAction(self.pkg_name, self.arch, self.version)
+            SourcePackageVersionShowMostRecentInternalRDepsAction(self.pkg_name, self.arch, self.version),
+            SourcePackageVersionInspectScratchSpaceAction(self.pkg_name, self.arch, self.version),
+            SourcePackageVersionCleanBinaryPackagesAction(self.pkg_name, self.arch, self.version)
         ]
 
 
@@ -305,6 +307,43 @@ class SourcePackageVersionInspectScratchSpaceAction(Action, SourcePackageVersion
 
         except BaseException as e:
             print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + "\n")
+
+
+class SourcePackageVersionCleanBinaryPackagesAction(Action, SourcePackageVersionFactoryBase):
+    """
+    Remove old binary packages (those which are not built from the source
+    package anymore and all but the most recent version of those which are
+    built).
+    """
+    def __init__(self, name, arch, version):
+        super().__init__(writes=True)
+
+        self.pkg_name = name
+        self.arch = arch
+        self.version = version
+
+        self.name = 'clean_binary_packages'
+
+
+    def run(self, *args):
+        print(
+"This removes binary packages that are not currently built and all but the most\n"
+"recent versions of those which are.\n")
+
+        while True:
+            try:
+                r = input("Do you really want to proceed? [y/N] ")
+                if r == 'y' or r == 'Y':
+                    break
+                if r == 'n' or r == 'N' or r == '':
+                    return
+
+            except KeyboardInterrupt:
+                print()
+                return
+
+        spv = self.create_spv(True)
+        spv.remove_old_binary_packages()
 
 
 #************** Presenting a source package version's attributes **************
@@ -464,7 +503,7 @@ class SourcePackageVersionBinaryPackagesDirectory(Directory, SourcePackageVersio
 
         children = []
 
-        for bp_name in bp_names:
+        for bp_name in sorted(bp_names):
             children.append(BinaryPackageNameDirectory(
                     self.pkg_name, self.arch, self.version, bp_name))
 
@@ -621,7 +660,7 @@ class BinaryPackageVersionIsCurrentProperty(Property):
 
 
     def read(self):
-        build = self.read_raw
+        built = self.read_raw
         return "Yes" if built else "No"
 
 
@@ -721,7 +760,7 @@ class SourcePackageVersionListSharedLibrariesAction(Action, SourcePackageVersion
 
         self.pkg_name = name
         self.arch = arch
-        self.version= version
+        self.version = version
 
         self.name = "list_shared_libraries"
 
@@ -742,6 +781,102 @@ class SourcePackageVersionListSharedLibrariesAction(Action, SourcePackageVersion
             print("  dev symlinks:")
             for _dev_symlink in lib.get_dev_symlinks():
                 print("    `%s'" % _dev_symlink)
+
+
+#****************************** Show rdep graph *******************************
+class SourcePackageVersionShowMostRecentInternalRDepsAction(Action, SourcePackageVersionFactoryBase):
+    """
+    Print or display (using a dot viewer) a graph of current (from last build)
+    binary package's internal (only between binary packages of this source
+    package version) runtime dependencies.
+
+    Arguments: [-g, --graph] to display a graph using a dot viewer.
+    """
+    def __init__(self, name, arch, version):
+        super().__init__()
+
+        self.pkg_name = name
+        self.arch = arch
+        self.version = version
+
+        self.name = 'show_most_recent_interal_rdeps'
+
+
+    def run(self, *args):
+        display = False
+
+        if len(args) > 1:
+            if len(args) == 2 and args[1] in ('-g', '--graph'):
+                display = True
+
+            else:
+                print("Invalid arguments. Use [-g, --graph].")
+                return
+
+        rdeps = []
+
+        spv = self.create_spv()
+
+        all_bp_names = spv.list_all_binary_packages()
+        current_bp_names = set(spv.list_current_binary_packages())
+
+        for bp_name in all_bp_names:
+            if bp_name not in current_bp_names:
+                continue
+
+            version = max(spv.list_binary_package_version_numbers(bp_name))
+            bp = spv.get_binary_package(bp_name, version)
+
+            if not bp.has_attribute('rdeps'):
+                continue
+
+            rdeps.append((bp_name, (version, bp.get_attribute('rdeps'))))
+
+            # Remove references to spv
+            del bp
+
+        # Free locks
+        del spv
+
+        # Format a graph in dot
+        dot = 'digraph "internal dependencies" {\n'
+
+        node_labels = {}
+        bp_versions = {}
+        label = 1
+
+        for name, v in rdeps:
+            version, _ = v
+
+            node_labels[name] = label
+            bp_versions[name] = version
+
+            dot += '    %d [label="%s:%s"]\n' % (label, name, version)
+
+            label += 1
+
+        dot += '\n'
+
+        # Add edges to graph
+        for name, v in rdeps:
+            _, deps = v
+
+            for dep in deps.get_required():
+                if dep in node_labels and (dep, bp_versions[dep]) in deps:
+                    dot += '    %d -> %d [label="%s"]\n' % (
+                            node_labels[name],
+                            node_labels[dep],
+                            deps.get_constraint_list(dep))
+
+        dot += '}'
+
+        if display:
+            cmd = ['xdot', '-']
+            p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+            p.communicate(dot.encode('UTF-8'))
+
+        else:
+            print(dot)
 
 
 #******************************** Build events ********************************

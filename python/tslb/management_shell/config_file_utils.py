@@ -388,13 +388,317 @@ def parse_dependency_list_str(ts):
                     v = VersionNumber(token)
                 except Exception as e:
                     raise CFUSyntaxError(line, col, "Invalid version number `%s': %s" %
-                            token, e)
+                            (token, e))
 
-                if constraint_type == '=':
-                    constraint_type = '=='
+                if constraint_type == '==':
+                    constraint_type = '='
 
                 constraints.append(VersionConstraint(constraint_type, v))
                 state = 2
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected literal")
+
+
+    if state != 1:
+        raise CFUSyntaxError(line, col, "Unexpected end of file")
+
+    return _list
+
+
+def tokenize_list_pair_of_str_dependency_list_str(s):
+    """
+    :param List(Tuple(int, int, str)): Preprocessed input string
+    :returns list(int, int, str, bool): Token string of 4-tuples
+        (line, column, token, is_literal).
+    """
+    # Characters allowed in unquoted string literals
+    def is_c(c):
+        c = c.encode('utf-8')
+        if len(c) != 1:
+            return False
+
+        c = c[0]
+
+        if c >= 0x41 and c <= 0x5a:
+            return True
+
+        if c >= 0x61 and c <= 0x7a:
+            return True
+
+        if c >= 0x30 and c <= 0x39:
+            return True
+
+        if c == 0x2e:
+            return True
+
+        return False
+
+    # Detect tokens with a DFA parser. Basically tokens are just words on an
+    # alphabet and therefore form a language.
+    ts = []
+
+    line = 0
+    col = 0
+
+    state = 1
+
+    token = ''
+    token_line = 0
+    token_col = 0
+
+    def add_token(line, col, c):
+        nonlocal token, token_line, token_col
+        if not token:
+            token_line = line
+            token_col = col
+
+        token += c
+
+
+    def finish_token(is_literal):
+        nonlocal token
+        ts.append((token_line, token_col, token, is_literal))
+        token = ''
+
+
+    for line, col, c in s:
+        if state == 1:
+            if c == '\n':
+                add_token(line, col, c)
+                finish_token(False)
+                state = 1
+
+            elif c.isspace():
+                state = 1
+
+            elif is_c(c):
+                add_token(line, col, c)
+                state = 2
+
+            elif c == '-':
+                add_token(line, col, c)
+                state = 3
+
+            elif c == '"':
+                state = 4
+
+            elif c in ('>', '<', '='):
+                add_token(line, col, c)
+                state = 6
+
+            elif c == '!':
+                add_token(line, col, c)
+                state = 7
+
+            else:
+                raise CFUSyntaxError(line, col, "Unexpected character")
+
+        elif state == 2:
+            if is_c(c):
+                add_token(line, col, c)
+                state = 2
+
+            elif c == '\n':
+                finish_token(True)
+                add_token(line, col, c)
+                finish_token(False)
+                state = 1
+
+            elif c.isspace():
+                finish_token(True)
+                state = 1
+
+            elif c in ('>', '<', '='):
+                finish_token(True)
+                add_token(line, col, c)
+                state = 6
+
+            elif c == '!':
+                finish_token(True)
+                add_token(line, col, c)
+                state = 7
+
+            elif c == '"':
+                finish_token(True)
+                state = 4
+
+            elif c == '-':
+                finish_token(True)
+                add_token(line, col, c)
+                state = 3
+
+            else:
+                raise CFUSyntaxError(line, col, "Unexpected character")
+
+        elif state == 3:
+            if c == '>':
+                add_token(line, col, c)
+                finish_token(False)
+                state = 1
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected `-'")
+
+        elif state == 4:
+            if c == '\\':
+                state = 5
+
+            elif c == '"':
+                finish_token(True)
+                state = 1
+
+            else:
+                add_token(line, col, c)
+                state = 4
+
+        elif state == 5:
+            if c in ('\\', '"', 'n', 'r', 't'):
+                add_token(line, col, escape_character_map['\\' + c])
+                state = 4
+
+            else:
+                raise CFUSyntaxError(line, col,
+                        "Invalid escape sequence `\\%s'" % c)
+
+        elif state == 6:
+            if c == '\n':
+                finish_token(False)
+                add_token(line, col, c)
+                finish_token(False)
+                state = 1
+
+            elif c.isspace():
+                finish_token(False)
+                state = 1
+
+            elif c in ('>', '<', '='):
+                prop_token = token + c
+                if prop_token not in ('>', '<', '>=', '<=', '=', '==', '!='):
+                    finish_token(False)
+
+                add_token(line, col, c)
+                state = 6
+
+            elif c == '!':
+                finish_token(False)
+                add_token(line, col, c)
+                state = 7
+
+            elif is_c(c):
+                finish_token(False)
+                add_token(line, col, c)
+                state = 2
+
+            elif c == '"':
+                finish_token(False)
+                state = 4
+
+            elif c == '-':
+                finish_token(False)
+                add_token(line, col, c)
+                state = 3
+
+            else:
+                raise CFUSyntaxError(line, col, "Unexpected character")
+
+        elif state == 7:
+            if c == '=':
+                add_token(line, col, '=')
+                finish_token(False)
+                state = 1
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected `='")
+
+
+    if state == 3:
+        raise CFUSyntaxError(line, col, "Expected `>' at end of input")
+    if state == 4:
+        raise CFUSyntaxError(line, col, "Expected closing quote at end of input")
+    if state == 5:
+        raise CFUSyntaxError(line, col, "Unfinished escape sequence at end of input")
+    if state == 7:
+        raise CFUSyntaxError(line, col, "Expected `=' at end of input")
+
+    if state == 2:
+        finish_token(True)
+    elif state == 6:
+        finish_token(True)
+
+    return ts
+
+
+def parse_list_pair_of_str_dependency_list_str(ts):
+    """
+    :param list(int, int, str, bool) ts: Token string
+    :returns list(tuple(str, str, list(VersionConstraint)))
+    """
+    # Power set constructed DFA parser
+    state = 1
+    line = 0
+    col = 0
+
+    _list = []
+
+    bp_name = None
+    dep = None
+    constraints = None
+    constraint_type = None
+
+    for line, col, token, is_literal in ts:
+        if state == 1:
+            if is_literal:
+                bp_name = token
+                state = 2
+
+            elif token == "\n":
+                state = 1
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected literal or non-literal `\\n'")
+
+        elif state == 2:
+            if not is_literal and token == "->":
+                state = 3
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected non-literal `->'")
+
+        elif state == 3:
+            if is_literal:
+                dep = token
+                constraints = []
+                state = 4
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected literal")
+
+        elif state == 4:
+            if not is_literal and token == "\n":
+                _list.append((bp_name, dep, constraints))
+                state = 1
+
+            elif not is_literal and token in ('<', '>', '>=', '<=', '!=', '==', '='):
+                constraint_type = token
+                state = 5
+
+            else:
+                raise CFUSyntaxError(line, col, "Expected non-literal from (< > <= >= == = \\n)")
+
+        elif state == 5:
+            if is_literal:
+                try:
+                    v = VersionNumber(token)
+                except Exception as e:
+                    raise CFUSyntaxError(line, col, "Invalid version number `%s': %s" %
+                            (token, e))
+
+                if constraint_type == '==':
+                    constraint_type = '='
+
+                constraints.append(VersionConstraint(constraint_type, v))
+                state = 4
 
             else:
                 raise CFUSyntaxError(line, col, "Expected literal")

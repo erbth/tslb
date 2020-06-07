@@ -2,6 +2,8 @@ from .SourcePackage import SourcePackageVersion
 from tslb.VersionNumber import VersionNumberColumn
 from sqlalchemy import types, Column, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import aliased
+from tslb import Architecture
 from tslb import timezone
 
 Base = declarative_base()
@@ -99,3 +101,68 @@ class BinaryPackageAttribute(Base):
 
         self.key = key
         self.value = value
+
+
+#****************** Low-level functions for searching etc. ********************
+def find_binary_packages(session, name, arch):
+    """
+    This function searches for binary packages with the specified name and
+    architecture. All version number of binary packages that match them (the
+    version number is the degree of freedom here) are returned.
+
+    :param session: A SQLAlchemy database session
+    :param str name: The name of binary packages that should be found
+    :param str|int arch: The architecture for which packages should be
+        searched
+    :returns list(VersionNumber): The found binary package versions
+    """
+    arch = Architecture.to_int(arch)
+    bp = aliased(BinaryPackage)
+
+    q = session.query(bp.version_number)\
+            .filter(bp.architecture == arch, bp.name == name)\
+            .all()
+
+    return [t[0] for t in q]
+
+
+def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_latest=False):
+    """
+    This function searches in all known files of binary packages for binary
+    packages of the specified architecture that contain the specified path.
+
+    If the path is specified to be absolute (see :param is_absolute:), the
+    whole file paths are matched agains the specified path. Otherwise the
+    functions searches for packages with files that end with the specified
+    path.
+
+    :param session: A SQLAlchemy database session
+    :param str path: The path to search for
+    :param str|int arch: The architecture in which should be searched
+    :param bool is_absolute: True if the path should be treated as absolute
+        path, otherwise false.
+    :param bool only_latest: If True, only the latest version of a package is
+        returned in case more versions match, otherwise all are returned
+    :returns list(tuple(str, VersionNumber)): A list of binary package versions
+        found
+    """
+    arch = Architecture.to_int(arch)
+    bpf = aliased(BinaryPackageFile)
+
+    bpq = session.query(bpf.binary_package, bpf.version_number)
+    if is_absolute:
+        bpq = bpq.filter(bpf.architecture == arch, bpf.path == path)
+    else:
+        bpq = bpq.filter(bpf.architecture == arch, bpf.path.like('%' +
+            path.replace('%', '\%').replace('_', '\_')))
+
+    if only_latest:
+        bpf2 = aliased(BinaryPackageFile)
+
+        bpq = bpq.filter(~session.query(bpf2)
+                .filter(bpf2.binary_package == bpf.binary_package,
+                    bpf2.architecture == bpf.architecture,
+                    bpf2.path == bpf.path,
+                    bpf2.version_number > bpf.version_number).exists())
+
+    return list(bpq.distinct().all())

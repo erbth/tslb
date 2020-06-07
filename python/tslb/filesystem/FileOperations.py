@@ -282,8 +282,8 @@ def restore_snapshot(path, name):
 def simplify_path_static(path):
     """
     Simplify a path without touching the filesystem. This essentially removes
-    double slashes. Hence it's static because it does not require dynamic
-    information only available from filesystems being online.
+    double slashes and trailing slashes. Hence it's static because it does not
+    require dynamic information only available from filesystems being online.
     """
     result = ''
     last_char = None
@@ -293,5 +293,8 @@ def simplify_path_static(path):
             result += char
 
         last_char = char
+
+    if len(result) > 1 and result[-1] == '/':
+        result = result[:-1]
 
     return result
