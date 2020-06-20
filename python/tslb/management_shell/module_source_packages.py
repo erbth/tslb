@@ -124,6 +124,9 @@ class SourcePackageVersionsDirectory(Directory):
         content.append(SourcePackageVersionsGetMeta(self.pkg_name, self.arch))
         content.append(SourcePackageVersionsManuallyHold(self.pkg_name, self.arch, True))
         content.append(SourcePackageVersionsManuallyHold(self.pkg_name, self.arch, False))
+        content.append(SourcePackageVersionsAdd(self.pkg_name, self.arch))
+        content.append(SourcePackageVersionsDelete(self.pkg_name, self.arch))
+        content.append(SourcePackageVersionsCopyShallow(self.pkg_name, self.arch))
 
         return content
 
@@ -176,6 +179,63 @@ class SourcePackageVersionsManuallyHold(SourcePackageBaseAction):
             else:
                 sp.manually_hold_versions(True)
                 print("Unheld versions manually.")
+
+
+class SourcePackageVersionsCopyShallow(SourcePackageBaseAction):
+    """
+    Copy a source package version and its attributes. Occurences of the old
+    version number in str attributes are replaced with the new version number.
+    """
+    def __init__(self, name, arch):
+        super().__init__(name, arch, writes=True)
+
+        self.name = "copy_shallow"
+
+
+    def run(self, *args):
+        if len(args) != 3:
+            print("Usage: %s <src> <dst>" % args[0])
+            return
+
+        try:
+            src = VersionNumber(args[1])
+            dst = VersionNumber(args[2])
+
+        except (TypeError, ValueError) as e:
+            print("Invalid version number: %s" % e)
+            return
+
+        sp = self.create_spkg(True)
+
+        versions = sp.list_version_numbers()
+        src_found = False
+
+        for v in versions:
+            if src == v:
+                src_found = True
+
+            if dst == v:
+                print("Destination version number exists already.")
+                return
+
+        if not src_found:
+            print("No such source version number")
+            return
+
+        src = sp.get_version(src)
+        dst = sp.add_version(dst)
+
+        for attr in src.list_attributes():
+            value = src.get_attribute(attr)
+
+            # Replace the old version number
+            if isinstance(value, str) and src.contains(src):
+                print("Attribute `%s': replacing `%s' with `%s'." %
+                    (attr, str(src), str(dst)))
+
+                value.replace(str(src), str(dst))
+
+            dst.set_attribute(attr, value)
 
 
 #*************** Presenting a single source package version *******************
@@ -799,7 +859,7 @@ class SourcePackageVersionShowMostRecentInternalRDepsAction(Action, SourcePackag
         self.arch = arch
         self.version = version
 
-        self.name = 'show_most_recent_interal_rdeps'
+        self.name = 'show_most_recent_internal_rdeps'
 
 
     def run(self, *args):

@@ -66,7 +66,15 @@ class StageFindSharedLibraries(object):
                 # objects.
                 libs = []
 
+                # Filter out libraries that consist of only one linker script.
+                # Because then they are no libraries on their own but `just'
+                # development files.
                 for lib_name, files in lib_file_map.items():
+                    if len(files) == 1:
+                        with open(simplify_path_static(base + '/' + files[0]), 'rb') as f:
+                            if f.read(4) != b'\x7fELF':
+                                continue
+
                     libs.append(so_tools.SharedLibrary(lib_name, *files, fs_base=base))
 
                 queue.put(libs)
@@ -89,7 +97,7 @@ class StageFindSharedLibraries(object):
             if ret != 0:
                 success = False
 
-            libs = queue.get()
+            libs = [] if queue.empty() else queue.get()
 
         except BaseException as e:
             success = False

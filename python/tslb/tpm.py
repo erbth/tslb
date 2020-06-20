@@ -118,7 +118,7 @@ class Tpm2(object):
 
         :raises CommonExceptions.CommandFailed: if the oepration fails.
         """
-        cmd = [self.tpm2, '--remove-unneeded']
+        cmd = [self.tpm2, '--remove-unneeded', '--assume-yes']
 
         if subprocess.run(cmd).returncode != 0:
             raise ces.CommandFailed(' '.join(cmd))

@@ -128,9 +128,12 @@ class StageSplitIntoBinaryPackages(object):
             remaining_files -= lib.get_dev_symlinks()
 
         for _file in remaining_files:
+            # Don't assign linker scripts as these are development files.
             if _file.endswith('.so'):
-                other_so_files.add(_file)
-                copied_files.add(_file)
+                with open(fops.simplify_path_static(spv.install_location + '/' + _file), 'rb') as f:
+                    if f.read(4) == b'\x7fELF':
+                        other_so_files.add(_file)
+                        copied_files.add(_file)
 
 
         if other_so_files:
@@ -211,15 +214,20 @@ class StageSplitIntoBinaryPackages(object):
         for _file in remaining_files:
             if \
                     _file.startswith('/usr/include/') or \
+                    _file.startswith('/usr/local/include/') or \
                     (
-                        (_file.startswith('/usr/local/include/') or \
-                        _file.startswith('/usr/lib/') or \
+                        (_file.startswith('/usr/lib/') or \
                         _file.startswith('/usr/local/lib/'))
                     and
                         (_file.endswith('.a') or \
                         _file.endswith('.so') or \
                         _file.endswith('.o') or \
-                        _file.endswith('.dbg'))):
+                        # _file.endswith('.dbg') or \
+                        _file.endswith('.pc'))
+                    ) or \
+                    _file.startswith('/usr/share/pkgconfig') or \
+                    _file.startswith('/usr/local/share/pkgconfig'):
+
                 dev_files.add(_file)
                 copied_files.add(_file)
 
@@ -387,9 +395,13 @@ class StageSplitIntoBinaryPackages(object):
                         if m:
                             files.add(_file)
 
-                # Reassign files
+                # Reassign files and directories
                 for _file in files:
-                    package_file_map[file_package_map[_file]].remove(_file)
+                    # Directories may not be contained in the file_package_map
+                    # if they are not packaged explicitely.
+                    if _file in file_package_map:
+                        package_file_map[file_package_map[_file]].remove(_file)
+
                     package_file_map[bp_name].add(_file)
                     file_package_map[_file] = bp_name
                     assigned_files.add(_file)
