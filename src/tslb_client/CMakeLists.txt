@@ -8,6 +8,7 @@ add_executable(tslb_client
 	ClientApplication.cpp
 	BuildClusterProxy.cpp
 	BuildNodeProxy.cpp
+	BuildMasterProxy.cpp
 
 	base64.c
 	utilities.cpp

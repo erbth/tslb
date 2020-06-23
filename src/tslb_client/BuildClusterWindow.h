@@ -107,6 +107,49 @@ public:
 };
 
 
+/*********************** An interface to build masters ************************/
+class MasterInterface : public Gtk::Box
+{
+private:
+	BuildClusterWindow *bcwin;
+
+public:
+	BuildClusterProxy::BuildClusterProxy &build_cluster_proxy;
+
+private:
+	/* UI components */
+	Gtk::Frame			m_fMain;
+	Gtk::Box			m_bMain;
+	Lwg::RGBLed			m_ledConnected;
+	Gtk::ComboBoxText	m_cbIdentity;
+	Lwg::RGBLed			m_ledState;
+	Gtk::Label			m_lState;
+	Lwg::RGBLed			m_ledError;
+	Gtk::Label			m_lError;
+	Gtk::Label			m_lButtons;
+	Gtk::ComboBoxText	m_cbArch;
+	Gtk::Button			m_btStart;
+	Gtk::Button			m_btStop;
+	Gtk::Button			m_btRefresh;
+
+	std::list<std::string> cbIdentity_values;
+
+	/* You subscribe to the build cluster proxy */
+	void on_master_list_changed();
+	static void _on_master_list_changed(void *pThis);
+
+	/* Update UI components */
+	void update_master_list();
+
+	void update_master_all();
+
+public:
+	MasterInterface(BuildClusterWindow *bcwin);
+	~MasterInterface();
+};
+
+
+/******************************* The main window ******************************/
 class BuildClusterWindow : public Gtk::Window
 {
 private:
@@ -122,6 +165,7 @@ private:
 	Gtk::Notebook m_nbMain;
 
 	ClusterOverview m_cluster_overview;
+	MasterInterface m_master_interface;
 
 public:
 	BuildClusterWindow(ClientApplication *c);

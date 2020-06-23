@@ -1,76 +1,75 @@
 #!/usr/bin/python3
-
 import asyncio
-from tslb.build_master.BuildMaster import BuildMaster
-import logging
-from tslb import settings
+import os
 import signal
-import traceback
+import socket
+from tslb import settings
+from tslb.build_master import BuildMaster
 
-# Setup the logging facility
-logging.basicConfig(
-        level = logging.DEBUG,
-        format = "%(levelname)-8s: %(message)s",
-        )
 
-# Some global variables
-yamb_hub_transport_address = None
+# Store the BuildMaster instance in a global variable
 bm = None
 
-async def init():
-    global bm
-    bm = BuildMaster(yamb_hub_transport_address)
-    await bm.connect()
-
-async def exit_gracefully(loop, reason=None):
-    logging.info(("exiting gracefully due to %s" % reason) if reason else "exiting gracefully")
-
-    tasks = [ t for t in asyncio.all_tasks() if t is not asyncio.current_task() ]
-    for t in tasks:
-        t.cancel()
-
-    loop.stop()
-
-def handle_exception(loop, context):
-    msg = context.get('exception', context['message'])
-    logging.critical(f"Caught an exception: {msg}")
-    traceback.print_exc()
-    if loop.is_running():
-        loop.create_task(exit_gracefully(loop))
-
-def handle_signal():
+def signal_handler(bm):
     loop = asyncio.get_running_loop()
-    loop.create_task(exit_gracefully(loop, "signal"))
+
+    if bm:
+        loop.create_task(bm.request_quit())
+    else:
+        exit(1)
+
+class LoopStopReason:
+    def __init__(self, initial=0):
+        self._stop_code = initial
+
+    def get_code(self):
+        return self._stop_code
+
+    def set_code(self, code):
+        self._stop_code = code
+
+
+async def init(loop, lsr, yamb_hub_transport_address, identity):
+    global bm
+
+    # Construct a BuildMaster
+    bm = BuildMaster(loop, lsr, yamb_hub_transport_address, identity)
+    loop.add_signal_handler(signal.SIGTERM, signal_handler, bm)
+    loop.add_signal_handler(signal.SIGINT, signal_handler, bm)
+
+    await bm.connect_to_yamb_hub()
+
 
 def main():
-    logging.info ("TSClient LEGACY Build System Build Master - starting")
-
-    # Globals
-    global yamb_hub_transport_address
+    print("TSClient LEGACY Build System Build Master - starting", flush=True)
 
     # Parse configuration data.
     if 'Yamb' not in settings:
-        logging.info('Missing section `Yamb\' in system configuration file.')
-        exit(1)
+        print("Missing section `Yamb' in system configuration files.")
+        return 1
 
     yamb_hub_transport_address = settings['Yamb'].get('hub', None)
     if not yamb_hub_transport_address:
-        logging.info ('No yamb hub transport address specified in the system configuration file.')
-        exit(1)
+        print("No yamb hub transport address specifies in the system configuartion file.")
+        return 1
 
-    # Mount filesystem if it is not mounted already.
-
-    # Create a main loop and an init task
     loop = asyncio.new_event_loop()
 
-    loop.add_signal_handler(signal.SIGINT,  handle_signal)
-    loop.add_signal_handler(signal.SIGTERM, handle_signal)
+    lsr = LoopStopReason()
 
-    loop.set_exception_handler(handle_exception)
-    loop.create_task(init())
+    # Find an identity for this build master
+    identity = "%s:%d" % (socket.gethostname(), os.getpid())
+    print("Own identity: %s" % identity, flush=True)
 
+    # Control flow changes into the loop
+    loop.create_task(init(loop, lsr, yamb_hub_transport_address, identity))
+
+    # The asyncio main loop - control over the loop is given to the BuildMaster
+    # object by now.
     loop.run_forever()
 
+    return lsr.get_code()
+
+
 if __name__ == '__main__':
-    main()
-    exit(0)
+    exit(main())

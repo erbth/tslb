@@ -242,3 +242,43 @@ void build_node_yamb_protocol::message_received(
 	if (source != node->get_current_address() && message_received_callback)
 		message_received_callback(node, source, destination, move(msg));
 }
+
+
+/* A yamb protocol to communicate with build masters */
+build_master_yamb_protocol::build_master_yamb_protocol(BuildClusterProxy::BuildClusterProxy &bcp)
+	: build_cluster_proxy(bcp)
+{
+}
+
+build_master_yamb_protocol::build_master_yamb_protocol(BuildClusterProxy::BuildClusterProxy &bcp,
+		message_received_callback_t mrc)
+	:
+		build_cluster_proxy(bcp),
+		message_received_callback(mrc)
+{
+}
+
+build_master_yamb_protocol::~build_master_yamb_protocol()
+{
+}
+
+uint32_t build_master_yamb_protocol::get_protocol_number() const
+{
+	return 1001;
+}
+
+void build_master_yamb_protocol::send_message(yamb_node::yamb_node *node,
+		uint32_t destination, unique_ptr<yamb_node::stream> msg)
+{
+	node->send_message(move(msg), destination, get_protocol_number());
+}
+
+void build_master_yamb_protocol::message_received(
+		yamb_node::yamb_node *node,
+		uint32_t source,
+		uint32_t destination,
+		unique_ptr<yamb_node::stream> msg)
+{
+	if (source != node->get_current_address() && message_received_callback)
+		message_received_callback(node, source, destination, move(msg));
+}

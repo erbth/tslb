@@ -11,6 +11,7 @@
 #include "yamb_node_helpers.h"
 
 namespace BuildNodeProxy { class BuildNodeProxy; }
+namespace BuildMasterProxy {class BuildMasterProxy; }
 
 namespace BuildClusterProxy
 {
@@ -64,12 +65,35 @@ namespace BuildClusterProxy
 		}
 	};
 
+	/* Two subscribers are identical if the supplied private data is identical.
+	 */
+	struct BuildMasterListSubscriber
+	{
+		using on_list_changed_t = void(*)(void*);
+
+		on_list_changed_t on_list_changed;
+
+		void *priv;
+
+		BuildMasterListSubscriber() : on_list_changed(nullptr), priv(nullptr) {}
+		BuildMasterListSubscriber(on_list_changed_t a, void* p) : on_list_changed(a), priv(p) {}
+		BuildMasterListSubscriber(void* p) : on_list_changed(nullptr), priv(p) {}
+
+		bool operator==(const BuildMasterListSubscriber &o)
+		{
+			return priv == o.priv;
+		}
+	};
+
 	class BuildClusterProxy
 	{
 	private:
 		/* Properties of the build system proxied by you */
 		std::map<std::string, std::shared_ptr<BuildNodeProxy::BuildNodeProxy>> build_nodes;
 		std::vector<BuildNodeListSubscriber> build_node_list_subscribers;
+
+		std::map<std::string, std::shared_ptr<BuildMasterProxy::BuildMasterProxy>> build_masters;
+		std::vector<BuildMasterListSubscriber> build_master_list_subscribers;
 
 		/* A soft timer that runs every second */
 		bool soft_timeout_1s_handler();
@@ -78,6 +102,7 @@ namespace BuildClusterProxy
 		/* Communicating through the yamb */
 		std::unique_ptr<yamb_node::yamb_node> ynode;
 		std::shared_ptr<build_node_yamb_protocol> build_node_yprotocol;
+		std::shared_ptr<build_master_yamb_protocol> build_master_yprotocol;
 
 	private:
 		void on_connection_established();
@@ -85,6 +110,7 @@ namespace BuildClusterProxy
 		void on_connection_failed(std::string error);
 
 		unsigned build_nodes_last_searched = 10000;
+		unsigned build_masters_last_searched = 10000;
 
 		/* Other entities can subscribe to the connection status */
 		std::vector<ConnectionStateSubscriber> connection_state_subscribers;
@@ -92,9 +118,15 @@ namespace BuildClusterProxy
 
 		/* Different actions */
 		void search_for_build_nodes();
+		void search_for_build_masters();
 
 		/* Respond to messages from entities in the cluster */
 		void build_node_message_received(
+				yamb_node::yamb_node *node,
+				uint32_t source, uint32_t destination,
+				std::unique_ptr<yamb_node::stream> msg);
+
+		void build_master_message_received(
 				yamb_node::yamb_node *node,
 				uint32_t source, uint32_t destination,
 				std::unique_ptr<yamb_node::stream> msg);
@@ -109,12 +141,20 @@ namespace BuildClusterProxy
 		void subscribe_to_connection_state(const ConnectionStateSubscriber &s);
 		void unsubscribe_from_connection_state(void* priv);
 
+		/* Build nodes */
 		std::vector<std::string> list_build_nodes() const;
 		std::vector<std::shared_ptr<BuildNodeProxy::BuildNodeProxy>> get_build_nodes() const;
 		std::shared_ptr<BuildNodeProxy::BuildNodeProxy> get_build_node(std::string identity) const;
 
 		void subscribe_to_build_node_list(const BuildNodeListSubscriber &s);
 		void unsubscribe_from_build_node_list(void* priv);
+
+		/* Build master */
+		std::vector<std::string> list_build_masters() const;
+		std::shared_ptr<BuildMasterProxy::BuildMasterProxy> get_build_master(std::string identity) const;
+
+		void subscribe_to_build_master_list(const BuildMasterListSubscriber &s);
+		void unsubscribe_from_build_master_list(void* priv);
 	};
 }
 

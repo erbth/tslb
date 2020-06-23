@@ -13,6 +13,7 @@
 class connection_factory;
 class connection;
 class build_node_yamb_protocol;
+class build_master_yamb_protocol;
 
 namespace BuildClusterProxy { class BuildClusterProxy; }
 
@@ -70,7 +71,7 @@ public:
 };
 
 
-/* A yamb protocol to communicate with build ndoes */
+/* A yamb protocol to communicate with build nodes */
 class build_node_yamb_protocol : public yamb_node::yamb_protocol
 {
 private:
@@ -87,6 +88,35 @@ public:
 			message_received_callback_t mrc);
 
 	virtual ~build_node_yamb_protocol();
+
+	uint32_t get_protocol_number() const override;
+
+	void send_message(yamb_node::yamb_node *node, uint32_t destination,
+			std::unique_ptr<yamb_node::stream> msg);
+
+	/* Called when a message addressed to this node was received. */
+	void message_received(yamb_node::yamb_node *node, uint32_t source,
+			uint32_t destination, std::unique_ptr<yamb_node::stream> msg) override;
+};
+
+
+/* A yamb protocol to communicate with build masters */
+class build_master_yamb_protocol : public yamb_node::yamb_protocol
+{
+private:
+	using message_received_callback_t = std::function<void(yamb_node::yamb_node*,
+			uint32_t source, uint32_t destination, std::unique_ptr<yamb_node::stream>)>;
+
+	BuildClusterProxy::BuildClusterProxy &build_cluster_proxy;
+
+	message_received_callback_t message_received_callback;
+
+public:
+	build_master_yamb_protocol(BuildClusterProxy::BuildClusterProxy &bcp);
+	build_master_yamb_protocol(BuildClusterProxy::BuildClusterProxy &bcp,
+			message_received_callback_t mrc);
+
+	virtual ~build_master_yamb_protocol();
 
 	uint32_t get_protocol_number() const override;
 

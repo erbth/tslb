@@ -3,6 +3,7 @@
 #include "BuildNodeConsoleWindow.h"
 #include "ClientApplication.h"
 #include "Message.h"
+#include <algorithm>
 #include <cstdio>
 #include <new>
 
@@ -369,20 +370,150 @@ void ClusterOverview::add_node(string identity)
 }
 
 
+/*************************** An interface to build masters ********************/
+MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
+	Gtk::Box(Gtk::Orientation::ORIENTATION_VERTICAL, 10),
+	bcwin(bcwin),
+	build_cluster_proxy(bcwin->build_cluster_proxy),
+	m_bMain(Gtk::Orientation::ORIENTATION_HORIZONTAL, 10),
+	m_lState("State (<initializing>)"),
+	m_lError("Error"),
+	m_lButtons("Build:"),
+	m_btStart("start"),
+	m_btStop("stop"),
+	m_btRefresh("refresh")
+{
+	set_border_width(10);
+	m_bMain.set_border_width(10);
 
+	m_ledConnected.set_red(1);
+
+	m_cbIdentity.append("");
+	m_cbIdentity.set_active(0);
+
+	m_cbArch.append("i386");
+	m_cbArch.append("amd64");
+	m_cbArch.set_active(1);
+
+	m_btStart.set_sensitive(false);
+	m_btStop.set_sensitive(false);
+
+	/* UI components */
+	m_bMain.pack_start(m_ledConnected, false, false, 0);
+	m_bMain.pack_start(m_cbIdentity, false, false, 0);
+	m_bMain.pack_start(m_ledState, false, false, 0);
+	m_bMain.pack_start(m_lState, false, false, 0);
+	m_bMain.pack_start(m_ledError, false, false, 0);
+	m_bMain.pack_start(m_lError, false, false, 0);
+
+	m_bMain.pack_end(m_btRefresh, false, false, 0);
+	m_bMain.pack_end(m_btStop, false, false, 0);
+	m_bMain.pack_end(m_btStart, false, false, 0);
+	m_bMain.pack_end(m_cbArch, false, false, 0);
+	m_bMain.pack_end(m_lButtons, false, false, 0);
+
+	m_fMain.add(m_bMain);
+	pack_start(m_fMain, false, false, 0);
+
+	/* Subscribe to parts of the build cluster (proxy) */
+	build_cluster_proxy.subscribe_to_build_master_list(
+			BuildClusterProxy::BuildMasterListSubscriber(
+				&MasterInterface::_on_master_list_changed,
+				this));
+
+	update_master_list();
+}
+
+MasterInterface::~MasterInterface()
+{
+}
+
+void MasterInterface::on_master_list_changed()
+{
+	update_master_list();
+}
+
+void MasterInterface::_on_master_list_changed(void *pThis)
+{
+	((MasterInterface*)pThis)->on_master_list_changed();
+}
+
+
+/* Update UI components */
+void MasterInterface::update_master_list()
+{
+	int current = m_cbIdentity.get_active_row_number();
+	bool master_changed = false;
+
+	auto build_masters = build_cluster_proxy.list_build_masters();
+
+	/* Add new masters */
+	for (auto name : build_masters)
+	{
+		if (find(cbIdentity_values.begin(), cbIdentity_values.end(), name) == cbIdentity_values.end())
+		{
+			cbIdentity_values.push_back(name);
+			m_cbIdentity.append(name);
+		}
+	}
+
+	/* Remove masters that disappeared */
+	int i = 0;
+
+	for (auto iter = cbIdentity_values.begin(); iter != cbIdentity_values.end(); )
+	{
+		if (i == 0)
+		{
+			i++;
+			continue;
+		}
+
+		if (find(build_masters.begin(), build_masters.end(), *iter) == build_masters.end())
+		{
+			m_cbIdentity.remove_text(i);
+			cbIdentity_values.erase(iter++);
+
+			if (i > 0 && current >= i)
+			{
+				current--;
+				master_changed = true;
+			}
+		}
+		else
+		{
+			iter++;
+			i++;
+		}
+	}
+
+	if (master_changed)
+	{
+		m_cbIdentity.set_active(current);
+		update_master_all();
+	}
+}
+
+void MasterInterface::update_master_all()
+{
+}
+
+
+/******************************* The main window ******************************/
 BuildClusterWindow::BuildClusterWindow(ClientApplication *c) :
 	Gtk::Window(),
 	m_client_application(c),
 	build_cluster_proxy(c->build_cluster_proxy),
 	m_bMain_vbox(Gtk::Orientation::ORIENTATION_VERTICAL, 10),
 	m_lInfo("The TSClient LEGACY Build System."),
-	m_cluster_overview(this)
+	m_cluster_overview(this),
+	m_master_interface(this)
 {
 	set_title ("The TSClient LEGACY Build System - Build cluster");
 	set_border_width(10);
 
 	/* UI components */
 	m_nbMain.append_page(m_cluster_overview, "Cluster overview");
+	m_nbMain.append_page(m_master_interface, "Build master");
 
 	m_bMain_vbox.pack_start(m_lInfo, false, false, 0);
 	m_bMain_vbox.pack_start(m_nbMain, true, true, 0);
