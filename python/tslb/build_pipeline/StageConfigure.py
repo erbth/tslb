@@ -39,21 +39,19 @@ class StageConfigure(object):
             if os.path.exists(os.path.join(spv.build_location,
                 spv.get_attribute('unpacked_source_directory'), 'CMakeLists.txt')):
 
-                configure_command = [ 'cmake', '-DCMAKE_BUILD_TYPE=Release',
-                    '-DCMAKE_INSTALL_PREFIX=/usr' ]
+                configure_command = "cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr"
 
             elif os.path.exists(os.path.join(spv.build_location,
                 spv.get_attribute('unpacked_source_directory'), 'configure')):
 
-                configure_command = [ 'configure', '-prefix=/usr' ]
+                configure_command = "./configure --prefix=/usr"
 
             else:
                 out.write("No configure command specified and failed to guess one.\n")
                 return False
 
-            tmp = ' '.join(configure_command)
-            spv.set_attribute('configure_command', tmp)
-            out.write("Guessed configure command to be `%s'\n" % tmp)
+            spv.set_attribute('configure_command', configure_command)
+            out.write("Guessed configure command to be `%s'\n" % configure_command)
 
 
         # Configure the package.
@@ -62,7 +60,8 @@ class StageConfigure(object):
             configure_command = PreparedBuildCommand(
                 configure_command,
                 {
-                    'MAX_PARALLEL_THREADS': str(round(multiprocessing.cpu_count() * 1.2 + 0.5))
+                    'MAX_PARALLEL_THREADS': str(round(multiprocessing.cpu_count() * 1.2 + 0.5)),
+                    'MAX_LOAD': str(round(multiprocessing.cpu_count() * 1.2 + 0.5))
                 },
                 chroot=rootfs_mountpoint)
         

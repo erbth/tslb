@@ -126,7 +126,7 @@ def find_binary_packages(session, name, arch):
     return [t[0] for t in q]
 
 
-def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_latest=False):
+def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_newest=False):
     """
     This function searches in all known files of binary packages for binary
     packages of the specified architecture that contain the specified path.
@@ -141,8 +141,9 @@ def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_
     :param str|int arch: The architecture in which should be searched
     :param bool is_absolute: True if the path should be treated as absolute
         path, otherwise false.
-    :param bool only_latest: If True, only the latest version of a package is
-        returned in case more versions match, otherwise all are returned
+    :param bool only_newest: If True, only the binary package with the newest
+        version number is returned, even if multiple different packages contain
+        the file.
     :returns list(tuple(str, VersionNumber)): A list of binary package versions
         found
     """
@@ -156,12 +157,11 @@ def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_
         bpq = bpq.filter(bpf.architecture == arch, bpf.path.like('%' +
             path.replace('%', '\%').replace('_', '\_')))
 
-    if only_latest:
+    if only_newest:
         bpf2 = aliased(BinaryPackageFile)
 
         bpq = bpq.filter(~session.query(bpf2)
-                .filter(bpf2.binary_package == bpf.binary_package,
-                    bpf2.architecture == bpf.architecture,
+                .filter(bpf2.architecture == bpf.architecture,
                     bpf2.path == bpf.path,
                     bpf2.version_number > bpf.version_number).exists())
 

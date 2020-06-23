@@ -34,15 +34,14 @@ class StageBuild(object):
             if os.path.exists(os.path.join(spv.build_location,
                 spv.get_attribute('unpacked_source_directory'), 'Makefile')):
 
-                build_command = [ 'make', '-j', '$(MAX_PARALLEL_THREADS)', '-l', '$(MAX_PARALLEL_THREADS)' ]
+                build_command = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)"
 
             else:
                 out.write("No build command specified and failed to guess one.\n")
                 return False
 
-            tmp = ' '.join(build_command)
-            spv.set_attribute('build_command', tmp)
-            out.write("Guessed build command to be `%s'\n" % tmp)
+            spv.set_attribute('build_command', build_command)
+            out.write("Guessed build command to be `%s'\n" % build_command)
 
 
         # Add .5 to round up.
@@ -52,7 +51,8 @@ class StageBuild(object):
             build_command = PreparedBuildCommand(
                 build_command,
                 {
-                    'MAX_PARALLEL_THREADS': str(max_parallel_threads)
+                    'MAX_PARALLEL_THREADS': str(max_parallel_threads),
+                    'MAX_LOAD': str(max_parallel_threads)
                 },
                 chroot=rootfs_mountpoint)
 

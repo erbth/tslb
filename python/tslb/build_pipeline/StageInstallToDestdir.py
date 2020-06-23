@@ -47,6 +47,7 @@ class StageInstallToDestdir(object):
                 install_to_destdir_command,
                 {
                     'MAX_PARALLEL_THREADS': str(max_parallel_threads),
+                    'MAX_LOAD': str(max_parallel_threads),
                     'DESTDIR': chroot_install_location
                 },
                 chroot=rootfs_mountpoint)

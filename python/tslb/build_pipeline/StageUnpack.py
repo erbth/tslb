@@ -77,20 +77,18 @@ class StageUnpack(object):
 
 
         # Unpack the package.
-        success = False
-
         try:
             spv.ensure_build_location()
 
             ret = subprocess.run(unpack_command, cwd=spv.build_location,
                     stdout=out.fileno(), stderr=out.fileno())
 
-            if ret.returncode == 0:
-                success = True
+            if ret.returncode != 0:
+                return False
 
         except BaseException as e:
-            success = False
             out.write(str(e) + '\n')
+            return False
 
 
         # Check for the expected unpacked directory
@@ -102,7 +100,7 @@ class StageUnpack(object):
                 out.write("The unpacked source directory `%s' does not exist after unpacking.\n" %\
                     unpacked_source_directory)
 
-                success = False
+                return False
 
         else:
             dirs = os.listdir(spv.build_location)
@@ -120,4 +118,4 @@ class StageUnpack(object):
                 spv.set_attribute('unpacked_source_directory', dirs[0])
                 out.write("Set unpacked_source_directory to `%s'.\n" % dirs[0])
 
-        return success
+        return True

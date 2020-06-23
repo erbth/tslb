@@ -36,7 +36,8 @@ class StagePatch(object):
         patch_command = PreparedBuildCommand(
             spv.get_attribute('patch_command'),
             {
-                'MAX_PARALLEL_THREADS': str(max_parallel_threads)
+                'MAX_PARALLEL_THREADS': str(max_parallel_threads),
+                'MAX_LOAD': str(max_parallel_threads)
             },
             chroot=rootfs_mountpoint)
 

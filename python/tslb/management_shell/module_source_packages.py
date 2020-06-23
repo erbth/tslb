@@ -36,8 +36,93 @@ class ArchDirectory(Directory):
 
 
     def listdir(self):
-        return [SourcePackageDirectory(name, self.arch)
+        content = [SourcePackageDirectory(name, self.arch)
                 for name in spkg.SourcePackageList(self.arch).list_source_packages()]
+
+        content.append(SourcePackageActionCreate(self.arch))
+        content.append(SourcePackageActionDestroy(self.arch))
+
+        return content
+
+
+class SourcePackageActionCreate(Action):
+    """
+    Create a new source package
+    """
+    def __init__(self, arch):
+        super().__init__(writes=True)
+
+        self.arch = arch
+        self.name = "create"
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <name>" % args[0])
+            return
+
+        name = args[1]
+
+        print("This will create source package `%s'." % name)
+
+        while True:
+            i = input("Are you sure? [y/n] ")
+            if i in ('y', 'Y'):
+                break
+
+            if i in ('n', 'N'):
+                return
+
+        try:
+            spkg.SourcePackageList(self.arch).create_source_package(name)
+
+        except spkg.SourcePackageExists:
+            print("A source package with name `%s' exists already." % name)
+            return
+
+        print("Created `%s'." % name)
+
+
+class SourcePackageActionDestroy(Action):
+    """
+    Destroy a source package
+    """
+    def __init__(self, arch):
+        super().__init__(writes=True)
+
+        self.arch = arch
+        self.name = "delete"
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <name>" % args[0])
+            return
+
+        name = args[1]
+
+        print("This will destroy source package `%s'." % name)
+
+        while True:
+            i = input("Are you sure? [y/n] ")
+            if i in ('y', 'Y'):
+                break
+
+            if i in ('n', 'N'):
+                return
+
+        spl = spkg.SourcePackageList(self.arch)
+        exists = name in spl.list_source_packages()
+
+        if not exists:
+            print("WARNING: Source package `%s' does not exist in the database." % name)
+
+        spl.destroy_source_package(name)
+
+        if exists:
+            print("Destroyed `%s'." % name)
+        else:
+            print("finished.")
 
 
 class SourcePackageDirectory(Directory):
@@ -181,6 +266,79 @@ class SourcePackageVersionsManuallyHold(SourcePackageBaseAction):
                 print("Unheld versions manually.")
 
 
+class SourcePackageVersionsAdd(SourcePackageBaseAction):
+    """
+    Add a new source package version
+    """
+    def __init__(self, name, arch):
+        super().__init__(name, arch, writes=True)
+
+        self.name = "add"
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <version>" % args[0])
+            return
+
+        try:
+            version = VersionNumber(args[1])
+
+        except (TypeError, ValueError) as e:
+            print("Invalid version number: %s" % e)
+            return
+
+        try:
+            self.create_spkg(True).add_version(version)
+
+        except spkg.SourcePackageVersionExists:
+            print("Version exists already")
+            return
+
+        except ces.AttributeManuallyHeld:
+            print("Versions are manually held.")
+            return
+
+        print("Created `%s'." % version)
+
+
+class SourcePackageVersionsDelete(SourcePackageBaseAction):
+    """
+    Delete a source package version
+    """
+    def __init__(self, name, arch):
+        super().__init__(name, arch, writes=True)
+
+        self.name = "delete"
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <version>" % args[0])
+            return
+
+        try:
+            version = VersionNumber(args[1])
+
+        except (TypeError, ValueError) as e:
+            print("Invalid version number: %s" % e)
+            return
+
+        sp = self.create_spkg(True)
+
+        if version not in sp.list_version_numbers():
+            print("WARNING: This version does not exist in the database.")
+
+        try:
+            sp.delete_version(version)
+
+        except ces.AttributeManuallyHeld:
+            print("Versions are manually held.")
+            return
+
+        print("finished.")
+
+
 class SourcePackageVersionsCopyShallow(SourcePackageBaseAction):
     """
     Copy a source package version and its attributes. Occurences of the old
@@ -223,17 +381,26 @@ class SourcePackageVersionsCopyShallow(SourcePackageBaseAction):
             return
 
         src = sp.get_version(src)
-        dst = sp.add_version(dst)
+
+        try:
+            dst = sp.add_version(dst)
+
+        except ces.AttributeManuallyHeld:
+            print("Versions are manually held.")
+            return
+
+        old_version_string = str(src.version_number)
+        new_version_string = str(dst.version_number)
 
         for attr in src.list_attributes():
             value = src.get_attribute(attr)
 
             # Replace the old version number
-            if isinstance(value, str) and src.contains(src):
-                print("Attribute `%s': replacing `%s' with `%s'." %
-                    (attr, str(src), str(dst)))
+            if isinstance(value, str) and old_version_string in value:
+                print("Attribute `%s': replacing version string `%s' with `%s'." %
+                    (attr, old_version_string, new_version_string))
 
-                value.replace(str(src), str(dst))
+                value = value.replace(old_version_string, new_version_string)
 
             dst.set_attribute(attr, value)
 

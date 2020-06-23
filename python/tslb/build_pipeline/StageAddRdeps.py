@@ -155,7 +155,7 @@ class StageAddRdeps(object):
                             bp.architecture,
                             so if so.startswith('/') else '/' + so,
                             so.startswith('/'),
-                            only_latest=True)
+                            only_newest=True)
 
                     if not deps:
                         out.write("Did not find a binary package that contains shared object `%s'.\n" % so)

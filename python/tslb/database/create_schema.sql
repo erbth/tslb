@@ -84,7 +84,7 @@ create table source_package_version_current_binary_packages (
 		on update cascade on delete cascade,
 
 	name varchar,
-	primary key (architecture, name)
+	primary key (source_package, version_number, architecture, name)
 );
 
 create table source_package_version_attributes (

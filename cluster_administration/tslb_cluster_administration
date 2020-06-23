@@ -44,22 +44,66 @@ function deploy_host() {
 	cat << "EOF" | ssh tslb@$host "cat > /srv/tslb/setup.sh && bash /srv/tslb/setup.sh"
 #!/bin/bash
 
-cat > /srv/tslb/tslb-build-node.service << EOF2
+cat > /srv/tslb/tslb-build-node@.service << EOF2
 [Unit]
-Description=Simple TSLB build node service file
+Description=Simple TSLB build node service file (instance %i)
 
 [Service]
 Type=simple
 Environment="PYTHONPATH=/srv/tslb/python"
-ExecStart=/srv/tslb/python/tslb/build_node/tslb_build_node
+ExecStart=/srv/tslb/python/tslb/build_node/tslb_build_node %i
+PrivateTmp=false
 EOF2
 
-if ! [ -f /run/systemd/system/tslb-build-node.service ] || \
-	! cmp /srv/tslb/tslb-build-node.service /run/systemd/system/tslb-build-node.service
-then
-	sudo cp /srv/tslb/tslb-build-node.service /run/systemd/system/tslb-build-node.service
-	sudo systemctl daemon-reload
-fi
+cat > /srv/tslb/tslb-build-nodes.service << EOF2
+[Unit]
+Description=Simple service file for all TSLB build nodes
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/srv/tslb/manager-start
+ExecStop=/srv/tslb/manager-stop
+PrivateTmp=False
+EOF2
+
+cat > /srv/tslb/manager-start << EOF2
+#!/usr/bin/python3
+
+import multiprocessing
+import subprocess
+
+node_count = round(multiprocessing.cpu_count() / 4)
+
+print("Starting %s build nodes ..." % node_count)
+for i in range(node_count):
+    r = subprocess.run(['systemctl', 'start', 'tslb-build-node@' + str(i) + '.service'])
+    if r.returncode != 0:
+        print("Failed to start node %d." % i)
+        exit(1)
+
+print("done.")
+exit(0)
+EOF2
+
+cat > /srv/tslb/manager-stop << EOF2
+#!/bin/bash
+set -e
+systemctl stop "tslb-build-node@*.service"
+EOF2
+
+chmod +x /srv/tslb/manager-start
+chmod +x /srv/tslb/manager-stop
+
+for file in tslb-build-node@.service tslb-build-nodes.service
+do
+	if ! [ -f /run/systemd/system/$file ] || \
+		! cmp /srv/tslb/$file /run/systemd/system/$file
+	then
+		sudo cp /srv/tslb/$file /run/systemd/system/$file
+		sudo systemctl daemon-reload
+	fi
+done
 EOF
 
 
@@ -80,7 +124,7 @@ function status_node_host() {
 	fi
 
 
-	if ssh tslb@$host "systemctl is-active -q tslb-build-node.service"
+	if ssh tslb@$host "systemctl is-active -q tslb-build-nodes.service"
 	then
 		printf "\033[32mactive\033[0m\n"
 	else
@@ -103,7 +147,7 @@ function start_node_host() {
 	printf "\033[32mreachable\033[0m\n"
 	echo "  Starting ..."
 
-	ssh tslb@$host "sudo systemctl start tslb-build-node.service"
+	ssh tslb@$host "sudo systemctl start tslb-build-nodes.service"
 
 	echo "  Finished."
 }
@@ -123,7 +167,7 @@ function stop_node_host() {
 	printf "\033[32mreachable\033[0m\n"
 	echo "  Stopping ..."
 
-	ssh tslb@$host "sudo systemctl stop tslb-build-node.service"
+	ssh tslb@$host "sudo systemctl stop tslb-build-nodes.service"
 
 	echo "  Finished."
 }

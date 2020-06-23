@@ -41,6 +41,7 @@ class StageAdapt:
             spv.get_attribute('adapt_command'),
             {
                 'MAX_PARALLEL_THREADS': str(max_parallel_threads),
+                'MAX_LOAD': str(max_parallel_threads),
                 'SOURCE_DIR': chroot_source_dir,
                 'INSTALL_LOCATION': chroot_install_location
             },
