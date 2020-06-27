@@ -116,10 +116,6 @@ namespace BuildClusterProxy
 		std::vector<ConnectionStateSubscriber> connection_state_subscribers;
 
 
-		/* Different actions */
-		void search_for_build_nodes();
-		void search_for_build_masters();
-
 		/* Respond to messages from entities in the cluster */
 		void build_node_message_received(
 				yamb_node::yamb_node *node,
@@ -155,6 +151,10 @@ namespace BuildClusterProxy
 
 		void subscribe_to_build_master_list(const BuildMasterListSubscriber &s);
 		void unsubscribe_from_build_master_list(void* priv);
+
+		/* Different actions */
+		void search_for_build_nodes();
+		void search_for_build_masters();
 	};
 }
 

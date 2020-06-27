@@ -4,6 +4,7 @@ An interface between the build master and the client yamb interface.
 import queue
 from tslb import Architecture
 from tslb import CommonExceptions as ces
+from tslb.VersionNumber import VersionNumber
 
 
 # Abstract interface
@@ -12,6 +13,13 @@ class BMInterface:
     An abstract base class for the interface between build master and client
     yamb interface.
     """
+    DOMAIN_STATE = 0
+    DOMAIN_REMAINING = 1
+    DOMAIN_BUILD_QUEUE = 2
+    DOMAIN_BUILDING_SET = 3
+    DOMAIN_NODES = 4
+    DOMAIN_ALL = 100
+
     @property
     def identity(self):
         """
@@ -58,24 +66,31 @@ class BMInterface:
         Start a build
 
         :param str/int arch:
+        :raises ces.InvalidState:
         """
         raise NotImplementedError
 
     def stop(self):
         """
         Stop a build
+
+        :raises ces.InvalidState:
         """
         raise NotImplementedError
 
     def open(self):
         """
         Open the 'package valve'
+
+        :raises ces.InvalidState:
         """
         raise NotImplementedError
 
     def close(self):
         """
         Close the 'package valve'
+
+        :raises ces.InvalidState:
         """
         raise NotImplementedError
 
@@ -120,7 +135,7 @@ class MockController(BMInterface):
         return list(self._remaining)
 
     def get_build_queue(self):
-        return list(self._queue.queue)
+        return list(self._build_queue.queue)
 
     def get_building_set(self):
         return list(self._building_set)
@@ -153,7 +168,20 @@ class MockController(BMInterface):
         self._arch = arch
         self._error = False
         self._valve = False
-        self._remaining = ['pkg1', 'pkg2', 'pkg3', 'pkg4', 'pkg5', 'pkg6']
+        self._remaining = [
+            ('pkg1', VersionNumber('1.0')),
+            ('pkg2', VersionNumber('1.2')),
+            ('pkg3', VersionNumber('1.4')),
+            ('pkg4', VersionNumber('2.0')),
+            ('pkg5', VersionNumber('1')),
+            ('pkg6', VersionNumber('1.0.1')),
+            ('pkg7', VersionNumber('1.0')),
+            ('pkg8', VersionNumber('1.2')),
+            ('pkg9', VersionNumber('1.4')),
+            ('pkg10', VersionNumber('2.0')),
+            ('pkg11', VersionNumber('1')),
+            ('pkg12', VersionNumber('1.0.1'))
+        ]
 
         while self._build_queue.qsize() > 0:
             self._build_queue.get()
@@ -166,12 +194,32 @@ class MockController(BMInterface):
 
         self._internal_state = 'computing'
 
+        self._notify_subscribers(self.DOMAIN_ALL)
+
+        # Start computing
+        self._loop.call_later(1, self._compute)
+
+
     def stop(self):
         if self._building_set:
             raise ces.InvalidState('building')
 
         if self._internal_state != 'idle':
             raise ces.InvalidState(self._internal_state)
+
+        self._error = False
+        self._valve = False
+        self._remaining = []
+
+        while self._build_queue.qsize() > 0:
+            self._build_queue.get()
+
+        self._building_set.clear()
+        self._nodes = {}
+
+        self._internal_state = 'off'
+
+        self._notify_subscribers(self.DOMAIN_ALL)
 
     def open(self):
         if self._internal_state not in ('idle', 'computing'):
@@ -185,6 +233,8 @@ class MockController(BMInterface):
 
         self._valve = True
 
+        self._notify_subscribers(self.DOMAIN_STATE)
+
     def close(self):
         if self._internal_state not in ('idle', 'computing'):
             raise ces.InvalidState(self._internal_state)
@@ -196,6 +246,8 @@ class MockController(BMInterface):
             raise ces.InvalidState('valve already closed')
 
         self._valve = False
+
+        self._notify_subscribers(self.DOMAIN_STATE)
 
     def subscribe(self, subscriber):
         for subs in self._subscribers:
@@ -214,3 +266,19 @@ class MockController(BMInterface):
     def _notify_subscribers(self, domain):
         for subs in self._subscribers:
             subs(self, domain)
+
+
+    # Emulating a build master
+    def _compute(self):
+        self._build_queue.put(self._remaining[0])
+        del self._remaining[0]
+
+        self._notify_subscribers(self.DOMAIN_REMAINING)
+        self._notify_subscribers(self.DOMAIN_BUILD_QUEUE)
+        
+        if not self._remaining:
+            self._internal_state = "idle"
+            self._notify_subscribers(self.DOMAIN_STATE)
+
+        else:
+            self._loop.call_later(1, self._compute)

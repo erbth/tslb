@@ -147,51 +147,6 @@ void BuildClusterProxy::unsubscribe_from_connection_state(void* priv)
 }
 
 
-/* Different actions */
-void BuildClusterProxy::search_for_build_nodes()
-{
-	if (ynode)
-	{
-		auto msg = make_unique<yamb_node::stream>();
-
-		Document d;
-		d.SetObject();
-		d.AddMember("action", "identify", d.GetAllocator());
-
-		StringBuffer buffer;
-		Writer<StringBuffer> writer(buffer);
-		d.Accept(writer);
-
-		msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-
-		build_node_yprotocol->send_message(ynode.get(), 0xffffffff, move(msg));
-
-		build_nodes_last_searched = 0;
-	}
-}
-
-void BuildClusterProxy::search_for_build_masters()
-{
-	if (ynode)
-	{
-		auto msg = make_unique<yamb_node::stream>();
-
-		Document d;
-		d.SetObject();
-		d.AddMember("cmd", "identify", d.GetAllocator());
-
-		StringBuffer buffer;
-		Writer<StringBuffer> writer(buffer);
-		d.Accept(writer);
-
-		msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
-
-		build_master_yprotocol->send_message(ynode.get(), 0xffffffff, move(msg));
-
-		build_masters_last_searched = 0;
-	}
-}
-
 /* Respond to messages from different entities in the cluster */
 void BuildClusterProxy::build_node_message_received(
 		yamb_node::yamb_node *nodes,
@@ -376,5 +331,52 @@ void BuildClusterProxy::unsubscribe_from_build_master_list(void* priv)
 	if (i != build_master_list_subscribers.end())
 		build_master_list_subscribers.erase(i);
 }
+
+
+/* Different actions */
+void BuildClusterProxy::search_for_build_nodes()
+{
+	if (ynode)
+	{
+		auto msg = make_unique<yamb_node::stream>();
+
+		Document d;
+		d.SetObject();
+		d.AddMember("action", "identify", d.GetAllocator());
+
+		StringBuffer buffer;
+		Writer<StringBuffer> writer(buffer);
+		d.Accept(writer);
+
+		msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
+
+		build_node_yprotocol->send_message(ynode.get(), 0xffffffff, move(msg));
+
+		build_nodes_last_searched = 0;
+	}
+}
+
+void BuildClusterProxy::search_for_build_masters()
+{
+	if (ynode)
+	{
+		auto msg = make_unique<yamb_node::stream>();
+
+		Document d;
+		d.SetObject();
+		d.AddMember("cmd", "identify", d.GetAllocator());
+
+		StringBuffer buffer;
+		Writer<StringBuffer> writer(buffer);
+		d.Accept(writer);
+
+		msg->write_data((uint8_t*) buffer.GetString(), buffer.GetSize());
+
+		build_master_yprotocol->send_message(ynode.get(), 0xffffffff, move(msg));
+
+		build_masters_last_searched = 0;
+	}
+}
+
 
 }

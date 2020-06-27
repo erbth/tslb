@@ -7,6 +7,7 @@
 #include <list>
 #include <legacy_widgets_for_gtkmm.h>
 #include "BuildNodeProxy.h"
+#include "BuildMasterProxy.h"
 
 /* Prototypes */
 class ClientApplication;
@@ -108,13 +109,32 @@ public:
 
 
 /*********************** An interface to build masters ************************/
+class ListStoreText : public Glib::Object
+{
+public:
+	std::string text;
+
+	/* For simpler comparison */
+	std::string comp1;
+	std::string comp2;
+
+	ListStoreText(std::string text, std::string comp1, std::string comp2)
+		: text(text), comp1(comp1), comp2(comp2)
+	{}
+
+	bool operator==(const std::pair<const std::string, const std::string>& p) const
+	{
+		return p.first == comp1 && p.second == comp2;
+	}
+};
+
 class MasterInterface : public Gtk::Box
 {
 private:
 	BuildClusterWindow *bcwin;
 
-public:
 	BuildClusterProxy::BuildClusterProxy &build_cluster_proxy;
+	std::shared_ptr<BuildMasterProxy::BuildMasterProxy> build_master;
 
 private:
 	/* UI components */
@@ -122,9 +142,10 @@ private:
 	Gtk::Box			m_bMain;
 	Lwg::RGBLed			m_ledConnected;
 	Gtk::ComboBoxText	m_cbIdentity;
+	Gtk::Box			m_bMainState;
 	Lwg::RGBLed			m_ledState;
 	Gtk::Label			m_lState;
-	Lwg::RGBLed			m_ledError;
+	Lwg::Led			m_ledError;
 	Gtk::Label			m_lError;
 	Gtk::Label			m_lButtons;
 	Gtk::ComboBoxText	m_cbArch;
@@ -132,16 +153,88 @@ private:
 	Gtk::Button			m_btStop;
 	Gtk::Button			m_btRefresh;
 
+	Gtk::Box			m_bRemaining;
+	Gtk::Box			m_blRemaining;
+	Gtk::Label			m_lRemaining;
+	Gtk::ScrolledWindow	m_swRemaining;
+	Gtk::FlowBox		m_fbRemaining;
+	Glib::RefPtr<Gio::ListStore<ListStoreText>> m_lsRemaining;
+
+	Gtk::Box			m_bBuildQueue;
+	Gtk::Box			m_blBuildQueue;
+	Gtk::Label			m_lBuildQueue;
+	Gtk::Box			m_hbBuildQueueLabels;
+	Gtk::Label			m_lBuildQueueFront;
+	Gtk::ScrolledWindow m_swBuildQueue;
+	Gtk::FlowBox		m_fbBuildQueue;
+	Glib::RefPtr<Gio::ListStore<ListStoreText>> m_lsBuildQueue;
+
+	Gtk::Box			m_bValve;
+	Gtk::Box			m_b2Valve;
+	Gtk::Label			m_lValve;
+	Lwg::RGBLed			m_ledValve;
+	Gtk::Button			m_btOpen;
+	Gtk::Button			m_btClose;
+
+	Gtk::Box			m_bBuildingSet;
+	Gtk::Box			m_blBuildingSet;
+	Gtk::Label			m_lBuildingSet;
+	Gtk::ScrolledWindow	m_swBuildingSet;
+
+	Gtk::Paned			m_pNodes;
+	Gtk::Box			m_bIdleNodes;
+	Gtk::Box			m_bBusyNodes;
+	Gtk::Box			m_blIdleNodes;
+	Gtk::Box			m_blBusyNodes;
+	Gtk::Label			m_lIdleNodes;
+	Gtk::Label			m_lBusyNodes;
+	Gtk::ScrolledWindow	m_swIdleNodes;
+	Gtk::ScrolledWindow	m_swBusyNodes;
+
+	Glib::RefPtr<Gtk::CssProvider> custom_css_provider;
+
 	std::list<std::string> cbIdentity_values;
 
 	/* You subscribe to the build cluster proxy */
 	void on_master_list_changed();
 	static void _on_master_list_changed(void *pThis);
 
+	/* Subscribing to a build master */
+	static void _on_master_responding_changed(void* pThis);
+	static void _on_master_remaining_changed(void* pThis);
+	static void _on_master_build_queue_changed(void* pThis);
+	static void _on_master_building_set_changed(void* pThis);
+	static void _on_master_nodes_changed(void* pThis);
+	static void _on_master_state_changed(void* pThis);
+
+	void on_error_received(std::string error_msg);
+	static void _on_error_received(void* pThis, std::string error_msg);
+
 	/* Update UI components */
 	void update_master_list();
 
 	void update_master_all();
+	void update_master_responding();
+	void update_master_remaining();
+	void update_master_build_queue();
+	void update_master_state();
+
+	void update_clear_fields();
+
+	/* Respond to user actions */
+	void select_master(std::string identity);
+
+	/* Event handlers */
+	void on_identity_changed();
+	void on_start_clicked();
+	void on_stop_clicked();
+	void on_refresh_clicked();
+	void on_open_clicked();
+	void on_close_clicked();
+
+	/* Building labels from ListStoreText items in ListStores */
+	Gtk::Widget* on_create_label_list_store(const Glib::RefPtr<ListStoreText> &item);
+
 
 public:
 	MasterInterface(BuildClusterWindow *bcwin);
