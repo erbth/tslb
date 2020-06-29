@@ -6,7 +6,7 @@
 using namespace std;
 
 ClientApplication::ClientApplication () :
-	Gtk::Application ("tslb.tslb_client")
+	Gtk::Application ()
 {
 	Glib::set_application_name ("TSClient LEGACY Build System Client");
 }
