@@ -16,6 +16,9 @@ namespace BuildClusterProxy { class BuildClusterProxy; }
 
 namespace BuildMasterProxy
 {
+	/* Prototypes */
+	class BuildMasterProxy;
+
 	enum state
 	{
 		BMP_STATE_OFF,
@@ -79,6 +82,40 @@ namespace BuildMasterProxy
 	};
 
 
+	class ConsoleSubscriber
+	{
+		friend class BuildMasterProxy;
+
+	private:
+		BuildMasterProxy *master = nullptr;
+		uint32_t last_mark_received = 0;
+
+		void *priv = nullptr;
+
+		/* Called when console data is received from the master.
+		 * Initiallly all available (old) data is transfered to the subscriber
+		 * through this cb.
+		 *
+		 * @param data: The data, do NOT consume, will be free'd afterwards /
+		 *     could point to internal storage.
+		 * @param size: Count of bytes in data */
+		using new_data_cb_t = void(*)(void *priv, const char *data, size_t size);
+		new_data_cb_t new_data_cb = nullptr;
+
+		ConsoleSubscriber(BuildMasterProxy *master, new_data_cb_t new_data_cb, void *priv)
+			: master(master), priv(priv), new_data_cb(new_data_cb) {}
+
+	public:
+		/* Only empty ConsoleSubscriber objects are publicly constructable. */
+		ConsoleSubscriber() {};
+
+		bool operator==(const ConsoleSubscriber &o) const
+		{
+			return priv == o.priv;
+		}
+	};
+
+
 	class BuildMasterProxy
 	{
 	private:
@@ -110,6 +147,9 @@ namespace BuildMasterProxy
 		/* A list of entities that subscribe to your state. */
 		std::vector<Subscriber> subscribers;
 
+		/* A vector of console subscribers */
+		std::vector<ConsoleSubscriber> console_subscribers;
+
 	public:
 		BuildMasterProxy(
 				BuildClusterProxy::BuildClusterProxy &bcp,
@@ -132,6 +172,17 @@ namespace BuildMasterProxy
 		void send_get_building_set();
 		void send_get_nodes();
 		void send_subscribe();
+
+		/* Console streaming */
+		void console_data_received(
+			std::vector<std::pair<uint32_t, uint32_t>> mdata, char *data, size_t data_size);
+
+		void console_update_received(
+			std::vector<std::pair<uint32_t, uint32_t>> mdata, char *data, size_t data_size);
+
+		void console_send_request_updates();
+		void console_send_ack();
+		void console_send_request(uint32_t start, uint32_t end);
 
 	public:
 		/* Querying state */
@@ -158,6 +209,21 @@ namespace BuildMasterProxy
 		void stop();
 		void open();
 		void close();
+
+		/* Console streaming */
+		/* Subscribe to the build master's console output. @param priv is used
+		 * to identify the subscription. It SHOULD NOT be nullptr as this
+		 * indicates an empty / invalid ConsoleSubscriber object. If it is, an
+		 * empty ConsoleSubscriber object is returned. */
+		ConsoleSubscriber subscribe_to_console(ConsoleSubscriber::new_data_cb_t, void *priv);
+
+		/* Unsubscribe from console output. The ConsoleSubscriber object given
+		 * and all copies of it MUST NOT be used anymore afterwards. Therefore
+		 * an internal pointer oft he given object is set to nullptr. This does,
+		 * however, not affect copies ... */
+		void unsubscribe_from_console(ConsoleSubscriber&);
+
+		void console_reconnect();
 	};
 }
 

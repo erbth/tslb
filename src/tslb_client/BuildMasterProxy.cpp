@@ -4,6 +4,8 @@
 #include <rapidjson/writer.h>
 #include "BuildMasterProxy.h"
 #include "BuildClusterProxy.h"
+#include "base64.h"
+#include "utilities.h"
 
 using namespace std;
 using namespace rapidjson;
@@ -293,6 +295,76 @@ void BuildMasterProxy::message_received(rapidjson::Document& d)
 				subs.on_error_received(subs.priv, error);
 		}
 	}
+
+
+	/* Console streaming */
+	if (d.HasMember("console_streaming") && d["console_streaming"].IsObject())
+	{
+		const Value &cs = d["console_streaming"];
+
+		if (cs.HasMember("msg") && cs["msg"].IsString())
+		{
+			string msg = cs["msg"].GetString();
+
+			if (msg == "data" || msg == "update")
+			{
+				if (cs.HasMember("mdata") && cs["mdata"].IsArray() &&
+						cs.HasMember("blob") && cs["blob"].IsString())
+				{
+					/* De-serialize array of tuples */
+					const Value &mdata = cs["mdata"];
+
+					vector<pair<uint32_t, uint32_t>> de_mdata(mdata.Size());
+
+					bool failed = false;
+
+					for (SizeType i = 0; i < mdata.Size(); i++)
+					{
+						const Value &t = mdata[i];
+
+						if (t.IsArray() && t.Size() == 2 &&
+								t[0].IsInt() && t[1].IsInt())
+						{
+							long int mark = t[0].GetInt();
+							long int pointer = t[1].GetInt();
+
+							if (mark < 0 || mark > 0xffffffff ||
+									pointer < 0 || pointer > 0xffffffff)
+							{
+								failed = true;
+								break;
+							}
+
+							de_mdata[i] = pair(mark, pointer);
+						}
+						else
+						{
+							failed = true;
+							break;
+						}
+					}
+
+					if (!failed)
+					{
+						/* Decode data blob */
+						size_t blob_size;
+						char *blob = base64_decode(
+								cs["blob"].GetString(),
+								cs["blob"].GetStringLength(),
+								&blob_size);
+
+						if (blob)
+						{
+							if (msg == "data")
+								console_data_received(de_mdata, blob, blob_size);
+							else
+								console_update_received(de_mdata, blob, blob_size);
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 
@@ -364,6 +436,126 @@ void BuildMasterProxy::send_subscribe()
 	d.SetObject();
 
 	d.AddMember("cmd", "subscribe", d.GetAllocator());
+	send_message_to_master(d);
+}
+
+
+/* Swallows blob */
+void BuildMasterProxy::console_data_received(
+		vector<pair<uint32_t, uint32_t>> mdata, char *data, size_t data_size)
+{
+	if (mdata.size() == 0)
+		return;
+
+
+	uint32_t first_mark = mdata.front().first;
+	uint32_t last_mark = mdata.back().first;
+
+	uint32_t min_mark_required = 0xffffffff;
+
+	for (ConsoleSubscriber& sub : console_subscribers)
+	{
+		if (sub.last_mark_received == 0)
+		{
+			if (sub.new_data_cb)
+				sub.new_data_cb(sub.priv, data, data_size);
+
+			sub.last_mark_received = last_mark;
+		}
+		else
+		{
+			/* Is it acceptable and helpful? - And if not, what would be needed? */
+			if (in_mark_range(mark_add_disp(first_mark, -1),
+						mark_add_disp(last_mark, -1),
+						sub.last_mark_received))
+			{
+				/* Calculate missing chunks from all we've got */
+				const char *ptr = data;
+
+				auto i = mdata.cbegin();
+				while (in_mark_range(i->first, last_mark, sub.last_mark_received))
+					ptr += (*i++).second;
+
+				/* Call subscriber */
+				if (sub.new_data_cb)
+					sub.new_data_cb(sub.priv, ptr, data_size - (ptr - data));
+
+				sub.last_mark_received = last_mark;
+			}
+			else if (last_mark != sub.last_mark_received)
+			{
+				/* This may request too much or not enough if wrap around
+				 * occurs. However I'm not sure if the exact amount can be
+				 * requested in every case ...
+				 * Anyway, it should work within a few rounds once each single
+				 * subscriber becomes synchronous one by one as the buffer at
+				 * the sender is usually quite large. Otherwise the user has to
+				 * refresh the console. (if it got stuck at a point from which
+				 * no data is available. We could detect this but it would be
+				 * more work and may require matchable requests and responses.
+				 * The easier way would be using a receive buffer, which I'be
+				 * been too lazy to do by now ...) */
+				min_mark_required = min(min_mark_required, sub.last_mark_received);
+			}
+		}
+	}
+
+	/* Request missing chunks */
+	if (min_mark_required < 0xffffffff)
+		console_send_request(min_mark_required, 0xffffffff);
+
+	free(data);
+}
+
+/* Swallows blob */
+void BuildMasterProxy::console_update_received(
+		vector<pair<uint32_t, uint32_t>> mdata, char *data, size_t data_size)
+{
+	console_data_received(mdata, data, data_size);
+
+	/* Send ack */
+	if (console_subscribers.size() > 0)
+		console_send_ack();
+}
+
+void BuildMasterProxy::console_send_request_updates()
+{
+	Document d;
+	d.SetObject();
+
+	Value cs(kObjectType);
+
+	cs.AddMember("msg", "request_updates", d.GetAllocator());
+	d.AddMember("console_streaming", cs, d.GetAllocator());
+
+	send_message_to_master(d);
+}
+
+void BuildMasterProxy::console_send_ack()
+{
+	Document d;
+	d.SetObject();
+
+	Value cs(kObjectType);
+
+	cs.AddMember("msg", "ack", d.GetAllocator());
+	d.AddMember("console_streaming", cs, d.GetAllocator());
+
+	send_message_to_master(d);
+}
+
+void BuildMasterProxy::console_send_request(uint32_t start, uint32_t end)
+{
+	Document d;
+	d.SetObject();
+
+	Value cs(kObjectType);
+
+	cs.AddMember("msg", "request", d.GetAllocator());
+	cs.AddMember("start", start, d.GetAllocator());
+	cs.AddMember("end", end, d.GetAllocator());
+	d.AddMember("console_streaming", cs, d.GetAllocator());
+
 	send_message_to_master(d);
 }
 
@@ -522,6 +714,51 @@ void BuildMasterProxy::close()
 
 	d.AddMember("cmd", "close", d.GetAllocator());
 	send_message_to_master(d);
+}
+
+
+ConsoleSubscriber BuildMasterProxy::subscribe_to_console(
+		ConsoleSubscriber::new_data_cb_t new_data_cb, void *priv)
+{
+	if (!priv)
+		return ConsoleSubscriber();
+
+	ConsoleSubscriber s(this, new_data_cb, priv);
+
+	auto old = find(console_subscribers.begin(), console_subscribers.end(), s);
+
+	if (old == console_subscribers.end())
+		console_subscribers.push_back(s);
+	else
+		*old = s;
+
+	/* Request updates on console buffer changes and request all old data */
+	console_send_request_updates();
+	console_send_request(0, 0xffffffff);
+
+	return s;
+}
+
+void BuildMasterProxy::unsubscribe_from_console(ConsoleSubscriber &cs)
+{
+	auto i = find(console_subscribers.begin(), console_subscribers.end(), cs);
+
+	if (i != console_subscribers.end())
+	{
+		console_subscribers.erase(i);
+
+		/* The ConsoleSubscriber object should be unusable afterwards. */
+		cs.priv = nullptr;
+	}
+}
+
+void BuildMasterProxy::console_reconnect()
+{
+	for (ConsoleSubscriber &sub : console_subscribers)
+		sub.last_mark_received = 0;
+
+	console_send_request_updates();
+	console_send_request(0, 0xffffffff);
 }
 
 }

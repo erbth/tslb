@@ -384,15 +384,22 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 	m_btStop("Stop"),
 	m_btRefresh("Refresh"),
 
+	m_bBody(Gtk::ORIENTATION_HORIZONTAL, 0),
+	m_bPane1(Gtk::ORIENTATION_VERTICAL, 10),
+	m_bPane2(Gtk::ORIENTATION_VERTICAL, 10),
+	m_sepBody(Gtk::ORIENTATION_VERTICAL),
+
 	m_bRemaining(Gtk::Orientation::ORIENTATION_VERTICAL, 5),
 	m_blRemaining(Gtk::Orientation::ORIENTATION_HORIZONTAL, 0),
 	m_lRemaining("Remaining packages to process/build:"),
+	m_bRemainingFBSurrounding(Gtk::ORIENTATION_VERTICAL, 0),
 
 	m_bBuildQueue(Gtk::Orientation::ORIENTATION_VERTICAL, 5),
 	m_blBuildQueue(Gtk::Orientation::ORIENTATION_HORIZONTAL, 0),
 	m_lBuildQueue("The build queue:"),
 	m_hbBuildQueueLabels(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5),
 	m_lBuildQueueFront("Front"),
+	m_bBuildQueueFBSurrounding(Gtk::ORIENTATION_VERTICAL, 0),
 
 	m_bValve(Gtk::Orientation::ORIENTATION_HORIZONTAL, 10),
 	m_b2Valve(Gtk::Orientation::ORIENTATION_HORIZONTAL, 10),
@@ -403,16 +410,26 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 	m_bBuildingSet(Gtk::Orientation::ORIENTATION_VERTICAL, 5),
 	m_blBuildingSet(Gtk::Orientation::ORIENTATION_HORIZONTAL, 0),
 	m_lBuildingSet("Building set:"),
+	m_bBuildingSetFBSurrounding(Gtk::ORIENTATION_VERTICAL, 0),
 
 	m_bIdleNodes(Gtk::Orientation::ORIENTATION_VERTICAL, 5),
 	m_bBusyNodes(Gtk::Orientation::ORIENTATION_VERTICAL, 5),
 	m_blIdleNodes(Gtk::Orientation::ORIENTATION_HORIZONTAL, 0),
 	m_blBusyNodes(Gtk::Orientation::ORIENTATION_HORIZONTAL, 0),
 	m_lIdleNodes("Idle build nodes:"),
-	m_lBusyNodes("Busy build nodes:")
+	m_lBusyNodes("Busy build nodes:"),
+	m_bIdleNodesFBSurrounding(Gtk::ORIENTATION_VERTICAL, 0),
+	m_bBusyNodesFBSurrounding(Gtk::ORIENTATION_VERTICAL, 0),
+
+	m_bConsole(Gtk::ORIENTATION_VERTICAL, 5),
+	m_blConsole(Gtk::ORIENTATION_HORIZONTAL, 0),
+	m_lConsole("Console:"),
+	m_bConsoleH(Gtk::ORIENTATION_HORIZONTAL, 2)
 {
-	set_border_width(10);
+	m_fMain.set_border_width(10);
 	m_bMain.set_border_width(10);
+	m_bPane1.set_border_width(10);
+	m_bPane2.set_border_width(10);
 
 	m_cbIdentity.append("");
 	m_cbIdentity.set_active(0);
@@ -422,8 +439,15 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 
 	custom_css_provider = Gtk::CssProvider::create();
 	custom_css_provider->load_from_data(
+		".fb_surrounding_box { background-color: #ffffff }\n"
 		".label_chunk_fb { background-color: #ffffff }\n"
 		".label_queue_fb { background-color: #ffffff }");
+
+	/* Flow box for the remaining set */
+	m_bRemainingFBSurrounding.get_style_context()->add_class("fb_surrounding_box");
+	m_bRemainingFBSurrounding.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
 
 	m_fbRemaining.get_style_context()->add_class("label_chunk_fb");
 	m_fbRemaining.get_style_context()->add_provider(
@@ -436,9 +460,15 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 			sigc::mem_fun(*this, &MasterInterface::on_create_label_list_store));
 
 	m_fbRemaining.set_selection_mode(Gtk::SELECTION_NONE);
-	m_fbRemaining.set_homogeneous(false);
+	m_fbRemaining.set_homogeneous(true);
 	m_fbRemaining.set_column_spacing(5);
 	m_fbRemaining.set_row_spacing(5);
+
+	/* Flow box for the build queue */
+	m_bBuildQueueFBSurrounding.get_style_context()->add_class("fb_surrounding_box");
+	m_bBuildQueueFBSurrounding.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
 
 	m_fbBuildQueue.get_style_context()->add_class("label_queue_fb");
 	m_fbBuildQueue.get_style_context()->add_provider(
@@ -451,10 +481,73 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 			sigc::mem_fun(*this, &MasterInterface::on_create_label_list_store));
 
 	m_fbBuildQueue.set_selection_mode(Gtk::SELECTION_NONE);
-	m_fbBuildQueue.set_homogeneous(false);
+	m_fbBuildQueue.set_homogeneous(true);
 	m_fbBuildQueue.set_column_spacing(5);
 	m_fbBuildQueue.set_row_spacing(5);
 
+	/* Flow box for the building set */
+	m_bBuildingSetFBSurrounding.get_style_context()->add_class("fb_surrounding_box");
+	m_bBuildingSetFBSurrounding.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_fbBuildingSet.get_style_context()->add_class("label_chunk_fb");
+	m_fbBuildingSet.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_lsBuildingSet = Gio::ListStore<ListStoreText>::create();
+	m_fbBuildingSet.bind_list_store(
+			m_lsBuildingSet,
+			sigc::mem_fun(*this, &MasterInterface::on_create_label_list_store));
+
+	m_fbBuildingSet.set_selection_mode(Gtk::SELECTION_NONE);
+	m_fbBuildingSet.set_homogeneous(true);
+	m_fbBuildingSet.set_column_spacing(5);
+	m_fbBuildingSet.set_row_spacing(5);
+
+	/* Two flow boxes for idle- and busy nodes */
+	m_bIdleNodesFBSurrounding.get_style_context()->add_class("fb_surrounding_box");
+	m_bIdleNodesFBSurrounding.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_fbIdleNodes.get_style_context()->add_class("label_chunk_fb");
+	m_fbIdleNodes.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_lsIdleNodes = Gio::ListStore<ListStoreText>::create();
+	m_fbIdleNodes.bind_list_store(
+			m_lsIdleNodes,
+			sigc::mem_fun(*this, &MasterInterface::on_create_label_list_store));
+
+	m_fbIdleNodes.set_selection_mode(Gtk::SELECTION_NONE);
+	m_fbIdleNodes.set_homogeneous(true);
+	m_fbIdleNodes.set_column_spacing(5);
+	m_fbIdleNodes.set_row_spacing(5);
+
+	m_bBusyNodesFBSurrounding.get_style_context()->add_class("fb_surrounding_box");
+	m_bBusyNodesFBSurrounding.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_fbBusyNodes.get_style_context()->add_class("label_chunk_fb");
+	m_fbBusyNodes.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_lsBusyNodes = Gio::ListStore<ListStoreText>::create();
+	m_fbBusyNodes.bind_list_store(
+			m_lsBusyNodes,
+			sigc::mem_fun(*this, &MasterInterface::on_create_label_list_store));
+
+	m_fbBusyNodes.set_selection_mode(Gtk::SELECTION_NONE);
+	m_fbBusyNodes.set_homogeneous(true);
+	m_fbBusyNodes.set_column_spacing(5);
+	m_fbBusyNodes.set_row_spacing(5);
+
+	/* Policies for showing adjustment sliders of the scrolled windows */
 	m_swRemaining.set_policy(Gtk::PolicyType::POLICY_NEVER, Gtk::PolicyType::POLICY_AUTOMATIC);
 	m_swBuildQueue.set_policy(Gtk::PolicyType::POLICY_NEVER, Gtk::PolicyType::POLICY_AUTOMATIC);
 	m_swBuildingSet.set_policy(Gtk::PolicyType::POLICY_NEVER, Gtk::PolicyType::POLICY_AUTOMATIC);
@@ -463,6 +556,21 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 
 	/* Minimum sizes */
 	m_swBuildQueue.set_size_request(-1, 60);
+
+	/* A terminal for console streaming */
+	m_vteConsole = vte_terminal_new();
+	vte_terminal_set_cursor_blink_mode(VTE_TERMINAL(m_vteConsole),
+			VTE_CURSOR_BLINK_OFF);
+
+	vte_terminal_set_scrollback_lines(VTE_TERMINAL(m_vteConsole), 100000);
+	vte_terminal_set_size(VTE_TERMINAL(m_vteConsole), 80, 25);
+
+	gtk_box_pack_start(GTK_BOX(m_bConsoleH.gobj()), m_vteConsole, true, true, 0);
+
+	m_sConsole = gtk_scrollbar_new(GTK_ORIENTATION_VERTICAL,
+			gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(m_vteConsole)));
+
+	gtk_box_pack_start(GTK_BOX(m_bConsoleH.gobj()), m_sConsole, false, false, 0);
 
 	/* UI components */
 	m_bMain.pack_start(m_ledConnected, false, false, 0);
@@ -483,44 +591,63 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 	m_fMain.add(m_bMain);
 	pack_start(m_fMain, false, false, 0);
 
-	m_swRemaining.add(m_fbRemaining);
+	m_bRemainingFBSurrounding.pack_start(m_fbRemaining, false, false, 0);
+	m_swRemaining.add(m_bRemainingFBSurrounding);
 	m_blRemaining.pack_start(m_lRemaining, false, false, 0);
 	m_bRemaining.pack_start(m_blRemaining, false, false, 0);
 	m_bRemaining.pack_start(m_swRemaining, true, true, 0);
-	pack_start(m_bRemaining, true, true, 0);
+	m_bPane1.pack_start(m_bRemaining, true, true, 0);
 
-	m_swBuildQueue.add(m_fbBuildQueue);
+	m_bBuildQueueFBSurrounding.pack_start(m_fbBuildQueue, false, false, 0);
+	m_swBuildQueue.add(m_bBuildQueueFBSurrounding);
 	m_hbBuildQueueLabels.pack_start(m_lBuildQueueFront, false, false, 0);
 	m_blBuildQueue.pack_start(m_lBuildQueue, false, false, 0);
 	m_bBuildQueue.pack_start(m_blBuildQueue, false, false, 0);
 	m_bBuildQueue.pack_start(m_hbBuildQueueLabels, false, false, 0);
 	m_bBuildQueue.pack_start(m_swBuildQueue, true, true, 0);
-	pack_start(m_bBuildQueue, false, false, 0);
+	m_bPane1.pack_start(m_bBuildQueue, false, false, 0);
 
 	m_b2Valve.pack_start(m_lValve, false, false, 0);
 	m_b2Valve.pack_start(m_ledValve, false, false, 0);
 	m_b2Valve.pack_start(m_btOpen, false, false, 0);
 	m_b2Valve.pack_start(m_btClose, false, false, 0);
 	m_bValve.pack_start(m_b2Valve, true, false, 0);
-	pack_start(m_bValve, false, false, 0);
+	m_bPane1.pack_start(m_bValve, false, false, 0);
 
+	m_bBuildingSetFBSurrounding.pack_start(m_fbBuildingSet, false, false, 0);
+	m_swBuildingSet.add(m_bBuildingSetFBSurrounding);
 	m_blBuildingSet.pack_start(m_lBuildingSet, false, false, 0);
 	m_bBuildingSet.pack_start(m_blBuildingSet, false, false, 0);
 	m_bBuildingSet.pack_start(m_swBuildingSet, true, true, 0);
-	pack_start(m_bBuildingSet, true, true, 0);
+	m_bPane1.pack_start(m_bBuildingSet, true, true, 0);
 
+	m_bIdleNodesFBSurrounding.pack_start(m_fbIdleNodes, false, false, 0);
+	m_swIdleNodes.add(m_bIdleNodesFBSurrounding);
 	m_blIdleNodes.pack_start(m_lIdleNodes, false, false, 0);
 	m_bIdleNodes.pack_start(m_blIdleNodes, false, false, 0);
 	m_bIdleNodes.pack_start(m_swIdleNodes, true, true, 0);
 	m_pNodes.pack1(m_bIdleNodes, true, false);
 
+	m_bBusyNodesFBSurrounding.pack_start(m_fbBusyNodes, false, false, 0);
+	m_swBusyNodes.add(m_bBusyNodesFBSurrounding);
 	m_blBusyNodes.pack_start(m_lBusyNodes, false, false, 0);
 	m_bBusyNodes.pack_start(m_blBusyNodes, false, false, 0);
 	m_bBusyNodes.pack_start(m_swBusyNodes, true, true, 0);
 	m_pNodes.pack2(m_bBusyNodes, true, false);
 
-	pack_start(m_pNodes, true, true, 0);
+	m_bPane1.pack_start(m_pNodes, true, true, 0);
 
+	m_blConsole.pack_start(m_lConsole, false, false, 0);
+	m_bConsole.pack_start(m_blConsole, false, false, 0);
+	m_bConsole.pack_start(m_bConsoleH, true, true, 0);
+	m_bPane2.pack_start(m_bConsole);
+
+	m_bBody.pack_start(m_bPane1, true, true);
+	m_bBody.set_center_widget(m_sepBody);
+	m_bBody.pack_end(m_bPane2, true, true);
+	pack_start(m_bBody, true, true, 0);
+
+	/* Clear the UI */
 	update_clear_fields();
 
 	/* Subscribe to parts of the build cluster (proxy) */
@@ -553,6 +680,13 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 
 MasterInterface::~MasterInterface()
 {
+	build_cluster_proxy.unsubscribe_from_build_master_list(this);
+
+	if (build_master)
+	{
+		build_master->unsubscribe_from_console(cs);
+		build_master->unsubscribe(this);
+	}
 }
 
 
@@ -583,10 +717,12 @@ void MasterInterface::_on_master_build_queue_changed(void *pThis)
 
 void MasterInterface::_on_master_building_set_changed(void *pThis)
 {
+	((MasterInterface*)pThis)->update_master_building_set();
 }
 
 void MasterInterface::_on_master_nodes_changed(void *pThis)
 {
+	((MasterInterface*)pThis)->update_master_nodes();
 }
 
 void MasterInterface::_on_master_state_changed(void *pThis)
@@ -610,6 +746,24 @@ void MasterInterface::on_error_received(string error_msg)
 void MasterInterface::_on_error_received(void *pThis, string error_msg)
 {
 	((MasterInterface*)pThis)->on_error_received(error_msg);
+}
+
+
+void MasterInterface::new_console_data(const char* data, size_t size)
+{
+	vte_terminal_feed(VTE_TERMINAL(m_vteConsole), data, size);
+}
+
+void MasterInterface::_new_console_data(void* pThis, const char* data, size_t size)
+{
+	((MasterInterface*)pThis)->new_console_data(data, size);
+}
+
+
+void MasterInterface::reconnect_console()
+{
+	vte_terminal_reset(VTE_TERMINAL(m_vteConsole), TRUE, TRUE);
+	build_master->console_reconnect();
 }
 
 
@@ -676,6 +830,8 @@ void MasterInterface::update_master_all()
 	update_master_responding();
 	update_master_remaining();
 	update_master_build_queue();
+	update_master_building_set();
+	update_master_nodes();
 	update_master_state();
 }
 
@@ -702,16 +858,39 @@ void MasterInterface::update_master_remaining()
 	if (!build_master)
 		return;
 
-	set<pair<string, string>> remaining = build_master->get_remaining();
+	const set<pair<string, string>> &remaining = build_master->get_remaining();
 
-	m_lsRemaining->remove_all();
+	/* Remove excess labels and build a set of contained packages in O(n\log{n})
+	 * time. */
+	set<pair<string, string>> stored_labels;
 
+	for (unsigned i = 0;;)
+	{
+		auto item = m_lsRemaining->get_item(i);
+		if (!item)
+			break;
+
+		auto p = make_pair(item->comp1, item->comp2);
+
+		if (remaining.find(p) == remaining.end())
+		{
+			m_lsRemaining->remove(i);
+		}
+		else
+		{
+			stored_labels.insert(move(p));
+			++i;
+		}
+	}
+
+	/* Add missing labels in O(n\log{n}) time. */
 	for (const auto &p : remaining)
 	{
-		m_lsRemaining->append(Glib::RefPtr<ListStoreText>(new ListStoreText(
-				p.first + ":" + p.second,
-				p.first,
-				p.second)));
+		if (stored_labels.find(p) == stored_labels.end())
+			m_lsRemaining->append(Glib::RefPtr<ListStoreText>(new ListStoreText(
+					p.first + ":" + p.second,
+					p.first,
+					p.second)));
 	}
 }
 
@@ -720,7 +899,7 @@ void MasterInterface::update_master_build_queue()
 	if (!build_master)
 		return;
 
-	vector<pair<string, string>> build_queue = build_master->get_build_queue();
+	const vector<pair<string, string>> &build_queue = build_master->get_build_queue();
 
 	unsigned cnt_queue = build_queue.size();
 	unsigned cnt_store = m_lsBuildQueue->get_n_items();
@@ -755,6 +934,123 @@ void MasterInterface::update_master_build_queue()
 	/* Remove excess elements */
 	for (unsigned i = cnt_queue; i < cnt_store; i++)
 		m_lsBuildQueue->remove(cnt_queue);
+}
+
+void MasterInterface::update_master_building_set()
+{
+	if (!build_master)
+		return;
+
+	const set<pair<string, string>> &building_set = build_master->get_building_set();
+
+	/* Remove excess labels and build a set of contained packages in O(n\log{n})
+	 * time. */
+	set<pair<string, string>> stored_labels;
+
+	for (unsigned i = 0;;)
+	{
+		auto item = m_lsBuildingSet->get_item(i);
+		if (!item)
+			break;
+
+		auto p = make_pair(item->comp1, item->comp2);
+
+		if (building_set.find(p) == building_set.end())
+		{
+			m_lsBuildingSet->remove(i);
+		}
+		else
+		{
+			stored_labels.insert(move(p));
+			++i;
+		}
+	}
+
+	/* Add missing labels in O(n\log{n}) time. */
+	for (const auto &p : building_set)
+	{
+		if (stored_labels.find(p) == stored_labels.end())
+			m_lsBuildingSet->append(Glib::RefPtr<ListStoreText>(new ListStoreText(
+					p.first + ":" + p.second,
+					p.first,
+					p.second)));
+	}
+}
+
+void MasterInterface::update_master_nodes()
+{
+	if (!build_master)
+		return;
+
+	/* Idle nodes */
+	const vector<string> &idle_nodes = build_master->get_idle_nodes();
+
+	unsigned cnt_idle = idle_nodes.size();
+	unsigned cnt_store = m_lsIdleNodes->get_n_items();
+
+	for (unsigned i = 0; i < cnt_idle; i++)
+	{
+		/* Compare position by position */
+		auto item = m_lsIdleNodes->get_item(i);
+
+		if (item)
+		{
+			if (*(item.get()) != idle_nodes[i])
+			{
+				m_lsIdleNodes->remove(i);
+				item.reset();
+			}
+		}
+		else
+		{
+			++cnt_store;
+		}
+
+		if (!item)
+		{
+			m_lsIdleNodes->insert(i, Glib::RefPtr<ListStoreText>(new ListStoreText(
+					idle_nodes[i], string(), string())));
+		}
+	}
+
+	/* Remove excess elements */
+	for (unsigned i = cnt_idle; i < cnt_store; i++)
+		m_lsIdleNodes->remove(cnt_idle);
+
+	/* Busy nodes */
+	const vector<string> &busy_nodes = build_master->get_busy_nodes();
+
+	unsigned cnt_busy = busy_nodes.size();
+	cnt_store = m_lsBusyNodes->get_n_items();
+
+	for (unsigned i = 0; i < cnt_busy; i++)
+	{
+		/* Compare position by position */
+		auto item = m_lsBusyNodes->get_item(i);
+
+		if (item)
+		{
+			if (*(item.get()) != busy_nodes[i])
+			{
+				m_lsBusyNodes->remove(i);
+				item.reset();
+			}
+		}
+		else
+		{
+			++cnt_store;
+		}
+
+		if (!item)
+		{
+			m_lsBusyNodes->insert(i, Glib::RefPtr<ListStoreText>(new ListStoreText(
+					busy_nodes[i], string(), string())));
+		}
+	}
+
+	/* Remove excess elements */
+	for (unsigned i = cnt_busy; i < cnt_store; i++)
+		m_lsBusyNodes->remove(cnt_busy);
 }
 
 /**
@@ -913,6 +1209,12 @@ void MasterInterface::update_clear_fields()
 	m_ledValve.set_red(0);
 	m_btOpen.set_sensitive(false);
 	m_btClose.set_sensitive(false);
+
+	m_lsBuildingSet->remove_all();
+	m_lsIdleNodes->remove_all();
+	m_lsBusyNodes->remove_all();
+
+	vte_terminal_reset(VTE_TERMINAL(m_vteConsole), TRUE, TRUE);
 }
 
 
@@ -926,7 +1228,9 @@ void MasterInterface::select_master(string identity)
 	/* Unsubscribe from old build master */
 	if (build_master)
 	{
+		build_master->unsubscribe_from_console(cs);
 		build_master->unsubscribe(this);
+		update_clear_fields();
 	}
 
 	/* Change currently selected build master */
@@ -944,6 +1248,9 @@ void MasterInterface::select_master(string identity)
 				_on_master_state_changed,
 				_on_error_received,
 				this));
+
+		/* Subscribe to console output */
+		cs = build_master->subscribe_to_console(_new_console_data, this);
 	}
 
 	/* Update the user interface */
@@ -1003,7 +1310,10 @@ void MasterInterface::on_refresh_clicked()
 	build_cluster_proxy.search_for_build_masters();
 
 	if (build_master)
+	{
 		build_master->refresh();
+		reconnect_console();
+	}
 }
 
 void MasterInterface::on_open_clicked()

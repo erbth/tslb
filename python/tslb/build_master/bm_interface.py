@@ -2,6 +2,7 @@
 An interface between the build master and the client yamb interface.
 """
 import queue
+import random
 from tslb import Architecture
 from tslb import CommonExceptions as ces
 from tslb.VersionNumber import VersionNumber
@@ -101,14 +102,30 @@ class BMInterface:
 
           * remaining
           * build_queue
+          * building_set
           * nodes
           * state
+          * all,
+
+        have a look at the constants defined above.
 
         :param subscriber: A function with signature (BMInterface, domain:str)
         """
         raise NotImplementedError
 
     def unsubscribe(self, subscriber):
+        raise NotImplementedError
+
+    def register_log_handler(self, handler):
+        """
+        Register a log handler.
+
+        :param handler: A function with signature (msg:str, flush=False) that
+            does not print newlines.
+        """
+        raise NotImplementedError
+
+    def deregister_log_handler(self, handler):
         raise NotImplementedError
 
 
@@ -122,10 +139,12 @@ class MockController(BMInterface):
         self._arch = Architecture.to_int('amd64')
         self._valve = False
         self._remaining = []
-        self._build_queue = queue.LifoQueue()
+        self._build_queue = queue.Queue()
         self._building_set = set()
         self._nodes = {}
         self._subscribers = []
+
+        self._log_handlers = []
 
     @property
     def identity(self):
@@ -146,9 +165,9 @@ class MockController(BMInterface):
 
         for name, is_busy in self._nodes.items():
             if is_busy:
-                idle.append(name)
-            else:
                 busy.append(name)
+            else:
+                idle.append(name)
 
         idle.sort()
         return (idle, busy)
@@ -160,6 +179,7 @@ class MockController(BMInterface):
             state = self._internal_state
 
         return (state, self._arch, self._error, self._valve)
+
 
     def start(self, arch):
         if self._internal_state != 'off':
@@ -221,6 +241,7 @@ class MockController(BMInterface):
 
         self._notify_subscribers(self.DOMAIN_ALL)
 
+
     def open(self):
         if self._internal_state not in ('idle', 'computing'):
             raise ces.InvalidState(self._internal_state)
@@ -234,6 +255,9 @@ class MockController(BMInterface):
         self._valve = True
 
         self._notify_subscribers(self.DOMAIN_STATE)
+
+        self._schedule()
+
 
     def close(self):
         if self._internal_state not in ('idle', 'computing'):
@@ -249,6 +273,7 @@ class MockController(BMInterface):
 
         self._notify_subscribers(self.DOMAIN_STATE)
 
+
     def subscribe(self, subscriber):
         for subs in self._subscribers:
             if subs is subscriber:
@@ -262,15 +287,37 @@ class MockController(BMInterface):
                 del self._subscribers[i]
                 break
 
+    def register_log_handler(self, handler):
+        for h in self._log_handlers:
+            if h is handler:
+                return
+
+        self._log_handlers.append(handler)
+
+    def deregister_log_handler(self, handler):
+        for i, h in enumerate(self._log_handlers):
+            if h is handler:
+                del self._log_handlers[i]
+                break
+
 
     def _notify_subscribers(self, domain):
         for subs in self._subscribers:
             subs(self, domain)
 
+    def _log(self, msg, flush=False):
+        for h in self._log_handlers:
+            h(msg, flush)
+
 
     # Emulating a build master
     def _compute(self):
-        self._build_queue.put(self._remaining[0])
+        pkg = self._remaining[0]
+
+        self._log("Adding `%s:%s' to the build queue ...\n" % pkg)
+        self._log("\033[48;2;190;36;6m                     \033[0m\n")
+
+        self._build_queue.put(pkg)
         del self._remaining[0]
 
         self._notify_subscribers(self.DOMAIN_REMAINING)
@@ -282,3 +329,53 @@ class MockController(BMInterface):
 
         else:
             self._loop.call_later(1, self._compute)
+
+        self._schedule()
+
+
+    def _schedule(self):
+        if self._valve:
+            # Find free nodes
+            free_nodes = []
+            for name, busy in self._nodes.items():
+                if not busy:
+                    free_nodes.append(name)
+
+            while self._build_queue.qsize() > 0 and free_nodes:
+                pkg = self._build_queue.get()
+                node = free_nodes[-1]
+                free_nodes.pop()
+
+                self._bind(pkg, node)
+
+        self._notify_subscribers(self.DOMAIN_BUILD_QUEUE)
+        self._notify_subscribers(self.DOMAIN_BUILDING_SET)
+        self._notify_subscribers(self.DOMAIN_NODES)
+        self._notify_subscribers(self.DOMAIN_STATE)
+
+
+    def _bind(self, pkg, node):
+        self._nodes[node] = True
+        self._building_set.add(pkg)
+
+        # Start build
+        self._loop.call_later(2 + random.random() * 2, self._complete_build, pkg, node)
+
+    def _complete_build(self, pkg, node):
+        self._nodes[node] = False
+        self._building_set.remove(pkg)
+
+        # if pkg[0] == 'pkg7':
+        #     self._fail()
+
+        # else:
+        #     self._schedule()
+
+        self._schedule()
+
+
+    def _fail(self):
+        self._error = True
+        self._valve = False
+
+        self._schedule()

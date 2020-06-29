@@ -2,6 +2,7 @@
 #define __BUILD_CLUSTER_WINDOW_H
 
 #include <gtkmm.h>
+#include <vte/vte.h>
 #include <map>
 #include <memory>
 #include <list>
@@ -126,6 +127,21 @@ public:
 	{
 		return p.first == comp1 && p.second == comp2;
 	}
+
+	bool operator!=(const std::pair<const std::string, const std::string>& p) const
+	{
+		return !(*this == p);
+	}
+
+	bool operator==(const std::string& s) const
+	{
+		return text == s;
+	}
+
+	bool operator!=(const std::string& s) const
+	{
+		return !(*this == s);
+	}
 };
 
 class MasterInterface : public Gtk::Box
@@ -153,10 +169,16 @@ private:
 	Gtk::Button			m_btStop;
 	Gtk::Button			m_btRefresh;
 
+	Gtk::Box			m_bBody;
+	Gtk::Box			m_bPane1;
+	Gtk::Box			m_bPane2;
+	Gtk::Separator		m_sepBody;
+
 	Gtk::Box			m_bRemaining;
 	Gtk::Box			m_blRemaining;
 	Gtk::Label			m_lRemaining;
 	Gtk::ScrolledWindow	m_swRemaining;
+	Gtk::Box			m_bRemainingFBSurrounding;
 	Gtk::FlowBox		m_fbRemaining;
 	Glib::RefPtr<Gio::ListStore<ListStoreText>> m_lsRemaining;
 
@@ -166,6 +188,7 @@ private:
 	Gtk::Box			m_hbBuildQueueLabels;
 	Gtk::Label			m_lBuildQueueFront;
 	Gtk::ScrolledWindow m_swBuildQueue;
+	Gtk::Box			m_bBuildQueueFBSurrounding;
 	Gtk::FlowBox		m_fbBuildQueue;
 	Glib::RefPtr<Gio::ListStore<ListStoreText>> m_lsBuildQueue;
 
@@ -180,6 +203,9 @@ private:
 	Gtk::Box			m_blBuildingSet;
 	Gtk::Label			m_lBuildingSet;
 	Gtk::ScrolledWindow	m_swBuildingSet;
+	Gtk::Box			m_bBuildingSetFBSurrounding;
+	Gtk::FlowBox		m_fbBuildingSet;
+	Glib::RefPtr<Gio::ListStore<ListStoreText>> m_lsBuildingSet;
 
 	Gtk::Paned			m_pNodes;
 	Gtk::Box			m_bIdleNodes;
@@ -190,6 +216,22 @@ private:
 	Gtk::Label			m_lBusyNodes;
 	Gtk::ScrolledWindow	m_swIdleNodes;
 	Gtk::ScrolledWindow	m_swBusyNodes;
+	Gtk::Box			m_bIdleNodesFBSurrounding;
+	Gtk::Box			m_bBusyNodesFBSurrounding;
+	Gtk::FlowBox		m_fbIdleNodes;
+	Gtk::FlowBox		m_fbBusyNodes;
+	Glib::RefPtr<Gio::ListStore<ListStoreText>> m_lsIdleNodes;
+	Glib::RefPtr<Gio::ListStore<ListStoreText>> m_lsBusyNodes;
+
+	Gtk::Box			m_bConsole;
+	Gtk::Box			m_blConsole;
+	Gtk::Label			m_lConsole;
+	Gtk::Box			m_bConsoleH;
+
+	/* Old school */
+	GtkWidget*			m_vteConsole = nullptr;
+	GtkWidget*			m_sConsole = nullptr;
+
 
 	Glib::RefPtr<Gtk::CssProvider> custom_css_provider;
 
@@ -210,6 +252,13 @@ private:
 	void on_error_received(std::string error_msg);
 	static void _on_error_received(void* pThis, std::string error_msg);
 
+	BuildMasterProxy::ConsoleSubscriber cs;
+
+	void new_console_data(const char* data, size_t size);
+	static void _new_console_data(void* pThis, const char* data, size_t size);
+
+	void reconnect_console();
+
 	/* Update UI components */
 	void update_master_list();
 
@@ -217,6 +266,8 @@ private:
 	void update_master_responding();
 	void update_master_remaining();
 	void update_master_build_queue();
+	void update_master_building_set();
+	void update_master_nodes();
 	void update_master_state();
 
 	void update_clear_fields();

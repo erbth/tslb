@@ -78,16 +78,6 @@ namespace BuildNodeProxy
 		/* Only empty ConsoleSubscriber objects are publicly constructable. */
 		ConsoleSubscriber() {};
 
-		/* Can be called by the subscriber to send input data to the node. The
-		 * node will forward it to the current build process's stdin.
-		 *
-		 * @param data: The data to send; will NOT be consumed i.e. free'd.
-		 * @param size: Count of bytes in data. */
-		void send_to_stdin(char *data, size_t size)
-		{
-			// node->...
-		}
-
 		bool operator==(const ConsoleSubscriber &o) const
 		{
 			return priv == o.priv;
@@ -126,7 +116,7 @@ namespace BuildNodeProxy
 		/* A list of entities that subscribe to your state. */
 		std::vector<StateSubscriber> state_subscribers;
 
-		/* A vector of console subscriber */
+		/* A vector of console subscribers */
 		std::vector<ConsoleSubscriber> console_subscribers;
 
 	public:

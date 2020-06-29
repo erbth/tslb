@@ -224,7 +224,7 @@ void BuildNodeProxy::message_received(rapidjson::Document &d)
 								t[0].IsInt() && t[1].IsInt())
 						{
 							long int mark = t[0].GetInt();
-							long int pointer = t[0].GetInt();
+							long int pointer = t[1].GetInt();
 
 							if (mark < 0 || mark > 0xffffffff ||
 									pointer < 0 || pointer > 0xffffffff)
@@ -293,7 +293,7 @@ void BuildNodeProxy::console_data_received(
 
 
 	uint32_t first_mark = mdata.front().first;
-	uint32_t last_mark = mdata.back().second;
+	uint32_t last_mark = mdata.back().first;
 
 	uint32_t min_mark_required = 0xffffffff;
 
@@ -326,16 +326,16 @@ void BuildNodeProxy::console_data_received(
 
 				sub.last_mark_received = last_mark;
 			}
-			else
+			else if (last_mark != sub.last_mark_received)
 			{
 				/* This may request too much or not enough if wrap around
 				 * occurs. However I'm not sure if the exact amount can be
 				 * requested in every case ...
-				 * Anyway, it should work withing a few rounds once each single
-				 * subscriber becomes synchronous one bye one as the buffer at
+				 * Anyway, it should work within a few rounds once each single
+				 * subscriber becomes synchronous one by one as the buffer at
 				 * the sender is usually quite large. Otherwise the user has to
 				 * close and reopen the console. (if it got stuck at a point
-				 * from which no data is available. we could detect this but it
+				 * from which no data is available. We could detect this but it
 				 * would be more work and may require matchable requests and
 				 * responses. The easier way would be using a receive buffer,
 				 * which I've been too lazy to do by now ...) */
@@ -568,7 +568,7 @@ void BuildNodeProxy::unsubscribe_from_console(ConsoleSubscriber &cs)
 	{
 		console_subscribers.erase(i);
 
-		/* The ConsoleSubscribere object should be unusable afterwards. */
+		/* The ConsoleSubscriber object should be unusable afterwards. */
 		cs.priv = nullptr;
 	}
 }

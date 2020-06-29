@@ -1,9 +1,12 @@
 """
 The yamb interface between build master and client
 """
+import base64
 import json
+import os
 from tslb import Architecture
 from tslb import CommonExceptions as ces
+from tslb.console_streaming import ConsoleStreamer, ConsoleAccessProtocol
 from .bm_interface import BMInterface
 
 
@@ -29,11 +32,25 @@ class ClientInterface:
         # Start timer
         self._loop.call_later(1, self._1s_timer)
 
+        # Console streaming
+        class _CAS(ConsoleAccessProtocol):
+            def data(cas, addr, mdata, blob):
+                self._send_console_data(addr, mdata, blob)
+
+            def update(cas, addr, mdata, blob):
+                self._send_console_update(addr, mdata, blob)
+
+        self._cas = _CAS()
+        self._console_streamer = ConsoleStreamer(self._cas)
+
         # Subscribe to controller
         self._controller.subscribe(self._notification_from_controller)
+        self._controller.register_log_handler(self._console_handler)
+
 
     def __del__(self):
         # Unsubscribe from controller
+        self._controller.deregister_log_handler(self._console_handler)
         self._controller.unsubscribe(self._notification_from_controller)
 
 
@@ -83,6 +100,38 @@ class ClientInterface:
 
             else:
                 raise ces.SavedYourLife("Invalid domain: %s" % domain)
+
+
+    # Console streaming
+    def _console_handler(self, msg, flush=False):
+        os.write(self._console_streamer.pty_slave, msg.encode('utf8'))
+
+    def _send_console_data(self, addr, mdata, blob):
+        self.send_message_to_client(addr, {
+            'console_streaming': {
+                'msg': 'data',
+                'mdata': mdata,
+                'blob': base64.b64encode(blob).decode('ascii')
+            }
+        })
+
+    def _send_console_update(self, addr, mdata, blob):
+        self.send_message_to_client(addr, {
+            'console_streaming': {
+                'msg': 'update',
+                'mdata': mdata,
+                'blob': base64.b64encode(blob).decode('ascii')
+            }
+        })
+
+    def _handle_console_request_updates(self, peer):
+        self._cas.updates_requested(peer)
+
+    def _handle_console_ack(self, peer):
+        self._cas.update_acknowledged(peer)
+
+    def _handle_console_request(self, peer, start, end):
+        self._cas.requested(peer, start, end)
 
 
     # Send a message to a client
@@ -191,6 +240,7 @@ class ClientInterface:
 
             cmd = j.get('cmd')
             msg_identity = j.get('identity')
+            cs = j.get('console_streaming')
 
             if cmd != 'identify' and msg_identity != self._controller.identity:
                 print("Dropped message for foreign identity")
@@ -200,44 +250,72 @@ class ClientInterface:
             print("Dropped message with unknown content")
             return
 
-        if cmd == 'identify':
-            self.cmd_identify(src)
+        if cmd:
+            if cmd == 'identify':
+                self.cmd_identify(src)
 
-        elif cmd == 'get-remaining':
-            self.cmd_get_remaining(src)
+            elif cmd == 'get-remaining':
+                self.cmd_get_remaining(src)
 
-        elif cmd == 'get-build-queue':
-            self.cmd_get_build_queue(src)
+            elif cmd == 'get-build-queue':
+                self.cmd_get_build_queue(src)
 
-        elif cmd == 'get-building-set':
-            self.cmd_get_building_set(src)
+            elif cmd == 'get-building-set':
+                self.cmd_get_building_set(src)
 
-        elif cmd == 'get-nodes':
-            self.cmd_get_nodes(src)
+            elif cmd == 'get-nodes':
+                self.cmd_get_nodes(src)
 
-        elif cmd == 'get-state':
-            self.cmd_get_state(src)
+            elif cmd == 'get-state':
+                self.cmd_get_state(src)
 
-        elif cmd == 'subscribe':
-            self.cmd_subscribe(src)
+            elif cmd == 'subscribe':
+                self.cmd_subscribe(src)
 
-        elif cmd == 'start':
-            try:
-                arch = Architecture.to_int(j.get('arch'))
-            except (TypeError, KeyError):
-                print("Ignored `start' message because it did not include a valid architecture.")
-                return
+            elif cmd == 'start':
+                try:
+                    arch = Architecture.to_int(j.get('arch'))
+                except (TypeError, KeyError):
+                    print("Ignored `start' message because it did not include a valid architecture.")
+                    return
 
-            self.cmd_start(src, arch)
+                self.cmd_start(src, arch)
 
-        elif cmd == 'stop':
-            self.cmd_stop(src)
+            elif cmd == 'stop':
+                self.cmd_stop(src)
 
-        elif cmd == 'open':
-            self.cmd_open(src)
+            elif cmd == 'open':
+                self.cmd_open(src)
 
-        elif cmd == 'close':
-            self.cmd_close(src)
+            elif cmd == 'close':
+                self.cmd_close(src)
 
-        else:
-            print("Dropped message with unknown cmd: `%s'." % cmd)
+            else:
+                print("Dropped message with unknown cmd: `%s'." % cmd)
+
+
+        if cs:
+            msg = cs.get('msg')
+
+            if msg == 'request_updates':
+                self._handle_console_request_updates(src)
+
+            elif msg == 'ack':
+                self._handle_console_ack(src)
+
+            elif msg == 'request':
+                try:
+                    start = int(cs['start'])
+                    end = int(cs['end'])
+
+                    if start < 0 or end < 0 or start > 0xffffffff or end > 0xffffffff:
+                        raise Exception
+
+                except:
+                    print("Dropped invalid console streaming msg:request.")
+                    return
+
+                self._handle_console_request(src, start, end)
+
+            else:
+                print("Dropped invalid console streaming message: `%s'." % msg)
