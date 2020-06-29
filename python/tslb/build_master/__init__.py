@@ -2,6 +2,7 @@ import asyncio
 import yamb_node
 from tslb.build_master import bm_interface
 from tslb.build_master import client_interface
+from tslb.build_master.controller import Controller
 
 
 # The main entrypoint of the build master
@@ -21,7 +22,8 @@ class BuildMaster:
 
         self._identity = identity
 
-        self._controller = bm_interface.MockController(self._loop, self._identity)
+        # self._controller = bm_interface.MockController(self._loop, self._identity)
+        self._controller = Controller(self._loop, self._identity)
         self._client_interface = client_interface.ClientInterface(loop, self._yamb, self._controller)
 
 

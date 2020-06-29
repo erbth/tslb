@@ -7,6 +7,9 @@ mysession.vim
 __pycache__
 *.pyc
 
+# Coverage output
+.coverage
+
 # mypy cache
 .mypy_cache
 

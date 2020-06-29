@@ -2,7 +2,7 @@
 An interface to the packages.
 """
 from tslb import Architecture
-from tslb.Constraints import DependencyList, VersionConstraint
+from tslb.Constraint import DependencyList, VersionConstraint
 from tslb.VersionNumber import VersionNumber
 
 def create_package_interface(arch):
