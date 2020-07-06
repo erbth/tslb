@@ -95,6 +95,10 @@ namespace BuildNodeProxy
 		/* Time of last state update in seconds from now */
 		unsigned last_state_update = 0;
 
+		/* Time of the last state query (should be done every 10 seconds to
+		 * inform the node that the client is alive) */
+		unsigned last_state_query = 0;
+
 	public:
 		const std::string identity;
 

@@ -4,7 +4,7 @@ import os
 import signal
 import socket
 from tslb import settings
-from tslb.build_master import BuildMaster
+from tslb.build_master.build_master import BuildMaster
 
 
 # Store the BuildMaster instance in a global variable

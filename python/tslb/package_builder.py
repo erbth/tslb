@@ -18,6 +18,7 @@ import signal
 import stat
 import subprocess
 import sys
+import time
 import tslb
 from tslb.build_pipeline import BuildPipeline
 
@@ -88,7 +89,8 @@ class PackageBuilder(object):
         spl = SourcePackage.SourcePackageList(arch)
         available_source_packages = set(spl.list_source_packages())
 
-        for dep_name in cdeps.get_required():
+        # TODO: Remove when we have tools
+        for dep_name in cdeps.get_required() + ['glibc', 'zlib']:
             if dep_name not in available_source_packages:
                 raise CannotFulfillDependencies(
                     'Required source package "%s" does not exist.' % dep_name)
@@ -123,6 +125,10 @@ class PackageBuilder(object):
 
         for n,a,v in required_binary_packages:
             cbpdeps.add_constraint(VersionConstraint('=', v), (n,a))
+
+        # TODO: Remove once we have tools attributes ...
+        cbpdeps.add_constraint(VersionConstraint('', '0'), ('zlib-all', Architecture.to_int('amd64')))
+        cbpdeps.add_constraint(VersionConstraint('', '0'), ('glibc-all', Architecture.to_int('amd64')))
 
         # Finally find the best fitting rootfs image.
         image = rootfs.find_image(cbpdeps)
@@ -717,6 +723,7 @@ def _unmount_devtmpfs(root, raises=True):
         resources on exit or similar).
     """
     _unmount(os.path.join(root, 'dev', 'pts'), raises)
+    time.sleep(0.2)
     _unmount(os.path.join(root, 'dev'), raises)
 
 

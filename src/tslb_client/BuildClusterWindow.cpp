@@ -303,6 +303,12 @@ void BuildNodeOverview::_on_node_error_received(void *pThis, string err)
 }
 
 
+string BuildNodeOverview::get_identity() const
+{
+	return node->identity;
+}
+
+
 void BuildNodeOverview::update_display()
 {
 	/* Manually trigger what would otherwise be triggered by information
@@ -364,8 +370,23 @@ void ClusterOverview::add_node(string identity)
 	{
 		auto node = make_unique<BuildNodeOverview>(_node);
 		m_bNodes.pack_start(*node, false, false, 0);
-		node->show();
         nodes.insert({identity, move(node)});
+
+		/* Move the node to its position, which is determined by the RB-tree
+		 * map. */
+		int i = 0;
+
+		for (const auto &p : nodes)
+		{
+			if (p.second->get_identity() == identity)
+			{
+				m_bNodes.reorder_child(*(p.second), i);
+				p.second->show();
+				break;
+			}
+
+			++i;
+		}
 	}
 }
 

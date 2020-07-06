@@ -77,6 +77,10 @@ void BuildMasterProxy::message_received(rapidjson::Document& d)
 	bool nodes_changed = false;
 	bool state_changed = false;
 
+	/* Ignore messages from other clients */
+	if (d.HasMember("cmd"))
+		return;
+
 
 	/* Remaining packages */
 	if (d.HasMember("remaining") && d["remaining"].IsArray())

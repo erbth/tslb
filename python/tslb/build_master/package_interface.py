@@ -2,8 +2,12 @@
 An interface to the packages.
 """
 from tslb import Architecture
+from tslb import build_state
+from tslb import build_pipeline
 from tslb.Constraint import DependencyList, VersionConstraint
 from tslb.VersionNumber import VersionNumber
+from tslb.SourcePackage import SourcePackageList, SourcePackage
+from tslb.SourcePackage import NoSuchSourcePackage, NoSuchSourcePackageVersion, NoSuchAttribute
 
 def create_package_interface(arch):
     """
@@ -29,6 +33,7 @@ class PackageInterface:
     def get_packages(self):
         """
         :returns list(tuple(str, VersionNumber)):
+        :raises InvalidConfiguration:
         """
         raise NotImplementedError
 
@@ -36,15 +41,17 @@ class PackageInterface:
         """
         :param tuple(str, VersionNumber) package:
         :returns DependencyList:
+        :raises InvalidConfiguration:
         """
         raise NotImplementedError
 
     def get_next_stage(self, package):
         """
-        Get the next stage that the package must flow through.
+        Get the next stage that the package must flow through or None if the
+        package's build finished.
 
         :param tuple(str, VersionNumber) package:
-        :returns str:
+        :returns str|NoneType:
         """
         raise NotImplementedError
 
@@ -59,9 +66,10 @@ class PackageInterface:
     def compute_child_outdate(self, stage):
         """
         Determine which stage of children shall be outdated given a package is
-        rebuilt in stage :param stage:.
+        rebuilt in stage :param stage:. If :param stage: is None (to indicate
+        that the package's build finished), this will return None.
 
-        :param str stage:
+        :param str|NoneType stage:
         :returns str:
         """
         raise NotImplementedError
@@ -119,3 +127,71 @@ class StubPackageInterface(PackageInterface):
 
 
 # Real implementation
+class RealPackageInterface(PackageInterface):
+    def __init__(self, arch):
+        self._arch = Architecture.to_int(arch)
+
+
+    def get_packages(self):
+        spl = SourcePackageList(self._arch)
+
+        all_pkg_names = spl.list_source_packages()
+        enabled_pkg_versions = []
+
+        for name in all_pkg_names:
+            pkg = SourcePackage(name, self._arch)
+
+            enabled_version = None
+
+            for version in pkg.list_version_numbers():
+                spv = pkg.get_version(version)
+
+                if spv.has_attribute('enabled'):
+                    val = spv.get_attribute('enabled')
+
+                    if (isinstance(val, bool) and val) or \
+                            (isinstance(val, str) and val.lower() == "true"):
+
+                        if enabled_version is not None:
+                            raise InvalidConfiguration(
+                                    "Source package `%s' has multiple enabled versions." %
+                                    name)
+
+                        enabled_version = version
+
+            if enabled_version is not None:
+                enabled_pkg_versions.append((name, enabled_version))
+
+        return enabled_pkg_versions
+
+
+    def get_cdeps(self, pkg):
+        name, version = pkg
+
+        try:
+            return SourcePackage(name, self._arch).get_version(version).get_attribute('cdeps')
+
+        except (NoSuchSourcePackage, NoSuchSourcePackageVersion, NoSuchAttribute) as e:
+            raise InvalidState(str(e))
+
+
+    def get_next_stage(self, pkg):
+        spv = SourcePackage(pkg[0], self._arch).get_version(pkg[1])
+        build_state.get_next_stage(build_state.get_build_state(spv))
+
+
+    def outdate_package(self, pkg, stage):
+        build_state.outdate_package_stage(pkg[0], self._arch, pkg[1], stage)
+
+
+    def compute_child_outdate(self, stage):
+        if not stage:
+            return None
+
+        return build_pipeline.outdates_child[stage]
+
+
+#******************************** Exceptions **********************************
+class InvalidConfiguration(Exception):
+    def __init__(self, msg):
+        super().__init__("Invalid configuration: " + msg)

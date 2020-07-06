@@ -11,7 +11,6 @@ import termios
 import threading
 
 from sqlalchemy.orm import aliased
-from sqlalchemy.sql.expression import or_
 from tslb import BinaryPackage as bp
 from tslb import Console
 from tslb import database as db
@@ -54,6 +53,21 @@ all_stages = [
         StageAddRdeps,
         StageCreatePMPackages
         ]
+
+outdates_child = {
+        'unpack': StageConfigure,
+        'patch': StageConfigure,
+        'configure': StageConfigure,
+        'build': StageConfigure,
+        'install_to_destdir': StageConfigure,
+        'strip': StageConfigure,
+        'adapt': StageConfigure,
+        'find_shared_libraries': StageAddRdeps,
+        'detect_man_info': StageAddRdeps,
+        'add_readme': StageAddRdeps,
+        'add_rdeps': StageAddRdeps,
+        'create_pm_packages': StageAddRdeps
+}
 
 def sync_stages_with_db(report=False):
     """
@@ -134,61 +148,11 @@ class BuildPipeline(object):
         self.out.write(Color.YELLOW + 'Determining which pipeline stages lie ahead.' + Color.NORMAL + '\n')
 
         # Find the last successful- and appropriate outdated events.
+        # Avoid a cyclic import.
+        from tslb.build_state import get_build_state
+
         with db.session_scope() as s:
-            # Last successful
-            se = aliased(dbbp.BuildPipelineStageEvent)
-            se2 = aliased(dbbp.BuildPipelineStageEvent)
-            last_successful_event = s.query(se)\
-                    .filter(se.source_package == spv.source_package.name,
-                            se.architecture == spv.architecture,
-                            se.version_number == spv.version_number,
-                            se.status == dbbp.BuildPipelineStageEvent.status_values.success,
-                            ~s.query(se2.stage)\
-                                    .filter(se2.source_package == se.source_package,
-                                        se2.architecture == se.architecture,
-                                        se2.version_number == se.version_number,
-                                        se2.status == se.status,
-                                        se2.time > se.time)\
-                                    .exists())\
-                    .first()
-
-            if last_successful_event:
-                s.expunge(last_successful_event)
-
-            # Appropriate outdated event
-            se = aliased(dbbp.BuildPipelineStageEvent)
-            se2 = aliased(dbbp.BuildPipelineStageEvent)
-
-            candidates = s.query(se)\
-                    .filter(se.source_package == spv.source_package.name,
-                            se.architecture == spv.architecture,
-                            se.version_number == spv.version_number,
-                            se.status == dbbp.BuildPipelineStageEvent.status_values.outdated,
-                            ~s.query(se2.stage)\
-                                    .filter(se2.source_package == se.source_package,
-                                        se2.architecture == se.architecture,
-                                        se2.version_number == se.version_number,
-                                        se2.status == dbbp.BuildPipelineStageEvent.status_values.success,
-                                        se2.time > se.time)\
-                                    .exists())\
-                    .cte('candidates')
-
-            c = aliased(candidates)
-            c2 = aliased(candidates)
-
-            bps = aliased(dbbp.BuildPipelineStage)
-
-            first_outdated_event_stage = s.query(c.c['stage'])\
-                    .join(bps)\
-                    .filter(or_(bps.parent == bps.name,
-                        ~s.query(c2)\
-                                .filter(c2.c['stage'] == bps.parent)\
-                                .exists()))\
-                    .first()
-
-            if first_outdated_event_stage:
-                first_outdated_event_stage = first_outdated_event_stage[0]
-
+            last_successful_event, first_outdated_event_stage = get_build_state(spv, s)
 
             # Determine through which stages the package must still go, and which
             # stage was the first successful one to base the build on.

@@ -2,7 +2,6 @@ import os
 from tslb import parse_utils
 from tslb import settings
 import subprocess
-from tslb.tclm import lock_S, lock_Splus, lock_X
 
 
 class StageUnpack(object):

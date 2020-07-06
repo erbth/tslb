@@ -79,6 +79,8 @@ public:
 	BuildNodeOverview(BuildNodeOverview &&o) = delete;
 	~BuildNodeOverview();
 
+	std::string get_identity() const;
+
 	void update_display();
 };
 

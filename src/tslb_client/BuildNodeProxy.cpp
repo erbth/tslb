@@ -34,6 +34,8 @@ void BuildNodeProxy::query_state()
 	d.AddMember("action", "get_status", d.GetAllocator());
 
 	send_message_to_node(d);
+
+	last_state_query = 0;
 }
 
 
@@ -41,7 +43,9 @@ void BuildNodeProxy::timeout_1s()
 {
 	auto was_responding = is_responding();
 
-	if (++last_state_update > 20)
+	++last_state_update;
+
+	if (++last_state_query > 10)
 		query_state();
 
 	/* Responding behavior changed? */
@@ -71,6 +75,10 @@ void BuildNodeProxy::set_yamb_addr(uint32_t addr)
 
 void BuildNodeProxy::message_received(rapidjson::Document &d)
 {
+	/* Ignore messages from other clients */
+	if (d.HasMember("action"))
+		return;
+
 	if (d.HasMember("state") && d["state"].IsString())
 	{
 		auto was_responding = is_responding();

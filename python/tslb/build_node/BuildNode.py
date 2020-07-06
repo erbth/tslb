@@ -55,7 +55,10 @@ class BuildNode(object):
         self.identity = identity
 
         self.state = (STATE_IDLE,)
-        self.build_master_addr = None
+
+        # A dict of client addresses -> last contact time, which shall be
+        # notified on state changes.
+        self._client_addrs = {}
 
         # Streaming console output
         class _CAS(ConsoleAccessProtocol):
@@ -139,8 +142,6 @@ class BuildNode(object):
         await self.worker_process.wait()
 
         # Change state and send notifications
-        # self.build_master_addr will not be None because someone must have
-        # initiated the build.
         if self.worker_process.returncode < 0:
             # -> failed
             self.state = (STATE_FAILED, self.state[1], FAIL_REASON_NODE_ABORT)
@@ -178,7 +179,7 @@ class BuildNode(object):
                     'version': str(version),
                     }
 
-        self.send_message_to_client(self.build_master_addr, d)
+        self._notify_clients(d)
 
         # Clean up.
         self.worker_process = None
@@ -220,9 +221,8 @@ class BuildNode(object):
                 return
 
             self.state = (STATE_BUILDING, (name, arch, version))
-            self.build_master_addr = dst
 
-            self.send_message_to_client(dst, {
+            self._notify_clients({
                 'state': 'building',
                 'name': name,
                 'arch': architectures[arch],
@@ -253,7 +253,7 @@ class BuildNode(object):
 
             self.state = (STATE_IDLE,)
 
-            self.send_message_to_client(dst, {
+            self._notify_clients({
                 'state': 'idle',
                 })
 
@@ -319,7 +319,7 @@ class BuildNode(object):
         if self.state[0] == STATE_IDLE:
             self.state = (STATE_MAINTENANCE,)
 
-            self.send_message_to_client(dst, {
+            self._notify_clients({
                 'state': 'maintenance',
                 })
 
@@ -333,7 +333,7 @@ class BuildNode(object):
         if self.state[0] == STATE_MAINTENANCE:
             self.state = (STATE_IDLE,)
 
-            self.send_message_to_client(dst, {
+            self._notify_clients({
                 'state': 'idle',
                 })
 
@@ -403,6 +403,10 @@ class BuildNode(object):
 
 
             if action:
+                # Add this client to the list of clients to notify or reset its
+                # timestamp there
+                self._client_addrs[src] = self.loop.time();
+
                 if action == 'identify':
                     self.identify(src)
 
@@ -466,3 +470,20 @@ class BuildNode(object):
                         return
 
                     self.handle_console_input(src, blob)
+
+
+    def _notify_clients(self, d):
+        """
+        Notify clients with new data. Non-responsive clients are removed from
+        the list of clients to notify.
+
+        :param dict d: Data to send
+        """
+        addrs = list(self._client_addrs.keys())
+        now = self.loop.time()
+
+        for addr in addrs:
+            if now - self._client_addrs[addr] > 15:
+                del self._client_addrs[addr]
+            else:
+                self.send_message_to_client(addr, d)

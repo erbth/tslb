@@ -497,7 +497,10 @@ class Image(object):
                 "Cannot alter an Image that is not locked exclusively.")
 
         with db.session_scope() as s:
-            s.query(db.rootfs.ImageContent).delete(synchronize_session=False)
+            s.query(db.rootfs.ImageContent)\
+                    .filter(db.rootfs.ImageContent.id == self.id)\
+                    .delete(synchronize_session=False)
+
             s.expire_all()
 
             for name, arch, version in pkgs:
@@ -575,14 +578,28 @@ def _map_rbd_image(name):
     :raises CommonExceptions.CommandFailed: If the underlying rbd command
         failed.
     """
-    cmd = ['rbd', 'map', *settings.get_ceph_cmd_conn_params(),
-        settings.get_ceph_rootfs_rbd_pool() + '/' + str(name)]
+    # Protect the call to `rbd map` as it fails to detect the mapped device if
+    # it is called concurrently.
+    lock_file_base = os.path.join(settings.get_temp_location(), 'rootfs')
+    mkdir_p(lock_file_base, 0o755)
+    
+    lock_file = os.path.join(lock_file_base, '.lock')
+    lock_fd = os.open(lock_file, os.O_CREAT | os.O_RDWR, 0o666)
+    os.lockf(lock_fd, os.F_LOCK, 1)
 
-    r = subprocess.run(cmd, stdout=subprocess.PIPE)
-    if r.returncode != 0:
-        raise CommandFailed(cmd, r.returncode)
+    try:
+        cmd = ['rbd', 'map', *settings.get_ceph_cmd_conn_params(),
+            settings.get_ceph_rootfs_rbd_pool() + '/' + str(name)]
 
-    return r.stdout.decode().replace('\n','')
+        r = subprocess.run(cmd, stdout=subprocess.PIPE)
+        if r.returncode != 0:
+            raise CommandFailed(cmd, r.returncode)
+
+        return r.stdout.decode().replace('\n','')
+
+    finally:
+        os.close(lock_fd)
+
 
 def _unmap_rbd_image(path, raises=True):
     """
@@ -715,6 +732,12 @@ def find_image(requirements):
                 error_function.append((e, img_id))
 
         # Find the best one
+        print("Error function:")
+        for a, b in error_function:
+            print("    %f: %s" % (a, b))
+
+        print("Minimum: %s" % min(error_function)[1])
+
         if len(error_function) > 0:
             return Image(min(error_function)[1])
         else:

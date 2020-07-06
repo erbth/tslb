@@ -2,7 +2,6 @@ import multiprocessing
 import os
 import subprocess
 from tslb.Console import Color
-from tslb.tclm import lock_S, lock_Splus, lock_X
 from tslb import settings
 from tslb.build_pipeline.utils import PreparedBuildCommand
 

@@ -131,7 +131,7 @@ class BMInterface:
 
 # A mock build master controller
 class MockController(BMInterface):
-    def __init__(self, loop, identity):
+    def __init__(self, loop, yamb_node, identity):
         self._loop = loop
         self._identity = identity
         self._internal_state = 'off'
