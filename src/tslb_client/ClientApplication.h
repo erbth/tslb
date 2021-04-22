@@ -3,6 +3,7 @@
 
 #include <gtkmm.h>
 #include <memory>
+#include <string>
 #include "BuildClusterProxy.h"
 
 /* Prototypes */
@@ -19,11 +20,13 @@ public:
 	BuildClusterProxy::BuildClusterProxy build_cluster_proxy;
 
 private:
+	std::string yamb_hub_addr;
+
 	std::shared_ptr<ConnectingWindow> connecting_window;
 	std::shared_ptr<Gtk::MessageDialog> connection_failure_dialog;
 	std::shared_ptr<BuildClusterWindow> build_cluster_window;
 
-	ClientApplication ();
+	ClientApplication (const std::string& yamb_addr);
 
 	void on_activate ();
 
@@ -32,13 +35,15 @@ private:
 	void on_connection_failure_dialog_response(int response_id);
 
 public:
-	static Glib::RefPtr<ClientApplication> create ();
+	static Glib::RefPtr<ClientApplication> create (const std::string& yamb_addr);
 
 	BuildClusterProxy::BuildClusterProxy &get_build_cluster_proxy();
 
 	/* I.e. being called by windows (but maybe not only) */
 	void failed_to_connect (Glib::ustring error);
 	void connected ();
+
+	std::string get_yamb_hub_addr() const;
 };
 
 #endif /* __CLIENT_APPLICATION_H */

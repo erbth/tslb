@@ -100,9 +100,11 @@ void ConnectingWindow::_connection_failed(void *pThis, string error)
 
 void ConnectingWindow::connect()
 {
+	auto addr = m_client_application->get_yamb_hub_addr();
+
 	// Start to connect to yamb
-	m_lInfo.set_text("Connecting to yamb hub on ::1 ...");
-	auto ret = m_build_cluster_proxy.connect_to_hub();
+	m_lInfo.set_text("Connecting to yamb hub on " + addr + " ...");
+	auto ret = m_build_cluster_proxy.connect_to_hub(addr);
 
 	if (ret)
 	{

@@ -132,7 +132,7 @@ namespace BuildClusterProxy
 
 		/* Returns a string with an error message on failure and nullopt on
 		 * success. */
-		std::optional<std::string> connect_to_hub();
+		std::optional<std::string> connect_to_hub(const std::string& yamb_addr);
 
 		void subscribe_to_connection_state(const ConnectionStateSubscriber &s);
 		void unsubscribe_from_connection_state(void* priv);

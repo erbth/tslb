@@ -5,15 +5,15 @@
 
 using namespace std;
 
-ClientApplication::ClientApplication () :
-	Gtk::Application ()
+ClientApplication::ClientApplication (const string& yamb_addr)
+	: Gtk::Application (), yamb_hub_addr(yamb_addr)
 {
 	Glib::set_application_name ("TSClient LEGACY Build System Client");
 }
 
-Glib::RefPtr<ClientApplication> ClientApplication::create ()
+Glib::RefPtr<ClientApplication> ClientApplication::create (const string& yamb_addr)
 {
-	return Glib::RefPtr<ClientApplication> (new ClientApplication());
+	return Glib::RefPtr<ClientApplication> (new ClientApplication(yamb_addr));
 }
 
 BuildClusterProxy::BuildClusterProxy &ClientApplication::get_build_cluster_proxy()
@@ -66,4 +66,10 @@ void ClientApplication::on_connection_failure_dialog_response(int response_id)
 {
 	if (connection_failure_dialog)
 		connection_failure_dialog->hide();
+}
+
+
+string ClientApplication::get_yamb_hub_addr() const
+{
+	return yamb_hub_addr;
 }

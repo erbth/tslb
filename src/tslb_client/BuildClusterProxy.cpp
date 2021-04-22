@@ -81,13 +81,13 @@ void BuildClusterProxy::on_connection_failed(string error)
 			});
 }
 
-optional<string> BuildClusterProxy::connect_to_hub()
+optional<string> BuildClusterProxy::connect_to_hub(const string& yamb_addr)
 {
 	if (!ynode)
 	{
 		ynode = unique_ptr<yamb_node::yamb_node>(yamb_node::yamb_node::create_yamb_node(
 				make_shared<connection_factory>(),
-				"::1", 0));
+				yamb_addr.c_str(), 0));
 
 		if (!build_node_yprotocol)
 			build_node_yprotocol = make_shared<build_node_yamb_protocol>(
