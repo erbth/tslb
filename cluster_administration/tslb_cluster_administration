@@ -5,7 +5,8 @@ set -e
 declare -a tools_hosts
 
 tools_hosts=(
-	"Releeshan"
+#	"Releeshan"
+	"node04"
 )
 
 PYTHON_PACKAGE=../python
