@@ -305,10 +305,13 @@ class RealClusterInterface(ClusterInterface):
         self._timer_task = self._loop.create_task(self._timer_1s())
 
 
-    def __del__(self):
+    def close(self):
+        """
+        Things that must be done on close and may not be done because of cyclic
+        references
+        """
         self._yamb.register_protocol(TSLB_NODE_YAMB_PROTOCOL, None)
         self._timer_task.cancel()
-        await self._timer_task
 
 
     async def _timer_1s(self):

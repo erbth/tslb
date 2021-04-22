@@ -59,7 +59,6 @@ class PackageInterface:
         """
         :param tuple(str, VersionNumber) package:
         :param str stage:
-        :returns str:
         """
         raise NotImplementedError
 
@@ -177,7 +176,7 @@ class RealPackageInterface(PackageInterface):
 
     def get_next_stage(self, pkg):
         spv = SourcePackage(pkg[0], self._arch).get_version(pkg[1])
-        build_state.get_next_stage(build_state.get_build_state(spv))
+        return build_state.get_next_stage(build_state.get_build_state(spv))
 
 
     def outdate_package(self, pkg, stage):
@@ -188,7 +187,7 @@ class RealPackageInterface(PackageInterface):
         if not stage:
             return None
 
-        return build_pipeline.outdates_child[stage]
+        return build_pipeline.outdates_child[stage].name
 
 
 #******************************** Exceptions **********************************

@@ -45,6 +45,7 @@ class StageUnpack(object):
                     "%s-%s.tar.bz2" % (spv.source_package.name, spv.version_number),
                     "%s-%s.tar.gz" % (spv.source_package.name, spv.version_number),
                     "%s-%s.tgz" % (spv.source_package.name, spv.version_number),
+                    "%s-%s.tar" % (spv.source_package.name, spv.version_number),
                     ]
 
             for source_archive in tries:
@@ -54,7 +55,7 @@ class StageUnpack(object):
                     break
 
             if not found:
-                out.write("No source archive found, tried [ %s ]." % ', '.join(tries))
+                out.write("No source archive found, tried [ %s ].\n" % ', '.join(tries))
                 return False
             else:
                 spv.set_attribute('source_archive', source_archive)

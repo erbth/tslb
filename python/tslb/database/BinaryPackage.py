@@ -150,19 +150,21 @@ def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_
     arch = Architecture.to_int(arch)
     bpf = aliased(BinaryPackageFile)
 
-    bpq = session.query(bpf.binary_package, bpf.version_number)
+    cte = session.query(bpf)
     if is_absolute:
-        bpq = bpq.filter(bpf.architecture == arch, bpf.path == path)
+        cte = cte.filter(bpf.architecture == arch, bpf.path == path)
     else:
-        bpq = bpq.filter(bpf.architecture == arch, bpf.path.like('%' +
+        cte = cte.filter(bpf.architecture == arch, bpf.path.like('%' +
             path.replace('%', '\%').replace('_', '\_')))
 
-    if only_newest:
-        bpf2 = aliased(BinaryPackageFile)
+    cte = cte.cte('candidates')
+    cand1 = aliased(cte)
 
-        bpq = bpq.filter(~session.query(bpf2)
-                .filter(bpf2.architecture == bpf.architecture,
-                    bpf2.path == bpf.path,
-                    bpf2.version_number > bpf.version_number).exists())
+    bpq = session.query(cand1.c['binary_package'], cand1.c['version_number'])
+
+    if only_newest:
+        cand2 = aliased(cte)
+        bpq = bpq.filter(~session.query(cand2)
+                .filter(cand2.c['version_number'] > cand1.c['version_number']).exists())
 
     return list(bpq.distinct().all())

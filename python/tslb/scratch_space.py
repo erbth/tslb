@@ -178,7 +178,7 @@ class ScratchSpacePool:
                     return
 
                 # Delete the image and its snapshots
-                with lock_X(tclm.define_lock(self.space_lock_base + name)):
+                with lock_X(tclm.define_lock(self.space_lock_base + name.replace('.', '_'))):
                     img = rbd.Image(ioctx, name)
                     snaps = [snap['name'] for snap in img.list_snaps()]
 

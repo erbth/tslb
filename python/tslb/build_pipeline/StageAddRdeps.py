@@ -42,6 +42,23 @@ class StageAddRdeps(object):
             update_binary_package_files(bp)
 
 
+        # If requested, skip this stage by adding dymm.
+        if spv.has_attribute("skip_rdeps"):
+            val = spv.get_attribute("skip_rdeps")
+
+            if (isinstance(val, bool) and val) or \
+                    (isinstance(val, str) and val.lower() == 'true'):
+
+                out.write(Color.YELLOW +
+                        "WARNING: Not adding rdeps because of attribute `skip_rdeps'!" +
+                        Color.NORMAL + '\n')
+
+                for bp in bps.values():
+                    bp.set_attribute('rdeps', DependencyList())
+
+                return True
+
+
         # Sort the binary packages into categories
         out.write("Adding runtime dependencies based on package categories ...\n")
 
@@ -162,7 +179,8 @@ class StageAddRdeps(object):
                         return False
 
                     if len(deps) > 1:
-                        out.write("Found multiple binary packages that contain shared object `%s'.\n" % so)
+                        out.write("Found multiple binary packages that contain shared object `%s':\n%s\n" %
+                                (so, deps))
                         return False
 
                     required_pkgs |= set(deps)

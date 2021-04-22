@@ -194,7 +194,17 @@ class SharedLibrary(object):
             if ret.returncode != 0:
                 raise ces.CommandFailed(' '.join(cmd))
 
-            match = re.search(r'SONAME\s+(' + self.name + r'\.so(\.(\d+(\.\d+)*))?)', ret.stdout.decode('UTF-8'))
+            regex = r'SONAME\s+(' + re.escape(self.name) + r'\.so(\.(\d+(\.\d+)*))?)'
+
+            try:
+                match = re.search(
+                        regex,
+                        ret.stdout.decode('UTF-8'))
+
+            except re.error:
+                print("regex: %s, content: %s" % (regex, ret.stdout.decode('UTF-8')))
+                raise
+
             if not match:
                 raise ces.AnalyzeError("'%s' has no SONAME" % self.name)
 
@@ -215,7 +225,7 @@ class SharedLibrary(object):
 
         # SONAME'd file
         so_named_file = None
-        r = re.compile('.+/%s$' % self.soname)
+        r = re.compile('.+/%s$' % re.escape(self.soname))
 
         for f in self.files:
             if re.match (r, f):

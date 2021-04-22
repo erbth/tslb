@@ -723,8 +723,8 @@ def _unmount_devtmpfs(root, raises=True):
         resources on exit or similar).
     """
     _unmount(os.path.join(root, 'dev', 'pts'), raises)
-    time.sleep(0.2)
-    _unmount(os.path.join(root, 'dev'), raises)
+    # subprocess.call(['bash', '-c', 'lsof|grep /dev'])
+    _unmount(os.path.join(root, 'dev'), raises=raises, retry_busy=40)
 
 
 def _unmount_tmp(root, raises=True):
@@ -775,7 +775,7 @@ def _unmount_tslb_aux(root, raises=True):
         _unmount(spm, raises)
 
 
-def _unmount(target, raises=True):
+def _unmount(target, raises=True, retry_busy=0):
     """
     For internal use only, unmount a filesystem.
 
@@ -783,16 +783,27 @@ def _unmount(target, raises=True):
     :param raises: If True, an exception is raised if unmounting fails.
         Otherwise the function does simply nothing (good for i.e. cleaning
         resources on exit or similar).
+    :param in retry_busy: How often to retry if the target seems busy. Between
+        each trial 0.5 seconds are waited.
 
     :raises CommonExceptions.CommandFailed: If unmounting fails and raises is
         True.
     """
     cmd = ['umount', target]
     
-    r = subprocess.call(cmd)
+    while True:
+        r = subprocess.call(cmd)
 
-    if r != 0 and raises:
-        raise ce.CommandFailed(cmd, r)
+        if r & 32:
+            if retry_busy > 0:
+                retry_busy -= 1
+                time.sleep(0.5)
+                continue
+
+        if r != 0 and raises:
+            raise ce.CommandFailed(cmd, r)
+
+        break
 
 
 def _copy_python_packages(root):

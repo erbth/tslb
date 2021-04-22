@@ -303,7 +303,10 @@ class Controller(BMInterface):
         self._pkg_fails = None
 
         self._package_interface = None
-        self._cluster_interface = None
+
+        if self._cluster_interface:
+            self._cluster_interface.close()
+            self._cluster_interface = None
 
         self._nodes = {}
 

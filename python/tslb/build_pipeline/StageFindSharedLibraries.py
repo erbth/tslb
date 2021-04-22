@@ -39,6 +39,9 @@ class StageFindSharedLibraries(object):
                     if subdir == '/usr/lib/gconv':
                         continue
 
+                    if subdir == '/usr/lib/bfd-plugins':
+                        continue
+
                     find_shared_libraries(lib_file_map, base, subdir)
 
             elif stat.S_ISLNK(st_buf.st_mode) or stat.S_ISREG(st_buf.st_mode):

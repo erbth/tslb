@@ -1,0 +1,55 @@
+% !TeX spellcheck = en_US
+\documentclass[a4paper]{scrartcl}
+\usepackage[left=2cm, right=2cm, top=2cm, bottom=2cm]{geometry}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{dirtree}
+\usepackage[hidelinks]{hyperref}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{tikz}
+\usetikzlibrary{automata, positioning, arrows, shapes.geometric}
+
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\program}[1]{\textbf{#1}}
+\newcommand{\variable}[1]{'\texttt{#1}'}
+\newcommand{\module}[1]{\texttt{#1}}
+\newcommand{\script}[1]{\texttt{#1}}
+
+\newcommand{\green}[1]{\textcolor{green}{#1}}
+
+\title{The TSClient LEGACY Build System}
+\subtitle{Developer's documentation}
+\author{Thomas Erbesdobler <t.erbesdobler@gmx.de>}
+
+\begin{document}
+	\maketitle
+	\tableofcontents
+	
+	\section{Package attributes}
+	\label{sec:package_attributes}
+	
+	\begin{tabularx}{\textwidth}{lX}
+		Command & Description \\
+		\hline
+		configure\_command & \\
+		build\_command & \\
+		install\_to\_destdir\_command & \\
+		skip\_rdeps & Optionally skip adding rdeps \\
+		adapt\_command & \\
+		additional\_file\_placement & \\
+		additional\_rdeps & \\
+		cdeps & \\
+		enabled & \\
+		source\_archive & \\
+		unpack\_command & \\
+		patch\_command & \\
+		unpacked\_source\_directory & \\
+	\end{tabularx}
+	
+\end{document}
