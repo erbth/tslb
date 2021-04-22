@@ -775,7 +775,7 @@ class Controller(BMInterface):
 
     def _log(self, msg, flush=False):
         for h in self._log_handlers:
-            h(msg, flush)
+            h(msg, flush=flush)
 
 
     # The BMInterface provided by this build master controller core

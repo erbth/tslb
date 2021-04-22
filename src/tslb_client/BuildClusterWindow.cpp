@@ -460,9 +460,38 @@ MasterInterface::MasterInterface(BuildClusterWindow *bcwin) :
 
 	custom_css_provider = Gtk::CssProvider::create();
 	custom_css_provider->load_from_data(
-		".fb_surrounding_box { background-color: #ffffff }\n"
-		".label_chunk_fb { background-color: #ffffff }\n"
-		".label_queue_fb { background-color: #ffffff }");
+		".fb_surrounding_sw { border: 1px solid black }\n"
+		".fb_surrounding_box { background-color: #ddd; }\n"
+		".label_chunk_fb { background-color: #ddd }\n"
+		".label_queue_fb { background-color: #ddd }");
+
+	/* Setup scrolled windows */
+	m_swRemaining.get_style_context()->add_class("fb_surrounding_sw");
+	m_swRemaining.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_swBuildQueue.get_style_context()->add_class("fb_surrounding_sw");
+	m_swBuildQueue.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_swBuildingSet.get_style_context()->add_class("fb_surrounding_sw");
+	m_swBuildingSet.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_swIdleNodes.set_border_width(5);
+	m_swIdleNodes.get_style_context()->add_class("fb_surrounding_sw");
+	m_swIdleNodes.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+	m_swBusyNodes.set_border_width(5);
+	m_swBusyNodes.get_style_context()->add_class("fb_surrounding_sw");
+	m_swBusyNodes.get_style_context()->add_provider(
+			custom_css_provider,
+			GTK_STYLE_PROVIDER_PRIORITY_USER);
 
 	/* Flow box for the remaining set */
 	m_bRemainingFBSurrounding.get_style_context()->add_class("fb_surrounding_box");
