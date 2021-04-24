@@ -19,6 +19,9 @@ class Color(object):
     BRIGHT_CYAN='\033[96m'
     BRIGHT_WHITE='\033[97m'
 
+    # Advanced colors
+    ORANGE='\033[38;2;255;165;0m'
+
     NORMAL='\033[0m'
 
     def print_color(c, s, reset=True):
