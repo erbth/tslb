@@ -120,7 +120,11 @@ def mkdir_p(path, mode=0o777, base="/"):
         p = os.path.join(p, component)
 
         if not os.path.isdir(p):
-            os.mkdir(p, mode=mode)
+            # The directory could have been created after the check
+            try:
+                os.mkdir(p, mode=mode)
+            except FileExistsError:
+                pass
 
 
 def rm_r(path):
