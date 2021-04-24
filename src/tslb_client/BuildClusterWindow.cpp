@@ -1200,7 +1200,8 @@ void MasterInterface::update_master_state()
 		m_btStart.set_sensitive(false);
 	}
 
-	if (state == BuildMasterProxy::BMP_STATE_IDLE)
+	if (state == BuildMasterProxy::BMP_STATE_IDLE ||
+			state == BuildMasterProxy::BMP_STATE_COMPUTING)
 	{
 		m_btStop.set_sensitive(true);
 	}

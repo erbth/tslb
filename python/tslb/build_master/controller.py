@@ -7,6 +7,7 @@ scheduler, finally uses dependency lists, too.
 
 A Python-native implementation should use dicts in the simplest case.
 """
+import asyncio
 import queue
 import re
 from bm_interface import BMInterface
@@ -33,6 +34,9 @@ class Controller(BMInterface):
         self._arch = Architecture.amd64
         self._error = False
         self._valve = False
+
+        # Cancellable asynchronous computing task
+        self._computing_task = None
 
         # Data structures used by the build master algorithm
         self._G = None
@@ -78,6 +82,10 @@ class Controller(BMInterface):
 
 
     def __del__(self):
+        # Stop asynchronous computing task
+        if self._computing_task is not None:
+            self._computing_task.cancel()
+
         # Unsubscribe from the build cluster
         if self._cluster_interface:
             self._cluster_interface.unsubscribe(self._cluster_notification)
@@ -86,7 +94,7 @@ class Controller(BMInterface):
             node.unsubscribe(self._build_node_notification)
 
 
-    def _build_dependency_graph(self):
+    async def _build_dependency_graph(self):
         """
         Builds the dependency graph G based on the packages and populates
         versions.
@@ -97,12 +105,14 @@ class Controller(BMInterface):
         self._versions = {}
 
         # Set nodes.
-        for pkg, v in self._package_interface.get_packages():
+        for pkg, v in await self._package_interface.get_packages():
             self._G[pkg] = []
             self._versions[pkg] = v
 
         # Add edges
         for pkg in self._G:
+            # 'yield' cpu for communication...
+            await asyncio.sleep(0.0001)
             cdeps = self._package_interface.get_cdeps((pkg, self._versions[pkg]))
 
             for cdep in cdeps.get_required():
@@ -164,7 +174,7 @@ class Controller(BMInterface):
                 self._H[u].append(v)
 
 
-    def _start_build(self):
+    async def _start_build(self):
         """
         Start a build by allocating resources and computing data
         representations needed during the build. This is where most of the work
@@ -184,26 +194,27 @@ class Controller(BMInterface):
 
         # Build required graphs
         try:
-            self._log("Building dependency graph G ...\n")
-            self._build_dependency_graph()
+            with self._package_interface.lock():
+                self._log("Building dependency graph G ...\n")
+                await self._build_dependency_graph()
 
-            self._log("Findings SCCs ...\n")
-            self._find_scc()
+                self._log("Findings SCCs ...\n")
+                self._find_scc()
 
-            self._log("  SCCs with more than one node:\n")
-            sccs = []
-            for scc, nodes in self._SCC.items():
-                if len(nodes) > 1:
-                    sccs.append(scc)
+                self._log("  SCCs with more than one node:\n")
+                sccs = []
+                for scc, nodes in self._SCC.items():
+                    if len(nodes) > 1:
+                        sccs.append(scc)
 
-            if sccs:
-                for scc in sccs:
-                    self._log("    %d: %s\n" % (scc, self._SCC[scc]))
-            else:
-                self._log("    None.\n")
+                if sccs:
+                    for scc in sccs:
+                        self._log("    %d: %s\n" % (scc, self._SCC[scc]))
+                else:
+                    self._log("    None.\n")
 
-            self._log("\nComputing the contracted transposed dependency graph HT ...\n")
-            self._compute_contracted_transposed_dependency_graph()
+                self._log("\nComputing the contracted transposed dependency graph HT ...\n")
+                self._compute_contracted_transposed_dependency_graph()
 
         except (GenericBMError, InvalidConfiguration) as e:
             self._log(Color.RED + "Error: " + Color.NORMAL + str(e) + "\n")
@@ -229,13 +240,13 @@ class Controller(BMInterface):
         # self._cluster_interface = MockClusterInterface(self._loop, self._yamb, self._arch)
         self._cluster_interface = RealClusterInterface(self._loop, self._yamb, self._arch)
 
-        # Subscribe and initially find build nodes
-        self._cluster_interface.subscribe(self._cluster_notification)
-        self._cluster_notification(self._cluster_interface)
-
         # Call the scheduler (It will also change the internal state to 'idle'
         # once it exists.)
         self._schedule()
+
+        # Subscribe and initially find build nodes
+        self._cluster_interface.subscribe(self._cluster_notification)
+        self._cluster_notification(self._cluster_interface)
 
         self._notify_subscribers(self.DOMAIN_ALL)
 
@@ -268,11 +279,16 @@ class Controller(BMInterface):
     def _stop_build(self):
         """
         Stop a currently running build. The caller must ensure that it is safe
-        to do so. Whenever this function is called from a different place thant
+        to do so. Whenever this function is called from a different place than
         `_start_build`, this usually means checking that `_internal_state` is
         'idle'.
         """
         self._internal_state = self.STATE_OFF
+
+        # Cancel potential ongoing computation
+        if self._computing_task is not None:
+            self._computing_task.cancel()
+            self._computing_task = None
 
         # Unsubscribe from the build cluster
         if self._cluster_interface:
@@ -589,6 +605,15 @@ class Controller(BMInterface):
         """
         New nodes were discovered or existing ones disappeared.
         """
+        # Ignore notification if we are not idle. As all computing-phases are
+        # blocking (apart from the initial graph computation during which we've
+        # not subscribed to the build cluster yet), this should not lead to
+        # missed events.
+        if self._internal_state != self.STATE_IDLE:
+            self._log(Color.ORANGE + "Warning:" + Color.NORMAL +
+                    " Cluster notification while controller was not idle.\n")
+            return
+
         existing_nodes = set(self._nodes.keys())
         retrieved_nodes = set(self._cluster_interface.get_build_nodes())
 
@@ -625,7 +650,15 @@ class Controller(BMInterface):
         t_state = node.get_state()
         state = t_state[0]
 
+        # Hack: allow for changes to busy as that happens during _schedule.
+        if self._internal_state != self.STATE_IDLE and state != node.STATE_BUSY:
+            self._log(Color.ORANGE + "Warning:" + Color.NORMAL +
+                    " Build node notification while controller was not idle.\n")
+            return
+
         if state == node.STATE_BUSY:
+            # Hack: nothing 'critical' maybe done here as this can happen
+            # during _schedule
             pass
 
         elif state == node.STATE_IDLE:
@@ -741,7 +774,11 @@ class Controller(BMInterface):
         # Maybe new nodes are packages became available. Additionally this will
         # notify clients.
         self._notify_subscribers(self.DOMAIN_REMAINING)
-        self._schedule()
+
+        # Hack: if state changed to busy, don't call schedule to avoid
+        # reentrance
+        if state != node.STATE_BUSY:
+            self._schedule()
 
 
     def _fail(self):
@@ -831,11 +868,17 @@ class Controller(BMInterface):
 
         self._notify_subscribers(self.DOMAIN_ALL)
 
-        self._loop.call_soon(self._start_build)
+        self._computing_task = self._loop.create_task(self._start_build())
 
     def stop(self):
-        if self._internal_state != self.STATE_IDLE:
-            raise ces.InvalidState("The controller's state is not `idle'.")
+        if self._internal_state not in (self.STATE_IDLE, self.STATE_COMPUTING):
+            raise ces.InvalidState(
+                    "The controller's state is not `idle' or `computing'.")
+
+            if self._internal_state == self.STATE_COMPUTING and self._computing_task is None:
+                raise ces.InvalidState(
+                        "The controller's state is `computing' but the "
+                        "computations are not cancellable.")
 
         self._stop_build()
 
@@ -850,7 +893,12 @@ class Controller(BMInterface):
             raise ces.InvalidState("The package valve is already open.")
 
         self._valve = True
-        self._schedule()
+        self._notify_subscribers(self.DOMAIN_STATE)
+
+        # _schedule() if state is idle, otherwise the background computing task
+        # will do this.
+        if self._internal_state == self.STATE_IDLE:
+            self._schedule()
 
     def close(self):
         if self._internal_state == self.STATE_OFF:

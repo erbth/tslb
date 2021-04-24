@@ -1,13 +1,16 @@
 """
 An interface to the packages.
 """
+import asyncio
+import contextlib
 from tslb import Architecture
-from tslb import build_state
 from tslb import build_pipeline
+from tslb import build_state
 from tslb.Constraint import DependencyList, VersionConstraint
-from tslb.VersionNumber import VersionNumber
-from tslb.SourcePackage import SourcePackageList, SourcePackage
 from tslb.SourcePackage import NoSuchSourcePackage, NoSuchSourcePackageVersion, NoSuchAttribute
+from tslb.SourcePackage import SourcePackageList, SourcePackage
+from tslb.VersionNumber import VersionNumber
+from tslb.tclm import lock_S
 
 def create_package_interface(arch):
     """
@@ -30,7 +33,7 @@ class PackageInterface:
         # Rather ugly way to disallow creating objects of this class.
         raise NotImplementedError
 
-    def get_packages(self):
+    async def get_packages(self):
         """
         :returns list(tuple(str, VersionNumber)):
         :raises InvalidConfiguration:
@@ -73,6 +76,14 @@ class PackageInterface:
         """
         raise NotImplementedError
 
+    @contextlib.contextmanager
+    def lock(self):
+        """
+        A context manager that represents a lock on the package base. While it
+        is aquired, the package base cannot be changed by other processes.
+        """
+        raise NotImplementedError
+
 
 # Stub implementation
 class StubPackageInterface(PackageInterface):
@@ -90,7 +101,7 @@ class StubPackageInterface(PackageInterface):
             ("snmpd", VersionNumber("1.0")):        (['glibc', 'libmount'],                 'finished')
         }
 
-    def get_packages(self):
+    async def get_packages(self):
         return list(self._pkgs.keys())
 
     def get_cdeps(self, package):
@@ -125,19 +136,26 @@ class StubPackageInterface(PackageInterface):
         return None
 
 
+    @contextlib.contextmanager
+    def lock(self):
+        yield None
+
+
 # Real implementation
 class RealPackageInterface(PackageInterface):
     def __init__(self, arch):
         self._arch = Architecture.to_int(arch)
 
 
-    def get_packages(self):
+    async def get_packages(self):
         spl = SourcePackageList(self._arch)
 
         all_pkg_names = spl.list_source_packages()
         enabled_pkg_versions = []
 
         for name in all_pkg_names:
+            # 'yield' cpu for communication...
+            await asyncio.sleep(0.0001)
             pkg = SourcePackage(name, self._arch)
 
             enabled_version = None
@@ -188,6 +206,12 @@ class RealPackageInterface(PackageInterface):
             return None
 
         return build_pipeline.outdates_child[stage].name
+
+
+    @contextlib.contextmanager
+    def lock(self):
+        with lock_S(SourcePackageList(self._arch).db_root_lock):
+            yield None
 
 
 #******************************** Exceptions **********************************
