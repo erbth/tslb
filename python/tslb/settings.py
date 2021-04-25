@@ -202,27 +202,10 @@ class settings_internal(types.ModuleType):
     def guess_if_in_rootfs_chroot(self):
         """
         Guess if we are inside a rootfs-image chroot environment based on if
-        all of /tmp/tslb/{packaging,collecting_repo,source_location} exist.
+        all of /tmp/tslb/{collecting_repo,source_location} exist.
         """
-        return os.path.isdir('/tmp/tslb/packaging') and\
-            os.path.isdir('/tmp/tslb/collecting_repo') and\
+        return os.path.isdir('/tmp/tslb/collecting_repo') and\
             os.path.isdir('/tmp/tslb/source_location')
-
-
-    def get_packaging_location(self, in_rootfs="auto"):
-        """
-        Get the packaging location.
-
-        :param in_rootfs: If true, everything shall be based on /tmp/tslb. When
-            set to "auto", the function determines if it is run inside an
-            chroot rootfs image environment based on if all of
-            /tmp/tslb/{packaging,collecting_repo,source_location} exist.
-        """
-        if in_rootfs == "auto":
-            in_rootfs = self.guess_if_in_rootfs_chroot()
-
-        return os.path.join('/tmp/tslb' if in_rootfs else self.get_fs_root(),
-            'packaging')
 
 
     def get_collecting_repo_location(self, in_rootfs="auto"):
@@ -232,7 +215,7 @@ class settings_internal(types.ModuleType):
         :param in_rootfs: If true, everything shall be based on /tmp/tslb. When
             set to "auto", the function determines if it is run inside an
             chroot rootfs image environment based on if all of
-            /tmp/tslb/{packaging,collecting_repo,source_location} exist.
+            /tmp/tslb/{collecting_repo,source_location} exist.
         """
         if in_rootfs == "auto":
             in_rootfs = self.guess_if_in_rootfs_chroot()
@@ -257,7 +240,7 @@ class settings_internal(types.ModuleType):
         :param in_rootfs: If true, everything shall be based on /tmp/tslb. When
             set to "auto", the function determines if it is run inside an
             chroot rootfs image environment based on if all of
-            /tmp/tslb/{packaging,collecting_repo,source_location} exist.
+            /tmp/tslb/{collecting_repo,source_location} exist.
         """
         if in_rootfs == "auto":
             in_rootfs = self.guess_if_in_rootfs_chroot()

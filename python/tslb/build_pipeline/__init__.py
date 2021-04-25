@@ -321,13 +321,11 @@ class BuildPipeline(object):
 
                 # Make a snapshot if the stage succeeded
                 if success:
-                    snapshot_path = None
                     snapshot_name = "%s-%s" % (stage.name, datetime.utcnow().isoformat())
 
                     spv.scratch_space.create_snapshot(snapshot_name)
 
                 else:
-                    snapshot_path = None
                     snapshot_name = None
 
                 try:
@@ -342,7 +340,6 @@ class BuildPipeline(object):
                             dbbp.BuildPipelineStageEvent.status_values.success if success else
                                 dbbp.BuildPipelineStageEvent.status_values.failed,
                             self.output_buffer.read_data(-1).decode('utf8'),
-                            snapshot_path,
                             snapshot_name))
 
                 except:

@@ -34,7 +34,6 @@ class BuildPipelineStageEvent(Base):
     status = Column(types.Integer, nullable=False)
     output = Column(types.String)
 
-    snapshot_path = Column(types.String)
     snapshot_name = Column(types.String)
 
     __table_args__ =  (ForeignKeyConstraint(
@@ -111,7 +110,7 @@ class BuildPipelineStageEvent(Base):
 
 
     def __init__(self, stage, time, source_package, architecture, version_number,
-            status, output=None, snapshot_path=None, snapshot_name=None):
+            status, output=None, snapshot_name=None):
         self.stage = stage
         self.time = time
         self.source_package = source_package
@@ -119,5 +118,4 @@ class BuildPipelineStageEvent(Base):
         self.version_number = version_number
         self.status = status
         self.output = output
-        self.snapshot_path = snapshot_path
         self.snapshot_name = snapshot_name

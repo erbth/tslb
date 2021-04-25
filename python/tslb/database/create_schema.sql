@@ -177,7 +177,6 @@ create table build_pipeline_stage_events (
 	status integer not null,
 	output varchar,
 
-	snapshot_path varchar,
 	snapshot_name varchar,
 
 	primary key (stage, time, source_package, "architecture", version_number)
