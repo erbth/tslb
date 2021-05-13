@@ -324,6 +324,9 @@ class ScratchSpace:
         # Unmap
         _unmap_rbd_image(dev)
 
+        # Delete mountpoint
+        os.rmdir(self._mountpoint)
+
 
     # Snapshots
     def create_snapshot(self, name):

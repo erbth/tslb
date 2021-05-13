@@ -181,7 +181,7 @@ def main(*args):
 
             try:
                 val = prop.read_raw()
-            except NotImplemented:
+            except NotImplementedError:
                 print("This property does not implement `read_raw`.")
                 continue
 

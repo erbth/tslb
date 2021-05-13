@@ -132,7 +132,7 @@ class VersionNumber(object):
             cs = self.components[i]
             co = other.components[i]
             if cs.__class__ != co.__class__:
-                raise NotImplemented
+                raise NotImplementedError
 
             if cs < co:
                 return True
@@ -152,7 +152,7 @@ class VersionNumber(object):
             cs = self.components[i]
             co = other.components[i]
             if cs.__class__ != co.__class__:
-                raise NotImplemented
+                raise NotImplementedError
 
             if cs < co:
                 return True

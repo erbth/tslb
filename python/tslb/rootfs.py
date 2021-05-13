@@ -426,7 +426,7 @@ class Image(object):
     def remove_ro_base(self):
         """
         Remove the ro_base snapshot of the image. This requires an X lock.
-        Moreover all child images must have been deleted or inflated. If the
+        Moreover all child images must have been deleted or flattened. If the
         image has no ro_base snapshot, this function does nothing (and requires
         non of the above demands).
 
@@ -459,6 +459,22 @@ class Image(object):
             r = subprocess.call(cmd)
             if r != 0:
                 raise CommandFailed(cmd, r)
+
+
+    def flatten(self):
+        """
+        Flatten the image such that it contains all data on its own and does
+        not depend on other images for cow-operations anymore.
+
+        :raises BaseException: If an operation fails.
+        """
+        cmd = ['rbd', 'flatten',
+            *settings.get_ceph_cmd_conn_params(),
+            settings.get_ceph_rootfs_rbd_pool() + '/' + str(self.id)]
+
+        r = subprocess.call(cmd)
+        if r != 0:
+            raise CommandFailed(cmd, r)
 
 
     def add_packages_to_list(self, pkgs):

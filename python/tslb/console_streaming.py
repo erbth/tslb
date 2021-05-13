@@ -359,7 +359,7 @@ class ConsoleAccessProtocol(object):
         Called by the protocol implementation if a request_updates message is
         received from a client with unique address.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
     def update_acknowledged(self, addr):
@@ -369,7 +369,7 @@ class ConsoleAccessProtocol(object):
         Called by the protocol implementation if an ACK is received from a
         client with unique address.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
     def requested(self, addr, start, end):
@@ -380,7 +380,7 @@ class ConsoleAccessProtocol(object):
         from a client with unique address. start and end are 32 bit unsigned
         integers (just stay in that range) for start and end mark.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
     def input(self, addr, data):
@@ -390,7 +390,7 @@ class ConsoleAccessProtocol(object):
         Called by the protocol implementation if an input mesage is received
         from a client with unique address.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
     def data(self, addr, mdata, data):
@@ -402,7 +402,7 @@ class ConsoleAccessProtocol(object):
         :type mdata: List(Tuple(int, int))
         :param bytes data: binary buffer
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
     def update(self, addr, mdata, data):
@@ -414,7 +414,7 @@ class ConsoleAccessProtocol(object):
         :type mdata: List(Tuple(int, int))
         :param bytes data: binary buffer
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
 class ConsoleStreamer(object):

@@ -185,6 +185,7 @@ class ImageDirectory(Directory):
             ImagePublishAction(self.img_id, True),
             ImagePublishAction(self.img_id, False),
             ImageRemoveRoBaseAction(self.img_id),
+            ImageFlattenAction(self.img_id),
             ImageMountAction(self.img_id),
             ImageRunBashAction(self.img_id)
         ]
@@ -285,7 +286,7 @@ class ImagePublishAction(Action, ImageBaseFactory):
         should be unpublished.
     """
     def __init__(self, img_id, publish):
-        super().__init__()
+        super().__init__(writes=True)
         self.publish = bool(publish)
         self.name = "publish" if self.publish else "unpublish"
         self.img_id = img_id
@@ -315,6 +316,26 @@ class ImageRemoveRoBaseAction(Action, ImageBaseFactory):
         
         try:
             img.remove_ro_base()
+
+        except Exception as e:
+            print("\033[31mFAILED\033[0m: %s" % e)
+
+
+class ImageFlattenAction(Action, ImageBaseFactory):
+    """
+    Flatten an image.
+    """
+    def __init__(self, img_id):
+        super().__init__(writes=False)
+        self.img_id = img_id
+        self.name = "flatten"
+
+
+    def run(self, *args):
+        img = self.create_image(False)
+
+        try:
+            img.flatten()
 
         except Exception as e:
             print("\033[31mFAILED\033[0m: %s" % e)

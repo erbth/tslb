@@ -105,8 +105,16 @@ class PackageBuilder(object):
                     dep_spv = dep_sp.get_version(v)
 
                     # Find newest binary packages currently built out of this
-                    # source package version.
+                    # source package version. Only consider '-all' packages as
+                    # that makes solving easier for the package manager.
+                    # Moreover it may result in more accurate rootfs image cost
+                    # calculation because an increased number of binary
+                    # packages built out of a source package will not result in
+                    # a higher cost (as they are not installed yet).
                     for bp_name in dep_spv.list_current_binary_packages():
+                        if not bp_name.endswith("-all"):
+                            continue
+
                         bp_v = max(dep_spv.list_binary_package_version_numbers(bp_name))
                         required_binary_packages.append((bp_name, arch, bp_v))
 
@@ -722,7 +730,8 @@ def _unmount_devtmpfs(root, raises=True):
         Otherwise the function does simply nothing (good for i.e. cleaning
         resources on exit or similar).
     """
-    _unmount(os.path.join(root, 'dev', 'pts'), raises)
+    # TODO: see if this helps, I think it won't.
+    _unmount(os.path.join(root, 'dev', 'pts'), raises=raises, retry_busy=40)
     # subprocess.call(['bash', '-c', 'lsof|grep /dev'])
     _unmount(os.path.join(root, 'dev'), raises=raises, retry_busy=40)
 

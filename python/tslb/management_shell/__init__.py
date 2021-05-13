@@ -81,7 +81,7 @@ class Property(Element):
         """
         Returns the attribute's raw value.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
     def read(self):
@@ -91,7 +91,7 @@ class Property(Element):
 
         :returns: The propertie's value.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
     def write(self, value):
@@ -103,4 +103,4 @@ class Property(Element):
         if not self.writable:
             raise RuntimeError("This property is read only")
 
-        raise NotImplemented
+        raise NotImplementedError
