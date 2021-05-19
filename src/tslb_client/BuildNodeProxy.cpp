@@ -45,7 +45,7 @@ void BuildNodeProxy::timeout_1s()
 
 	++last_state_update;
 
-	if (++last_state_query > 10)
+	if (++last_state_query > 2)
 		query_state();
 
 	/* Responding behavior changed? */

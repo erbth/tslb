@@ -24,10 +24,10 @@ BuildClusterProxy::BuildClusterProxy()
 
 bool BuildClusterProxy::soft_timeout_1s_handler()
 {
-	if (++build_nodes_last_searched >= 30)
+	if (++build_nodes_last_searched >= 5)
 		search_for_build_nodes();
 
-	if (++build_masters_last_searched >= 30)
+	if (++build_masters_last_searched >= 5)
 		search_for_build_masters();
 
 	for_each(

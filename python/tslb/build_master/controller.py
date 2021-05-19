@@ -584,7 +584,7 @@ class Controller(BMInterface):
         if self._scc_failed(scc):
             self._fail()
             self._log(Color.RED + "Error:" + Color.NORMAL +
-                    " All packages in SCC `%s' failed.\n")
+                    " All packages in SCC `%d' failed.\n" % scc)
 
             self._log_scc_info(scc)
 

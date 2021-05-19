@@ -163,7 +163,7 @@ def get_next_stage(events):
         for i,stage in enumerate(bp.all_stages):
             if stage.name == next_stage:
                 if i + 1 < len(bp.all_stages):
-                    next_stage = bp.all_stages[i + 1]
+                    next_stage = bp.all_stages[i + 1].name
                 else:
                     next_stage = None
 
@@ -194,3 +194,49 @@ def get_next_stage(events):
                 break
 
     return next_stage
+
+
+def get_last_successful_stage_event(spv, stage, s=None):
+    """
+    Get the newset successful event for the given stage.
+
+    :param SourcePackageVersion spv:
+    :param str stage:
+    :param s: A db session. If None, a new one will be created.
+    :returns dbbp.BuildPipelineStageEvent|None:
+        Last successful event of that stage or None
+    """
+    have_session = False
+
+    if s is None:
+        s = db.get_session()
+        have_session = True
+
+    try:
+        se = aliased(dbbp.BuildPipelineStageEvent)
+        se2 = aliased(dbbp.BuildPipelineStageEvent)
+        last_successful_event = s.query(se)\
+                .filter(se.source_package == spv.source_package.name,
+                        se.architecture == spv.architecture,
+                        se.version_number == spv.version_number,
+                        se.stage == stage,
+                        se.status == dbbp.BuildPipelineStageEvent.status_values.success,
+                        ~s.query(se2.stage)\
+                                .filter(se2.source_package == se.source_package,
+                                    se2.architecture == se.architecture,
+                                    se2.version_number == se.version_number,
+                                    se2.stage == se.stage,
+                                    se2.status == se.status,
+                                    se2.time > se.time)\
+                                .exists())\
+                .first()
+
+        if last_successful_event:
+            s.expunge(last_successful_event)
+
+        return last_successful_event
+
+    finally:
+        if have_session:
+            s.rollback()
+            s.close()

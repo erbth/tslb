@@ -3,11 +3,14 @@ from tslb import Architecture
 from tslb import CommonExceptions as ce
 from tslb import Console
 from tslb import SourcePackage
+from tslb import build_pipeline
+from tslb import build_state
 from tslb import rootfs
 from tslb import settings
 from tslb.Console import Color
 from tslb.Constraint import DependencyList, VersionConstraint
 from tslb.VersionNumber import VersionNumber
+from tslb.build_pipeline import BuildPipeline
 from tslb.filesystem import FileOperations as fops
 from tslb.tpm import Tpm2
 from tslb.utils import is_mounted
@@ -20,7 +23,6 @@ import subprocess
 import sys
 import time
 import tslb
-from tslb.build_pipeline import BuildPipeline
 
 
 class PackageBuilder(object):
@@ -90,7 +92,7 @@ class PackageBuilder(object):
         available_source_packages = set(spl.list_source_packages())
 
         # TODO: Remove when we have tools
-        for dep_name in cdeps.get_required() + ['glibc', 'zlib']:
+        for dep_name in set(cdeps.get_required() + ['glibc', 'zlib']):
             if dep_name not in available_source_packages:
                 raise CannotFulfillDependencies(
                     'Required source package "%s" does not exist.' % dep_name)
@@ -104,19 +106,36 @@ class PackageBuilder(object):
                 if (dep_name, v) in cdeps:
                     dep_spv = dep_sp.get_version(v)
 
-                    # Find newest binary packages currently built out of this
-                    # source package version. Only consider '-all' packages as
-                    # that makes solving easier for the package manager.
-                    # Moreover it may result in more accurate rootfs image cost
-                    # calculation because an increased number of binary
-                    # packages built out of a source package will not result in
-                    # a higher cost (as they are not installed yet).
-                    for bp_name in dep_spv.list_current_binary_packages():
-                        if not bp_name.endswith("-all"):
-                            continue
+                    last_complete_build = build_state.get_last_successful_stage_event(
+                            dep_spv, build_pipeline.all_stages[-1].name)
 
-                        bp_v = max(dep_spv.list_binary_package_version_numbers(bp_name))
-                        required_binary_packages.append((bp_name, arch, bp_v))
+                    # If there's no complete build, no binary package will be
+                    # added. But that is not bad enough to terminate the build.
+                    if last_complete_build is not None:
+                        # Find newest binary packages currently built out of this
+                        # source package version. Only consider '-all' packages as
+                        # that makes solving easier for the package manager.
+                        # Moreover it may result in more accurate rootfs image cost
+                        # calculation because an increased number of binary
+                        # packages built out of a source package will not result in
+                        # a higher cost (as they are not installed yet).
+                        for bp_name in dep_spv.list_current_binary_packages():
+                            if not bp_name.endswith("-all"):
+                                continue
+
+                            # Binary package versions that have been completely
+                            # built.
+                            available_bp_vs = []
+                            for bp_v_num in dep_spv.list_binary_package_version_numbers(bp_name):
+                                bp = dep_spv.get_binary_package(bp_name, bp_v_num)
+
+                                if bp.get_creation_time() <= last_complete_build.time:
+                                    available_bp_vs.append(bp.version_number)
+
+                                del bp
+
+                            bp_v = max(available_bp_vs)
+                            required_binary_packages.append((bp_name, arch, bp_v))
 
                     found = True
                     break
@@ -125,6 +144,9 @@ class PackageBuilder(object):
                 raise CannotFulfillDependencies(
                     'No version of the required source package "%s" fulfills '
                     'the requirements.' % dep_name)
+
+            # Free dep_spv and dep_sp (free locks)
+            del dep_spv, dep_sp
 
 
         # Create a dependency list with equal-dependencies out of the list of
@@ -162,7 +184,6 @@ class PackageBuilder(object):
 
         self.out.write("Found %d missing packages.\n" %
                 len(missing_pkgs))
-
 
         if len(missing_pkgs) > 0:
             Console.print_status_box("Creating a new COW cloned image ...",
@@ -567,7 +588,10 @@ def _mount_devtmpfs(root):
         os.chmod(mountpoint, 0o755)
         os.chown(mountpoint, 0, 0)
 
-    cmd = ['mount', '--bind', '/dev', mountpoint]
+    # Give every chroot environment its on devtmpfs s.t. the different
+    # environments do not interfere.
+    cmd = ['mount', '-t', 'devtmpfs', 'devtmpfs', mountpoint,
+        '-omode=620']
 
     r = subprocess.call(cmd)
     if r != 0:
@@ -730,10 +754,8 @@ def _unmount_devtmpfs(root, raises=True):
         Otherwise the function does simply nothing (good for i.e. cleaning
         resources on exit or similar).
     """
-    # TODO: see if this helps, I think it won't.
-    _unmount(os.path.join(root, 'dev', 'pts'), raises=raises, retry_busy=40)
-    # subprocess.call(['bash', '-c', 'lsof|grep /dev'])
-    _unmount(os.path.join(root, 'dev'), raises=raises, retry_busy=40)
+    _unmount(os.path.join(root, 'dev', 'pts'), raises=raises)
+    _unmount(os.path.join(root, 'dev'), raises=raises)
 
 
 def _unmount_tmp(root, raises=True):
