@@ -1,5 +1,6 @@
 import re
 import subprocess
+import sys
 from tslb import CommonExceptions as ces
 from tslb.VersionNumber import VersionNumber
 from tslb import Architecture
@@ -12,16 +13,20 @@ class Tpm2_pack:
     def __init__(self, tpm2_pack='tpm2_pack'):
         self.tpm2_pack = tpm2_pack
 
-    def pack(self, directory):
+    def pack(self, directory, stdout=sys.stdout, stderr=sys.stderr):
         """
         Package the unpacked form in the given directory.
 
         :param str directory: The root of the unpacked form.
+        :param stdout: sys.stdout-like object for tpm2_pack's stdout
+        :param stderr: sys.stdout-like object for tpm2_pack's stderr
         :raises `CommonExceptions.CommandFailed`: If packaging fails.
         """
         cmd = [self.tpm2_pack, '.']
 
-        res = subprocess.run(cmd, cwd=directory)
+        res = subprocess.run(cmd, cwd=directory,
+                stdout=stdout.fileno(), stderr=stderr.fileno())
+
         if (res.returncode != 0):
             raise ces.CommandFailed(' '.join(cmd))
 

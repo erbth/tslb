@@ -11,8 +11,12 @@ from tslb.tclm import lock_X
 from tslb import tclm
 from tslb import rootfs
 from tslb import scratch_space
+import errno
 import multiprocessing
 import os
+import pty
+import select
+import threading
 
 
 def initially_create_all_locks():
@@ -101,7 +105,7 @@ def run_bash_in_rootfs_image(img_id):
         image.unmount(mount_namespace)
 
 
-class FDWrapper(object):
+class FDWrapper:
     """
     Wraps an fd into something that behaves like sys.stdout etc.
     This does NOT close the fd on deletion!
@@ -139,3 +143,75 @@ def is_mounted(path):
                 return True
 
     return False
+
+
+class LogTransformer:
+    """
+    A context manager that provides the writer-end of a pty in from of an
+    sys.stdout-like object and starts a background thread which reads from it,
+    transforms log lines accordingly and writes the output to the given
+    stdout-like object.
+
+    It can optionally aquire a given lock while writing to protect the output
+    FD.
+
+    :param str pattern: Pattern used when writing to the output. %(line)s is
+                        substituted by a line read from the input.
+    :param out:         Output sys.stdout-like object
+    :param lock:        Optional lock to acquire while writing, defaults to
+                        None.
+    """
+    def __init__(self, pattern, out, lock=None):
+        self._pattern = pattern
+        self._out = out
+        self._lock = lock
+        self._master = None
+        self._slave = None
+        self._worker = None
+
+        self._pipe_r = None
+        self._pipe_w = None
+
+    def _worker_fun(self):
+        while True:
+            rfds,_,_ = select.select([self._master, self._pipe_r], [], [])
+            if self._master in rfds:
+                lines = os.read(self._master, 65535)
+            elif self._pipe_r in rfds:
+                break
+
+            # read() returning zero indicates EOF
+            if not lines:
+                return
+
+            lines = lines.decode('utf8').replace('\r', '').rstrip('\n').split('\n')
+            text = ''.join((self._pattern % {'line': line}) + '\n' for line in lines)
+
+            if self._lock is not None:
+                with self._lock:
+                    self._out.write(text)
+            else:
+                self._out.write(text)
+
+    def __enter__(self):
+        self._master, self._slave = pty.openpty()
+        self._pipe_r, self._pipe_w = os.pipe()
+        self._worker = threading.Thread(target=self._worker_fun)
+        self._worker.start()
+        return FDWrapper(self._slave)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # Request exit
+        os.write(self._pipe_w, b'1')
+        self._worker.join()
+
+        os.close(self._slave)
+        os.close(self._master)
+        os.close(self._pipe_r)
+        os.close(self._pipe_w)
+
+        self._master = None
+        self._slave = None
+        self._pipe_r = None
+        self._pipe_w = None
+        self._worker = None

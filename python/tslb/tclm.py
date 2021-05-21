@@ -29,11 +29,20 @@ def ensure_connection():
 thlocal = threading.local()
 
 def get_local_p():
+    """
+    Get the thread local TCLM process
+    """
     if not getattr(thlocal, 'p', None):
         ensure_connection()
         thlocal.p = tclmc.register_process()
 
     return thlocal.p
+
+def set_local_p(p):
+    """
+    Set the thread local TCLM process
+    """
+    thlocal.p = p
 
 
 class lock(object):

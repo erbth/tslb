@@ -1,11 +1,17 @@
 from tslb import Architecture
-from tslb import settings
 from tslb import package_utils
-from tslb.tpm import Tpm2_pack
+from tslb import settings
+from tslb import tclm
 from tslb.build_pipeline.common_functions import update_binary_package_files
-import tslb.CommonExceptions as ces
+from tslb.tpm import Tpm2_pack
+from tslb.utils import LogTransformer
+import concurrent.futures
 import os
 import shutil
+import sys
+import threading
+import time
+import tslb.CommonExceptions as ces
 
 class StageCreatePMPackages(object):
     name = 'create_pm_packages'
@@ -27,65 +33,107 @@ class StageCreatePMPackages(object):
 
         tpm2_pack = Tpm2_pack()
 
-        for n in spv.list_current_binary_packages():
-            bv = max(spv.list_binary_package_version_numbers(n))
-            b = spv.get_binary_package(n, bv)
+        # Binary packages should not conflict with each other, hence packaging
+        # them in parallel should not yield a deadlock.
+        with concurrent.futures.ThreadPoolExecutor(4) as exe:
+            tclm_p = tclm.get_local_p()
+            console_lock = threading.Lock()
+
+            def debug_fcnt():
+                while True:
+                    time.sleep(1)
+
+                    # Print all threads
+                    print("Threads:")
+                    frames = sys._current_frames()
+                    for t in threading.enumerate():
+                        frame = frames.get(t.ident)
+                        if not frame:
+                            continue
+
+                        c = frame.f_code
+                        pos = c.co_filename + ":" + str(frame.f_lineno)
+                        print("  %s (%s): %s" % (t.ident, t.name, pos))
+
+            thdbg = threading.Thread(target=debug_fcnt)
+            thdbg.start()
+
+            def package(arg):
+                pkg_index, n = arg
+
+                with LogTransformer("%3d: %%(line)s" % pkg_index, out, console_lock) as tr_out:
+                    # Use the same TCLM process in all threads.
+                    tclm.set_local_p(tclm_p)
+
+                    bv = max(spv.list_binary_package_version_numbers(n))
+                    b = spv.get_binary_package(n, bv)
 
 
-            # Update files
-            out.write("Updating files of binary package `%s' ...\n" % b.name)
-            update_binary_package_files(b)
+                    # Update files
+                    tr_out.write("Updating files of binary package `%s' ...\n" % b.name)
+                    update_binary_package_files(b)
 
-            # Create desc.xml
-            out.write("Packing ...\n")
+                    # Create desc.xml
+                    tr_out.write("Packing ...\n")
 
-            with open(os.path.join(b.scratch_space_base, 'desc.xml'), 'w', encoding='utf8') as f:
-                f.write(package_utils.desc_from_binary_package(b))
+                    with open(os.path.join(b.scratch_space_base, 'desc.xml'), 'w', encoding='utf8') as f:
+                        f.write(package_utils.desc_from_binary_package(b))
 
-            # Pack
-            from tslb.package_builder import execute_in_chroot
+                    # Pack
+                    from tslb.package_builder import execute_in_chroot
 
-            def chroot_func(scratch_space_base, out):
-                try:
-                    tpm2_pack.pack(scratch_space_base)
-                    return 0
+                    def chroot_func(scratch_space_base, out):
+                        try:
+                            tpm2_pack.pack(scratch_space_base, stdout=out, stderr=out)
+                            return 0
 
-                except ces.CommandFailed as e:
-                    out.write(str(e))
-                    return 1
+                        except ces.CommandFailed as e:
+                            tr_out.write(str(e))
+                            return 1
 
-            chroot_scratch_space_base = '/tmp/tslb/scratch_space/binary_packages/%s/%s' % (
-                b.name, b.version_number)
+                    chroot_scratch_space_base = '/tmp/tslb/scratch_space/binary_packages/%s/%s' % (
+                        b.name, b.version_number)
 
-            ret = execute_in_chroot(rootfs_mountpoint, chroot_func,
-                                    chroot_scratch_space_base, out)
+                    ret = execute_in_chroot(rootfs_mountpoint, chroot_func,
+                                            chroot_scratch_space_base, tr_out)
 
-            if ret != 0:
+                    if ret != 0:
+                        return False
+
+                    return True
+
+
+                    # Copy the package to the collecting repo
+                    transport_form = '%s-%s_%s.tpm2' % (b.name, b.version_number,
+                            Architecture.to_str(b.architecture))
+
+                    tr_out.write("Copying transport form `%s' to the collecting repo ...\n" % transport_form)
+
+                    transport_form = os.path.join(b.scratch_space_base, transport_form)
+
+                    arch_dir = os.path.join(
+                            settings.get_collecting_repo_location(),
+                            Architecture.to_str(b.architecture))
+
+                    if not os.path.isdir(arch_dir):
+                        os.mkdir(archdir)
+                        os.chown(archdir, 0, 0)
+                        os.chmod(archdir, 0o755)
+
+                    shutil.copy(transport_form,
+                        os.path.join(arch_dir, ''))
+
+                    tr_out.write("\n")
+
+                    return True
+
+            # for n in spv.list_current_binary_packages():
+            #     if not package(n):
+            #         success = False
+            #         break
+
+            res = exe.map(package, enumerate(spv.list_current_binary_packages()))
+            if not all(res):
                 success = False
-                break
-
-
-            # Copy the package to the collecting repo
-            transport_form = '%s-%s_%s.tpm2' % (b.name, b.version_number,
-                    Architecture.to_str(b.architecture))
-
-            out.write("Copying transport form `%s' to the collecting repo ...\n" % transport_form)
-
-            transport_form = os.path.join(b.scratch_space_base, transport_form)
-
-            arch_dir = os.path.join(
-                    settings.get_collecting_repo_location(),
-                    Architecture.to_str(b.architecture))
-
-            if not os.path.isdir(arch_dir):
-                os.mkdir(archdir)
-                os.chown(archdir, 0, 0)
-                os.chmod(archdir, 0o755)
-
-            shutil.copy(transport_form,
-                os.path.join(arch_dir, ''))
-
-            out.write("\n")
-
 
         return success
