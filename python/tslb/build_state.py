@@ -5,60 +5,122 @@ from here shall access the database as directly as possible and hence reduce
 overhead. They shall be pretty fast.
 """
 
-from tslb import database as db
 from tslb import Architecture
+from tslb import CommonExceptions as ces
 from tslb import build_pipeline as bp
 from tslb import database as db
+from tslb import database as db
+from tslb import parse_utils
+from tslb import tclm
 from tslb import timezone
+from tslb.SourcePackage import NoSuchSourcePackage, NoSuchSourcePackageVersion
+from tslb.SourcePackage import SourcePackageList, SourcePackage
+from tslb.VersionNumber import VersionNumber
 from tslb.database import BuildPipeline as dbbp
 from tslb.database import SourcePackage as dbsp
-from tslb.SourcePackage import NoSuchSourcePackage, NoSuchSourcePackageVersion
-from tslb.VersionNumber import VersionNumber
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.expression import or_
 
 
-def outdate_package_stage(name, arch, version, stage):
+def outdate_package_stage(name, arch, version, stage, session=None):
     """
     Outdate the given source package version.
 
+    :param session: Optional DB session or None to create one.
+
     :raises NoSuchSourcePackage:
     :raises NoSuchSourcePackageVersion:
+    :raises RuntimeError: If there's no lock for the given packages...
     :raises ValueError: If the given stage does not exist.
     """
     version = VersionNumber(version)
     arch = Architecture.to_int(arch)
 
-    with db.session_scope() as s:
-        # Verify that the source package and -version exist
-        sp = aliased(dbsp.SourcePackage)
+    # Acquire lock
+    dblp = 'tslb.db.%s.source_packages.%s.%s' % \
+            (Architecture.architectures[arch], name, str(version).replace('.', '_'))
 
-        if not s.query(sp.name).filter(sp.name == name,
-                sp.architecture == arch).first():
+    dblk = tclm.define_lock(dblp)
 
-            raise NoSuchSourcePackage(name, arch)
+    own_session = session is None
 
-        spv = aliased(dbsp.SourcePackageVersion)
+    with tclm.lock_X(dblk):
+        if own_session:
+            session = db.get_session()
 
-        if not s.query(spv.source_package).filter(spv.source_package == name,
-                spv.architecture == arch,
-                spv.version_number == version).first():
+        try:
+            # Verify that the source package and -version exist
+            sp = aliased(dbsp.SourcePackage)
 
-            raise NoSuchSourcePackageVersion(name, arch, version)
+            if not session.query(sp.name).filter(sp.name == name,
+                    sp.architecture == arch).first():
+
+                raise NoSuchSourcePackage(name, arch)
+
+            spv = aliased(dbsp.SourcePackageVersion)
+
+            if not session.query(spv.source_package).filter(spv.source_package == name,
+                    spv.architecture == arch,
+                    spv.version_number == version).first():
+
+                raise NoSuchSourcePackageVersion(name, arch, version)
 
 
-        # Verify that the stage exists
-        bps = aliased(dbbp.BuildPipelineStage)
+            # Verify that the stage exists
+            bps = aliased(dbbp.BuildPipelineStage)
 
-        if not s.query(bps.name).filter(bps.name == stage).first():
-            raise ValueError("No such build pipeline stage: %s" % stage)
+            if not session.query(bps.name).filter(bps.name == stage).first():
+                raise ValueError("No such build pipeline stage: %s" % stage)
 
 
-        # Create an outdated event
-        oe = dbbp.BuildPipelineStageEvent(stage, timezone.now(), name, arch,
-                version, dbbp.BuildPipelineStageEvent.status_values.outdated)
+            # Create an outdated event
+            oe = dbbp.BuildPipelineStageEvent(stage, timezone.now(), name, arch,
+                    version, dbbp.BuildPipelineStageEvent.status_values.outdated)
 
-        s.add(oe)
+            session.add(oe)
+
+            if own_session:
+                session.commit()
+
+        except:
+            if own_session:
+                session.rollback()
+            raise
+
+        finally:
+            if own_session:
+                session.close()
+
+def outdate_enabled_versions_in_arch(arch, stage):
+    """
+    Outdate all "enabled" versions of each package in the given architecture.
+
+    :raises ValueError: If the given stage does not exist
+    """
+    # Acquire S+ lock on architecture
+    dbrlp = 'tslb.db.%s' % Architecture.to_str(arch)
+    dbrlk = tclm.define_lock(dbrlp)
+
+    with tclm.lock_Splus(dbrlk):
+        with db.session_scope() as s:
+            # Outdate all enabled versions
+            for name in SourcePackageList(arch).list_source_packages():
+                enabled_versions = []
+
+                sp = SourcePackage(name, arch)
+                for v in sp.list_version_numbers():
+                    try:
+                        if parse_utils.is_yes(sp.get_version(v).get_attribute('enabled')):
+                            enabled_versions.append(v)
+
+                    except ces.NoSuchAttribute:
+                        pass
+
+                # Free lock
+                del sp
+
+                for v in enabled_versions:
+                    outdate_package_stage(name, arch, v, stage, session=s)
 
 
 def get_build_state(spv, s=None):

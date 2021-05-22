@@ -23,10 +23,11 @@ db_password = ds['password']
 del ds
 
 
-class conn(object):
+class conn:
     """
     A singleton thread local DB connection wrapper
     """
+    @staticmethod
     def get_session():
         if getattr(thlocal, 'db_sessionmaker', None) is None:
             url = 'postgresql://%s:%s@%s/%s' % (db_user, db_password, db_host, db_name)

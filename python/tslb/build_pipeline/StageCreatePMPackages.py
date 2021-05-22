@@ -13,7 +13,7 @@ import threading
 import time
 import tslb.CommonExceptions as ces
 
-class StageCreatePMPackages(object):
+class StageCreatePMPackages:
     name = 'create_pm_packages'
 
     def flow_through(spv, rootfs_mountpoint, out):
@@ -38,25 +38,6 @@ class StageCreatePMPackages(object):
         with concurrent.futures.ThreadPoolExecutor(4) as exe:
             tclm_p = tclm.get_local_p()
             console_lock = threading.Lock()
-
-            def debug_fcnt():
-                while True:
-                    time.sleep(1)
-
-                    # Print all threads
-                    print("Threads:")
-                    frames = sys._current_frames()
-                    for t in threading.enumerate():
-                        frame = frames.get(t.ident)
-                        if not frame:
-                            continue
-
-                        c = frame.f_code
-                        pos = c.co_filename + ":" + str(frame.f_lineno)
-                        print("  %s (%s): %s" % (t.ident, t.name, pos))
-
-            thdbg = threading.Thread(target=debug_fcnt)
-            thdbg.start()
 
             def package(arg):
                 pkg_index, n = arg
@@ -83,6 +64,10 @@ class StageCreatePMPackages(object):
                     from tslb.package_builder import execute_in_chroot
 
                     def chroot_func(scratch_space_base, out):
+                        # Deadlocks can occur when printing immediately from a
+                        # forked child process if many forks happen
+                        # immediately.
+                        time.sleep(0.5)
                         try:
                             tpm2_pack.pack(scratch_space_base, stdout=out, stderr=out)
                             return 0
@@ -99,8 +84,6 @@ class StageCreatePMPackages(object):
 
                     if ret != 0:
                         return False
-
-                    return True
 
 
                     # Copy the package to the collecting repo
@@ -127,8 +110,8 @@ class StageCreatePMPackages(object):
 
                     return True
 
-            # for n in spv.list_current_binary_packages():
-            #     if not package(n):
+            # for arg in enumerate(spv.list_current_binary_packages()):
+            #     if not package(arg):
             #         success = False
             #         break
 

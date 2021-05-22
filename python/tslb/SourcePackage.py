@@ -23,7 +23,7 @@ from tslb.scratch_space import ScratchSpacePool
 # For convenience methods
 from tslb.Constraint import VersionConstraint, DependencyList
 
-class SourcePackageList(object):
+class SourcePackageList:
     def __init__(self, architecture, create_locks = False):
         architecture = Architecture.to_int(architecture)
 
@@ -105,7 +105,7 @@ class SourcePackageList(object):
                     s.delete(spkg)
 
 
-class SourcePackage(object):
+class SourcePackage:
     def __init__(self, name, architecture,
         write_intent = False, create_locks = False, db_session=None):
 
@@ -407,7 +407,7 @@ class SourcePackage(object):
             Architecture.to_str(self.architecture))
 
 
-class SourcePackageVersion(object):
+class SourcePackageVersion:
     def __init__(self, source_package, version_number, create_locks=False, db_session=None):
         """
         A source package version.

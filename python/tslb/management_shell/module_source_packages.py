@@ -11,7 +11,7 @@ from tslb import SourcePackage as spkg
 from tslb.management_shell import *
 from tslb.VersionNumber import VersionNumber
 from tslb.timezone import localtime
-from tslb.build_state import outdate_package_stage
+from tslb.build_state import outdate_package_stage, outdate_enabled_versions_in_arch
 import tslb.build_pipeline as bpp
 
 
@@ -39,10 +39,39 @@ class ArchDirectory(Directory):
         content = [SourcePackageDirectory(name, self.arch)
                 for name in spkg.SourcePackageList(self.arch).list_source_packages()]
 
+        content.append(SourcePackageActionOutdateEnabledVersionsArch(self.arch))
         content.append(SourcePackageActionCreate(self.arch))
         content.append(SourcePackageActionDestroy(self.arch))
 
         return content
+
+
+class SourcePackageActionOutdateEnabledVersionsArch(Action):
+    """
+    Outdate all enabled versions in the architecture
+    """
+    def __init__(self, arch):
+        super().__init__(writes=True)
+
+        self.arch = arch
+        self.name = "outdate_enabled_versions"
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <stage>" % args[0])
+            return
+
+        try:
+            outdate_enabled_versions_in_arch(self.arch, args[1])
+            print(Color.GREEN + "finished." + Color.NORMAL)
+
+        except ValueError as e:
+            print(str(e))
+
+        except BaseException as e:
+            print(e)
+            print(Color.RED + "FAILED." + Color.NORMAL)
 
 
 class SourcePackageActionCreate(Action):
@@ -1190,6 +1219,7 @@ class SourcePackageVersionBuildStateOutdateAction(Action):
             print(str(e))
 
         except BaseException as e:
+            print(e)
             print(Color.RED + "FAILED." + Color.NORMAL)
 
 

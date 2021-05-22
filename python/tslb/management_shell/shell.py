@@ -201,6 +201,29 @@ def main(*args):
                 print(str(e) + '\n')
 
 
+        elif cmd == 'help':
+            if len(elems) != 2:
+                print("Usage: help <object>")
+                continue
+
+            obj = None
+            for elem in cwd.listdir():
+                if elem.name == elems[1]:
+                    obj = elem
+                    break
+
+            if obj is None:
+                print("No such object in the current working directory.")
+                continue
+
+            if isinstance(obj, Action) or isinstance(obj, Property):
+                print(obj.__doc__)
+            elif isinstance(obj, Directory):
+                print("This is a directory.")
+            else:
+                print("Help for this object not implemented.")
+
+
         else:
             # See if the current working directory contains an action or
             # property with that name.

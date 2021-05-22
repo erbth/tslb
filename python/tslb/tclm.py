@@ -45,7 +45,7 @@ def set_local_p(p):
     thlocal.p = p
 
 
-class lock(object):
+class lock:
     """
     A wrapper around a TCLM lock that uses the thread local process TCLM
     process.
@@ -136,7 +136,7 @@ def register_process():
     return tclmc.register_process()
 
 # Context managers for scoped locking
-class lock_S(object):
+class lock_S:
     """
     Context manager that holds the specified lock in S mode.
     """
@@ -150,7 +150,7 @@ class lock_S(object):
         self.lk.release_S()
 
 
-class lock_Splus(object):
+class lock_Splus:
     """
     Context manager that holds the specified lock in S+ mode.
     """
@@ -164,7 +164,7 @@ class lock_Splus(object):
         self.lk.release_Splus()
 
 
-class lock_X(object):
+class lock_X:
     """
     Context manager that holds the specified lock in X mode.
     """

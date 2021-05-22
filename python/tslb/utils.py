@@ -2,21 +2,24 @@
 Some utility functions that are useful in various conditions or special states
 of the system, and do not properly fit into exactly one Python module/package.
 """
+from tslb import rootfs
+from tslb import rootfs
+from tslb import scratch_space
+from tslb import tclm
+from tslb import tclm
 from tslb.Architecture import architectures
 from tslb.BinaryPackage import BinaryPackage
 from tslb.SourcePackage import SourcePackage, SourcePackageList, SourcePackageVersion
-from tslb import rootfs
-from tslb import tclm
 from tslb.tclm import lock_X
-from tslb import tclm
-from tslb import rootfs
-from tslb import scratch_space
+import contextlib
 import errno
 import multiprocessing
 import os
 import pty
 import select
+import sys
 import threading
+import traceback
 
 
 def initially_create_all_locks():
@@ -215,3 +218,41 @@ class LogTransformer:
         self._pipe_r = None
         self._pipe_w = None
         self._worker = None
+
+
+@contextlib.contextmanager
+def thread_inspector(stop=True):
+    """
+    Start a thread inspecing all threads to e.g. find deadlocks.
+
+    :param bool stop: Stop the monitor after exiting the with-statement
+        (defaults to True, may interfer with other things if kept running...)
+    """
+    ev = threading.Event()
+
+    def debug_fcnt():
+        while True:
+            if ev.wait(1):
+                break
+
+            # Print all threads
+            print("Threads: (PID: %s)" % os.getpid())
+            frames = sys._current_frames()
+            for t in threading.enumerate():
+                frame = frames.get(t.ident)
+                if not frame:
+                    continue
+
+                c = frame.f_code
+                pos = c.co_filename + ":" + str(frame.f_lineno)
+                print("  %s (%s): %s" % (t.ident, t.name, pos))
+                print(traceback.print_stack(frame))
+
+    thdbg = threading.Thread(target=debug_fcnt)
+    thdbg.start()
+
+    yield
+
+    if stop:
+        ev.set()
+        thdbg.join()

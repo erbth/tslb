@@ -13,7 +13,7 @@ from tslb.VersionNumber import VersionNumber
 from tslb.build_pipeline import BuildPipeline
 from tslb.filesystem import FileOperations as fops
 from tslb.tpm import Tpm2
-from tslb.utils import is_mounted
+from tslb.utils import is_mounted, thread_inspector
 import multiprocessing
 import os
 import shutil
@@ -357,7 +357,9 @@ class PackageBuilder(object):
 
             # Publish, downgrade lock (for safety) and remount read only.
             unmount_pseudo_filesystems(mountpoint, raises=False)
+            self.out.write("  unmounting image...\n")
             image.unmount(self.mount_namespace)
+            self.out.write("  finished.\n")
 
             image.publish()
 
@@ -417,12 +419,13 @@ def execute_in_chroot(root, f, *args, **kwargs):
     """
     Executes the function f in a chroot environment, see start_in_chroot.
 
-    :returns: What f returns
-    :rtype int:
+    :returns: What f returns or the child-processes exit code if != 0, e.g. -N
+        if the child gets killed by a signal.
+    :rtype: int
     """
-    p = start_in_chroot(root, f, *args, **kwargs)
+    p,q = start_in_chroot(root, f, *args, **kwargs)
     p.join()
-    return p.exitcode
+    return q.get() if p.exitcode == 0 else p.exitcode
 
 
 def start_in_chroot(root, f, *args, **kwargs):
@@ -435,10 +438,13 @@ def start_in_chroot(root, f, *args, **kwargs):
     :type f: MUST return int, NoneType or `subprocess.CompletedProcess`.
     :param *args: are passed to f
     :param **kwargs: are passed to f, too
-    :returns: The started (but not joined) process.
+    :returns: The started (but not joined) process and a Queue on which f's
+              result will be placed.
     :rtype: multiprocessing.Process
     :raises: what f raises (plus what may fail ...).
     """
+    q = multiprocessing.Queue()
+
     def enter(root, f, *args, **kwargs):
         # Clear environment (but preserve TERM)
         TERM = os.getenv('TERM')
@@ -459,13 +465,13 @@ def start_in_chroot(root, f, *args, **kwargs):
         if isinstance(r, subprocess.CompletedProcess):
             r = r.returncode
 
-        exit(0 if r is None else r)
+        q.put(0 if r is None else r)
 
     p = multiprocessing.Process(target=enter,
         args=(root, f, *args), kwargs=kwargs)
 
     p.start()
-    return p
+    return (p,q)
 
 
 # Mounting- and unmounting pseudo filesystems
