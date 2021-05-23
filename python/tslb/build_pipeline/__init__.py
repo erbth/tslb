@@ -22,7 +22,7 @@ from tslb.SourcePackage import SourcePackage, SourcePackageVersion
 from tslb.database import BuildPipeline as dbbp
 from tslb.filesystem import FileOperations as fops
 from tslb.buffers import ConsoleBufferFixedSize
-from tslb.utils import FDWrapper
+from tslb.basic_utils import FDWrapper
 
 from .StageUnpack import StageUnpack
 from .StagePatch import StagePatch

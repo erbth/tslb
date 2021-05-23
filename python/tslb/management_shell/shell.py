@@ -78,11 +78,17 @@ def main(*args):
             return exitcode
 
         elif cmd == "ls":
+            pattern = "*"
             if len(elems) > 1:
-                print("ls does not accept arguments.")
-                continue
+                pattern = ' '.join(elems[1:])
+
+            # Prepare pattern
+            pattern = re.compile('^' + re.escape(pattern).replace(r'\*', '.*') + '$')
 
             for e in cwd.listdir():
+                if not re.match(pattern, e.name):
+                    continue
+
                 s = ""
                 postfix = ""
 
@@ -217,9 +223,14 @@ def main(*args):
                 continue
 
             if isinstance(obj, Action) or isinstance(obj, Property):
-                print(obj.__doc__)
+                if obj.__doc__:
+                    print(obj.__doc__)
+                else:
+                    print("No help available")
+
             elif isinstance(obj, Directory):
                 print("This is a directory.")
+
             else:
                 print("Help for this object not implemented.")
 

@@ -14,6 +14,7 @@ class RootDirectory(Directory):
     def listdir(self):
         return [
             ImagesDirectory(),
+            ToolsDirectory(),
             ActionList(),
             ActionCreateEmpty(),
             ActionCowClone(),
@@ -185,6 +186,7 @@ class ImageDirectory(Directory):
             ImagePublishAction(self.img_id, True),
             ImagePublishAction(self.img_id, False),
             ImageRemoveRoBaseAction(self.img_id),
+            ImageListChildrenAction(self.img_id),
             ImageFlattenAction(self.img_id),
             ImageMountAction(self.img_id),
             ImageRunBashAction(self.img_id)
@@ -321,6 +323,23 @@ class ImageRemoveRoBaseAction(Action, ImageBaseFactory):
             print("\033[31mFAILED\033[0m: %s" % e)
 
 
+class ImageListChildrenAction(Action, ImageBaseFactory):
+    """
+    List COW-clones of this image.
+    """
+    def __init__(self, img_id):
+        super().__init__(writes=False)
+        self.img_id = img_id
+        self.name = "list_children"
+
+
+    def run(self, *args):
+        img = self.create_image(False)
+        print("Children:")
+        for c in img.list_children():
+            print("  %s" % c)
+
+
 class ImageFlattenAction(Action, ImageBaseFactory):
     """
     Flatten an image.
@@ -416,5 +435,57 @@ class ImageRunBashAction(Action, ImageBaseFactory):
             finally:
                 img.unmount('mgmt_shell')
 
+        except Exception as e:
+            print("\033[31mFAILED\033[0m: %s" % e)
+
+
+#********************************** Tools *************************************
+class ToolsDirectory(Directory):
+    """
+    A directory with tools for rootfs images.
+    """
+    def __init__(self):
+        super().__init__()
+        self.name = "tools"
+
+
+    def listdir(self):
+        return [
+            ActionToolsDeleteProbablyUnused(),
+            ActionToolsDeleteProbablyRecreatable()
+        ]
+
+
+class ActionToolsDeleteProbablyUnused(Action):
+    """
+    Delete all images that have no comment and are not published. Child images
+    are flattened.
+    """
+    def __init__(self):
+        super().__init__(writes=True)
+        self.name = "delete_probably_unused"
+
+
+    def run(self, *args):
+        try:
+            rootfs.delete_probably_unused_images()
+            print("\033[32mok.\033[0m")
+        except Exception as e:
+            print("\033[31mFAILED\033[0m: %s" % e)
+
+
+class ActionToolsDeleteProbablyRecreatable(Action):
+    """
+    Delete all published images without a comment. Child images are flattened.
+    """
+    def __init__(self):
+        super().__init__(writes=True)
+        self.name = "delete_probably_recreatable"
+
+
+    def run(self, *args):
+        try:
+            rootfs.delete_probably_recreatable_images()
+            print("\033[32mok.\033[0m")
         except Exception as e:
             print("\033[31mFAILED\033[0m: %s" % e)

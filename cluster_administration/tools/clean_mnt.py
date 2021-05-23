@@ -49,7 +49,7 @@ def main():
     rbd_maps = ['/dev/rbd' + str(i) for i in os.listdir('/sys/bus/rbd/devices')]
     for m in rbd_maps:
         print("unmapping '%s'." % m)
-        ensure_ret(subprocess.run(['rbd', 'unmap', m]))
+        ensure_ret(subprocess.run(['rbd', '-c', '/dev/null', 'unmap', m]))
 
 if __name__ == '__main__':
     main()

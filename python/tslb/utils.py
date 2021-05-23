@@ -2,24 +2,21 @@
 Some utility functions that are useful in various conditions or special states
 of the system, and do not properly fit into exactly one Python module/package.
 """
-from tslb import rootfs
+from concurrent import futures
+from datetime import datetime, timezone
+from tslb import Architecture
+from tslb import build_pipeline
 from tslb import rootfs
 from tslb import scratch_space
 from tslb import tclm
-from tslb import tclm
-from tslb.Architecture import architectures
 from tslb.BinaryPackage import BinaryPackage
 from tslb.SourcePackage import SourcePackage, SourcePackageList, SourcePackageVersion
 from tslb.tclm import lock_X
-import contextlib
-import errno
-import multiprocessing
 import os
-import pty
-import select
-import sys
-import threading
-import traceback
+import re
+
+# Compatibility
+from tslb.basic_utils import *
 
 
 def initially_create_all_locks():
@@ -31,7 +28,7 @@ def initially_create_all_locks():
     scratch_space.create_locks()
 
     # Create locks for packages
-    for arch in architectures.keys():
+    for arch in Architecture.architectures.keys():
         spl = SourcePackageList(arch, create_locks = True)
 
         sps = spl.list_source_packages()
@@ -108,151 +105,99 @@ def run_bash_in_rootfs_image(img_id):
         image.unmount(mount_namespace)
 
 
-class FDWrapper:
+def remove_old_snapshots_from_scratch_space(space, keep, print_fn=None):
     """
-    Wraps an fd into something that behaves like sys.stdout etc.
-    This does NOT close the fd on deletion!
+    Remove 'old' snapshots from a scratch space; i.e. snapshots of a build
+    pipeline stage that does not exist anymore or where :param keep: newer
+    snapshots of that build pipeline stage exist. Note that at least one
+    snapshot of each stage is kept, hence settings keep < 1 results in a
+    ValueError.
 
-    :param int fd: The fd to wrap
+    This requires an X lock on the scratch space (it must be created with `rw =
+    True`) and that the scratch space is not mounted.
+
+    :param ScratchSpace space:
+    :param int keep: Number of snapshots to keep of each stage.
+    :param print_fn: An optional callable that will be called on each snapshot
+        before it is removed. It receives the snapshot's name as argument. It
+        may be used to e.g. print which snapshots are removed.
+
+    :raises ValueError: If keep < 1
+    :raises scratch_space.NotWritable: If the space does not have an X lock
+    :raises ScratchSpaceMounted: If the scratch space is mounted
     """
-    def __init__(self, fd):
-        self._fd = fd
+    if keep < 1:
+        raise ValueError("At least one snapshot of each build pipeline stage "
+                "must be kept.")
 
-    def fileno(self):
-        return self._fd
+    if not space.rw:
+        raise scratch_space.NotWritable
 
-    def close(self):
-        os.close(self._fd)
+    if space.mounted:
+        raise ScratchSpaceMounted
+
+    # Find such snapshots
+    to_remove = []
+    stage_snapshots = { s.name: [] for s in build_pipeline.all_stages }
+
+    for snap in space.list_snapshots():
+        m = re.match(r'^(.*)-(\d+-\d+-[^-]+)$', snap)
+        if not m or m[1] not in stage_snapshots:
+            to_remove.append(snap)
+            continue
+
+        stage_snapshots[m[1]].append(
+                (datetime.fromisoformat(m[2]).replace(tzinfo=timezone.utc), snap))
+
+    for snaps in stage_snapshots.values():
+        snaps.sort()
+        snaps.reverse()
+        to_remove += [t[1] for t in snaps[keep:]]
+
+    # Remove snapshots
+    for snap in to_remove:
+        if print_fn:
+            print_fn(snap)
+
+        space.delete_snapshot(snap)
 
 
-    def write(self, data):
-        """
-        :type data: str or bytes
-        """
-        if isinstance(data, str):
-            data = data.encode('utf8')
-
-        os.write(self._fd, data)
-
-
-def is_mounted(path):
+def remove_old_snapshots_from_scratch_spaces_in_arch(arch, keep, print_fn=None):
     """
-    Returns true if the specified path exists and something is mounted there
-    i.e. it is a mountpoint.
+    Remove 'old' snapshots (see `remove_old_snapshots_from_scratch_space`) from
+    all scratch spaces that are associated with the given architecture.
+
+    :param arch:
+    :param int keep:
+    :param print_fn: Will receive scratch space and snapshot names of each
+        snapshot as arguments before it is deleted.
     """
-    with open('/proc/mounts', 'r', encoding='UTF-8') as f:
-        for mountpoint in f:
-            if mountpoint.split()[1] == path:
-                return True
+    to_process = []
 
-    return False
+    for name in scratch_space.ScratchSpacePool().list_scratch_spaces():
+        m = re.match(r'^.+_([^_]+)_[^_]+$', name)
+        if m and m[1] == Architecture.to_str(arch):
+            to_process.append(name)
 
+    with futures.ThreadPoolExecutor(5) as exe:
+        def work(name):
+            space = scratch_space.ScratchSpace(
+                    scratch_space.ScratchSpacePool(),
+                    name,
+                    True)
 
-class LogTransformer:
-    """
-    A context manager that provides the writer-end of a pty in from of an
-    sys.stdout-like object and starts a background thread which reads from it,
-    transforms log lines accordingly and writes the output to the given
-    stdout-like object.
+            remove_old_snapshots_from_scratch_space(space, keep,
+                    print_fn=(lambda sn: print_fn(name, sn)) if print_fn else None)
 
-    It can optionally aquire a given lock while writing to protect the output
-    FD.
+        fs = [exe.submit(work, name) for name in to_process]
+        res = futures.wait(fs, return_when=futures.ALL_COMPLETED)
 
-    :param str pattern: Pattern used when writing to the output. %(line)s is
-                        substituted by a line read from the input.
-    :param out:         Output sys.stdout-like object
-    :param lock:        Optional lock to acquire while writing, defaults to
-                        None.
-    """
-    def __init__(self, pattern, out, lock=None):
-        self._pattern = pattern
-        self._out = out
-        self._lock = lock
-        self._master = None
-        self._slave = None
-        self._worker = None
-
-        self._pipe_r = None
-        self._pipe_w = None
-
-    def _worker_fun(self):
-        while True:
-            rfds,_,_ = select.select([self._master, self._pipe_r], [], [])
-            if self._master in rfds:
-                lines = os.read(self._master, 65535)
-            elif self._pipe_r in rfds:
-                break
-
-            # read() returning zero indicates EOF
-            if not lines:
-                return
-
-            lines = lines.decode('utf8').replace('\r', '').rstrip('\n').split('\n')
-            text = ''.join((self._pattern % {'line': line}) + '\n' for line in lines)
-
-            if self._lock is not None:
-                with self._lock:
-                    self._out.write(text)
-            else:
-                self._out.write(text)
-
-    def __enter__(self):
-        self._master, self._slave = pty.openpty()
-        self._pipe_r, self._pipe_w = os.pipe()
-        self._worker = threading.Thread(target=self._worker_fun)
-        self._worker.start()
-        return FDWrapper(self._slave)
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        # Request exit
-        os.write(self._pipe_w, b'1')
-        self._worker.join()
-
-        os.close(self._slave)
-        os.close(self._master)
-        os.close(self._pipe_r)
-        os.close(self._pipe_w)
-
-        self._master = None
-        self._slave = None
-        self._pipe_r = None
-        self._pipe_w = None
-        self._worker = None
+        # Let potential exceptions occur
+        for r in res.done:
+            r.result()
 
 
-@contextlib.contextmanager
-def thread_inspector(stop=True):
-    """
-    Start a thread inspecing all threads to e.g. find deadlocks.
-
-    :param bool stop: Stop the monitor after exiting the with-statement
-        (defaults to True, may interfer with other things if kept running...)
-    """
-    ev = threading.Event()
-
-    def debug_fcnt():
-        while True:
-            if ev.wait(1):
-                break
-
-            # Print all threads
-            print("Threads: (PID: %s)" % os.getpid())
-            frames = sys._current_frames()
-            for t in threading.enumerate():
-                frame = frames.get(t.ident)
-                if not frame:
-                    continue
-
-                c = frame.f_code
-                pos = c.co_filename + ":" + str(frame.f_lineno)
-                print("  %s (%s): %s" % (t.ident, t.name, pos))
-                print(traceback.print_stack(frame))
-
-    thdbg = threading.Thread(target=debug_fcnt)
-    thdbg.start()
-
-    yield
-
-    if stop:
-        ev.set()
-        thdbg.join()
+#*********************************** Exceptions *******************************
+class ScratchSpaceMounted(Exception):
+    def __init__(self):
+        super().__init__("Scratch space is mounted.")

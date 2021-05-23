@@ -11,6 +11,7 @@ import subprocess
 import rados
 import rbd
 from contextlib import contextmanager
+from tslb import basic_utils
 from tslb import settings
 from tslb import tclm
 from tslb.filesystem.FileOperations import mkdir_p
@@ -303,7 +304,7 @@ class ScratchSpace:
         """
         Unmount the image if it is currently mounted.
 
-        :raises RuntimeError: if the operation fails.
+        :raises RuntimeError: If the operation fails.
         """
         # Find the device, if any.
         dev = None
@@ -448,6 +449,81 @@ class ScratchSpace:
             snaps = [snap['name'] for snap in img.list_snaps()]
 
         return snaps
+
+
+    # Mounting a snapshot
+    def is_snapshot_mounted(self, snap_name):
+        return basic_utils.is_mounted(self.get_snapshot_mount_path(snap_name))
+
+
+    def get_snapshot_mount_path(self, snap_name):
+        escaped_name = re.sub('[^a-zA-Z0-9.:+-]', '_', snap_name)
+        return self._mountpoint + '-' + escaped_name
+
+
+    def mount_snapshot(self, snap_name):
+        """
+        Mount a snapshot if it is not mounted already. The mountpoint will be
+        the normal mountpoint's name appended by the snapshot's name.
+        Characters that should not be used on a filesystem are replaced with
+        underscores. Snapshots are always mounted read-only.
+
+        :param str snap_name:
+        :raises NoSuchSnapshot:
+        :raises RuntimeError: If the operation fails.
+        """
+        if snap_name not in self.list_snapshots():
+            raise NoSuchSnapshot
+
+        if self.is_snapshot_mounted(snap_name):
+            return
+
+        # Map
+        dev = _map_rbd_image(self.name + "@" + snap_name, ro=True)
+
+        try:
+            # Mount
+            mp = self.get_snapshot_mount_path(snap_name)
+
+            if not os.path.isdir(mp):
+                mkdir_p(mp)
+
+            _mount(dev, mp, ro=True)
+
+        except:
+            _unmap_rbd_image(dev, raises=False)
+            raise
+
+
+    def unmount_snapshot(self, snap_name):
+        """
+        Unmount a snapshot it if is currently mounted.
+
+        :param str snap_name:
+        :raises RuntimeError: If the oepration fails.
+        """
+        # Find the device, if any.
+        dev = None
+        mp = self.get_snapshot_mount_path(snap_name)
+
+        with open('/proc/mounts', 'r', encoding='UTF-8') as f:
+            for line in f:
+                m = re.match(r'^(\S+)\s+(\S+)\s.*', line)
+                if m and m[2] == mp:
+                    dev = m[1]
+                    break
+
+        if dev is None:
+            return
+
+        # Unmount
+        _umount(mp)
+
+        # Unmap
+        _unmap_rbd_image(dev)
+
+        # Delete mountpoint
+        os.rmdir(mp)
 
 
 def _map_rbd_image(name, ro=False):

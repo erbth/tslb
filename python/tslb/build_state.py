@@ -129,8 +129,8 @@ def get_build_state(spv, s=None):
 
     :param SourcePackageVersion spv:
     :param s: A db session. If none, a new one will be created.
-    :returns tuple(dbbp.BuildPipelineStageEvent, str):
-        (Last successful event, last outdated event stage name)
+    :returns tuple(dbbp.BuildPipelineStageEvent, str|NoneType):
+        (Last successful event, last outdated event stage name or None)
     """
     have_session = False
 
@@ -163,7 +163,7 @@ def get_build_state(spv, s=None):
         se = aliased(dbbp.BuildPipelineStageEvent)
         se2 = aliased(dbbp.BuildPipelineStageEvent)
 
-        candidates = s.query(se)\
+        candidates = s.query(se.stage)\
                 .filter(se.source_package == spv.source_package.name,
                         se.architecture == spv.architecture,
                         se.version_number == spv.version_number,
@@ -174,24 +174,14 @@ def get_build_state(spv, s=None):
                                     se2.version_number == se.version_number,
                                     se2.status == dbbp.BuildPipelineStageEvent.status_values.success,
                                     se2.time > se.time)\
-                                .exists())\
-                .cte('candidates')
+                                .exists())
 
-        c = aliased(candidates)
-        c2 = aliased(candidates)
+        candidates = [t[0] for t in candidates]
 
-        bps = aliased(dbbp.BuildPipelineStage)
-
-        first_outdated_event_stage = s.query(c.c['stage'])\
-                .join(bps)\
-                .filter(or_(bps.parent == bps.name,
-                    ~s.query(c2)\
-                            .filter(c2.c['stage'] == bps.parent)\
-                            .exists()))\
-                .first()
-
-        if first_outdated_event_stage:
-            first_outdated_event_stage = first_outdated_event_stage[0]
+        first_outdated_event_stage = None
+        for stage in reversed(bp.all_stages):
+            if stage.name in candidates:
+                first_outdated_event_stage = stage.name
 
         return (last_successful_event, first_outdated_event_stage)
 

@@ -37,10 +37,18 @@ def to_str(param):
     :type param: int or str
     :returns: The arch in str representation
     :rtype: str
+    :raises TypeError, ValueError:
     """
     if isinstance(param, int):
-        return architectures[param]
+        try:
+            return architectures[param]
+        except KeyError as exc:
+            raise ValueError("Invalid architecture") from exc
+
     elif isinstance(param, str):
+        if param not in architectures_reverse:
+            raise ValueError("Invalid architecture")
+
         return param
     else:
         raise TypeError

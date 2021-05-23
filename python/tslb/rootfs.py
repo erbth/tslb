@@ -1,12 +1,14 @@
-from tslb.CommonExceptions import *
+from tslb import Architecture
+from tslb import ceph
 from tslb import database as db
 from tslb import settings
 from tslb import tclm
-from tslb.tclm import lock_X, lock_Splus, lock_S
-from tslb.filesystem.FileOperations import mkdir_p
+from tslb.CommonExceptions import *
 from tslb.VersionNumber import VersionNumber
-from tslb import Architecture
+from tslb.filesystem.FileOperations import mkdir_p
+from tslb.tclm import lock_X, lock_Splus, lock_S
 import tslb.database.rootfs
+import concurrent.futures
 import errno
 import os
 import re
@@ -36,7 +38,7 @@ class Image(object):
         :param acquired_X: Set to true if the image's lock is held in X mode by
             the caller. Mainly used by functions that create images.
 
-        :param db_object: The db object representing this package. Use only of
+        :param db_object: The db object representing this package. Use only if
             you ABSOLUTELY known what you are doing.
 
         :raises rootfs.NoSuchImage: If such an image does not exist.
@@ -468,13 +470,24 @@ class Image(object):
 
         :raises BaseException: If an operation fails.
         """
-        cmd = ['rbd', 'flatten',
-            *settings.get_ceph_cmd_conn_params(),
-            settings.get_ceph_rootfs_rbd_pool() + '/' + str(self.id)]
+        with ceph.ioctx_rootfs() as ioctx:
+            with ceph.rbd_img(ioctx, str(self.id)) as img:
+                img.flatten()
 
-        r = subprocess.call(cmd)
-        if r != 0:
-            raise CommandFailed(cmd, r)
+
+    def list_children(self):
+        """
+        Get child images that are COW clones of this image's ro_base snapshot.
+
+        :rtype: List(str)
+        """
+        cs = []
+        with ceph.ioctx_rootfs() as ioctx:
+            with ceph.rbd_img(ioctx, str(self.id)) as img:
+                for c in img.list_children2():
+                    cs.append(int(c['image']))
+
+        return cs
 
 
     def add_packages_to_list(self, pkgs):
@@ -658,12 +671,13 @@ def _list_rbd_image_snapshots(name):
 
 def list_images():
     """
-    List all (published and unpublished) rootfs images.
+    List all (published and unpublished) rootfs images. They are orderd by
+    ascending id.
 
     :rtype: List(int)
     """
     with db.session_scope() as s:
-        q = s.query(db.rootfs.Image.id)
+        q = s.query(db.rootfs.Image.id).order_by(db.rootfs.Image.id)
         return [t[0] for t in q]
 
 
@@ -957,7 +971,7 @@ def delete_image(img_id):
                 s.delete(ai)
 
     # Delete the image (requires an X lock on the image to ensure all
-    # operations completed.
+    # operations completed).
     lk = tclm.define_lock('tslb.rootfs.images.' + str(img_id))
 
     try:
@@ -987,7 +1001,10 @@ def delete_image(img_id):
                         + '@ro_base']
 
                 r = subprocess.call(cmd)
-                if r != 0 and r != errno.ENOENT:
+
+                # EINVAL means that the snapshot is not protected (probably
+                # because protecting it was interrupted)
+                if r != 0 and r != errno.ENOENT and r != errno.EINVAL:
                     raise CommandFailed(cmd, r)
 
             cmd = ['rbd', 'snap', 'purge',
@@ -1013,6 +1030,96 @@ def delete_image(img_id):
             pass
         else:
             raise
+
+
+def _delete_multiple_images(imgs):
+    """
+    The images must have a S-lock only. :param imgs: will be altered. No copies
+    of the contained images must exist. On successful completion, :param imgs:
+    will be empty.
+
+    :type imgs: List(Image)
+    """
+    while len(imgs) > 0:
+        img = imgs[0]
+        del imgs[0]
+
+        # Acquire an S+ lock on the image s.t. no one can change it until it is
+        # deleted (to avoid race conditions where the image would not qualify
+        # for being deleted at the very point in time at which it would be
+        # deleted, because someone may have added a comment after it has been
+        # evaluated.
+
+        lk = img.db_lock
+        with tclm.lock_Splus(lk):
+            print("Deleting image %s ..." % img.id)
+
+            # Flatten children
+            with concurrent.futures.ThreadPoolExecutor(5) as exe:
+                def work(c):
+                    print("  Flattening child %s ..." % c)
+                    Image(c).flatten()
+
+                futures = [exe.submit(work, img_id) for img_id in img.list_children()]
+                res = concurrent.futures.wait(futures, return_when=concurrent.futures.ALL_COMPLETED)
+
+                # Let potential exceptions occur
+                for r in res:
+                    r.result()
+
+            # Free S lock
+            id_ = img.id
+            del img
+
+            # Delete image
+            delete_image(id_)
+
+
+def delete_probably_unused_images():
+    """
+    Delete all images that have no comment and are not published. Child images
+    are flattened.
+    """
+    to_delete = []
+    for img_id in list_images():
+        # The image may have been deleted in the time between enumerating the
+        # images and evaluating them.
+        try:
+            img = Image(img_id)
+        except NoSuchImage:
+            continue
+
+        if not img.in_available_list and not img.comment:
+            to_delete.append(img)
+            del img
+
+    # Ids are assigned in an ascending order, hence deleting images in the
+    # reverse orders should minimize / avoid flatten operations.
+    to_delete.reverse()
+    _delete_multiple_images(to_delete)
+
+
+def delete_probably_recreatable_images():
+    """
+    Delete all published images without a comment. Child images are flattened.
+    """
+    to_delete = []
+    for img_id in list_images():
+        # The image may have been deleted in the time between enumerating the
+        # images and evaluating them.
+        try:
+            img = Image(img_id)
+        except NoSuchImage:
+            continue
+
+        if img.in_available_list and not img.comment:
+            to_delete.append(img)
+            del img
+
+    # Ids are assigned in an ascending order, hence deleting images in the
+    # reverse orders should minimize / avoid flatten operations.
+    to_delete.reverse()
+    _delete_multiple_images(to_delete)
 
 
 # *************************** Exceptions **************************************

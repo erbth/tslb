@@ -4,7 +4,7 @@ from tslb import settings
 from tslb import tclm
 from tslb.build_pipeline.common_functions import update_binary_package_files
 from tslb.tpm import Tpm2_pack
-from tslb.utils import LogTransformer
+from tslb.basic_utils import LogTransformer
 import concurrent.futures
 import os
 import shutil
