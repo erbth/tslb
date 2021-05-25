@@ -11,6 +11,8 @@ As the time of this writing the book was available from
 http://www.linuxfromscratch.org/lfs/download.html.
 """
 
+from concurrent import futures
+import concurrent.futures.thread
 import os
 import re
 import stat
@@ -18,7 +20,7 @@ import subprocess
 import sys
 
 
-def strip_and_create_debug_links_in_root(root_path, out=sys.stdout):
+def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=None):
     """
     This function finds and strips ELF files in a given system root. It handles
     the library and executable directories different. In library directories
@@ -29,33 +31,58 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout):
     :param str root_path: The path to a system's filsystem-root
     :param out: An output stream to which this function shall report shat it
         does
+    :param parallel: The number of stripping tasks to perform in parallel, or
+        None if no parallel execution shall be done.
     :raises: an exception on error.
     """
     lib_dirs = ['lib', 'usr/lib', 'usr/local/lib', 'lib64', 'opt']
     exec_dirs = ['bin', 'sbin', 'usr/bin', 'usr/sbin', 'usr/local/bin', 'usr/local/sbin']
 
-    for d in lib_dirs:
-        target = os.path.join(root_path, d)
-        if not os.path.isdir(target):
-            continue
+    exe = None
+    try:
+        if parallel:
+            if parallel < 1:
+                raise ValueError("Number of parallel threads must be >= 1.")
 
-        strip_and_create_debug_links_in_directory(
-                target,
-                max_level='unneeded',
-                out=out)
+            exe = futures.ThreadPoolExecutor(parallel)
 
-    for d in exec_dirs:
-        target = os.path.join(root_path, d)
-        if not os.path.isdir(target):
-            continue
+        fs = []
 
-        strip_and_create_debug_links_in_directory(
-                target,
-                max_level='all',
-                out=out)
+        for d in lib_dirs:
+            target = os.path.join(root_path, d)
+            if not os.path.isdir(target):
+                continue
+
+            fs += strip_and_create_debug_links_in_directory(
+                    target,
+                    max_level='unneeded',
+                    out=out,
+                    exe=exe)
+
+        for d in exec_dirs:
+            target = os.path.join(root_path, d)
+            if not os.path.isdir(target):
+                continue
+
+            fs += strip_and_create_debug_links_in_directory(
+                    target,
+                    max_level='all',
+                    out=out,
+                    exe=exe)
+
+        # Wait for futures in case of parallel execution
+        if exe:
+            # Fetch result to raise pending exceptions
+            for res in futures.wait(fs, return_when=futures.ALL_COMPLETED).done:
+                res.result()
+
+    finally:
+        if exe:
+            exe.shutdown(wait=True)
 
 
-def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.stdout):
+def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.stdout,
+        exe=None):
     """
     This function finds and strips all ELF files in a given directory.
 
@@ -64,6 +91,9 @@ def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.std
         < 'unneeded' < 'all'.
     :param out: An output stream to which this function shall report what it
         does.
+    :param exe: An executor for performing (potentially concurrent) stripping
+
+    :returns: A list of futures if :param exe: is given, else an empty list.
 
     :raises: an exception on error.
     """
@@ -74,18 +104,22 @@ def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.std
 
     if stat.S_ISDIR(stbuf.st_mode):
         # Recursively process directory
+        ret = []
         for elem in os.listdir(path):
-            strip_and_create_debug_links_in_directory(
+            ret += strip_and_create_debug_links_in_directory(
                     os.path.join(path, elem),
                     max_level,
-                    out)
+                    out,
+                    exe)
+
+        return ret
 
     elif stat.S_ISREG(stbuf.st_mode):
         with open(path, 'rb') as f:
             magic = f.read(4)
 
         if magic != b'\x7fELF':
-            return
+            return []
 
         # Use a filename ending based heuristics to find an appropriate strip
         # level.
@@ -104,10 +138,18 @@ def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.std
         elif max_level == 'debug':
             strip_type = 'debug'
 
-        strip_and_create_debug_links_for_elf_file(
-                path=path,
-                strip_type=strip_type,
-                out=out)
+        def work():
+            strip_and_create_debug_links_for_elf_file(
+                    path=path,
+                    strip_type=strip_type,
+                    out=out)
+
+        if exe:
+            return [exe.submit(work)]
+        else:
+            work()
+
+    return []
 
 
 def strip_and_create_debug_links_for_elf_file(path, strip_type, out=sys.stdout):

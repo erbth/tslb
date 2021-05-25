@@ -1107,7 +1107,7 @@ class SourcePackageVersionShowMostRecentInternalRDepsAction(Action, SourcePackag
             node_labels[name] = label
             bp_versions[name] = version
 
-            dot += '    %d [label="%s:%s"]\n' % (label, name, version)
+            dot += '    %d [label="%s:%s"];\n' % (label, name, version)
 
             label += 1
 
@@ -1119,7 +1119,7 @@ class SourcePackageVersionShowMostRecentInternalRDepsAction(Action, SourcePackag
 
             for dep in deps.get_required():
                 if dep in node_labels and (dep, bp_versions[dep]) in deps:
-                    dot += '    %d -> %d [label="%s"]\n' % (
+                    dot += '    %d -> %d [label="%s"];\n' % (
                             node_labels[name],
                             node_labels[dep],
                             deps.get_constraint_list(dep))

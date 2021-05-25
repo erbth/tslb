@@ -35,7 +35,7 @@ class StageCreatePMPackages:
 
         # Binary packages should not conflict with each other, hence packaging
         # them in parallel should not yield a deadlock.
-        with concurrent.futures.ThreadPoolExecutor(4) as exe:
+        with concurrent.futures.ThreadPoolExecutor(6) as exe:
             tclm_p = tclm.get_local_p()
             console_lock = threading.Lock()
 
@@ -64,10 +64,6 @@ class StageCreatePMPackages:
                     from tslb.package_builder import execute_in_chroot
 
                     def chroot_func(scratch_space_base, out):
-                        # Deadlocks can occur when printing immediately from a
-                        # forked child process if many forks happen
-                        # immediately.
-                        time.sleep(0.5)
                         try:
                             tpm2_pack.pack(scratch_space_base, stdout=out, stderr=out)
                             return 0
@@ -109,11 +105,6 @@ class StageCreatePMPackages:
                     tr_out.write("\n")
 
                     return True
-
-            # for arg in enumerate(spv.list_current_binary_packages()):
-            #     if not package(arg):
-            #         success = False
-            #         break
 
             res = exe.map(package, enumerate(spv.list_current_binary_packages()))
             if not all(res):

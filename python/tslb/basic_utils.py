@@ -5,6 +5,7 @@ by the higher-level functionality from utils.py, which requires other parts of
 the TSLB which in turn require these basic utils.
 """
 import contextlib
+import io
 import os
 import pty
 import select
@@ -161,3 +162,24 @@ def thread_inspector(stop=True):
     if stop:
         ev.set()
         thdbg.join()
+
+
+def replace_output_streams():
+    """
+    Replace sys.stdout and sys.stderr with new TextIOWrappers wrapping fds 1
+    and 2 respectively. This can be useful when the original
+    sys.stdout/sys.stderr is locked forever e.g. after a fork, where the child
+    process does not contain a thread from the parent process that locked them
+    and hence cannot unlock the streams.
+    """
+    sys.stdout = io.TextIOWrapper(
+            buffer=io.BufferedWriter(
+                raw=io.FileIO(1, mode='wb', closefd=False)
+            ),
+            encoding='utf8')
+
+    sys.stderr = io.TextIOWrapper(
+            buffer=io.BufferedWriter(
+                raw=io.FileIO(2, mode='wb', closefd=False)
+            ),
+            encoding='utf8')

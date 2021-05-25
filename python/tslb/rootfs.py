@@ -479,7 +479,7 @@ class Image(object):
         """
         Get child images that are COW clones of this image's ro_base snapshot.
 
-        :rtype: List(str)
+        :rtype: List(int)
         """
         cs = []
         with ceph.ioctx_rootfs() as ioctx:

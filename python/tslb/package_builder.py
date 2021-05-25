@@ -13,7 +13,7 @@ from tslb.VersionNumber import VersionNumber
 from tslb.build_pipeline import BuildPipeline
 from tslb.filesystem import FileOperations as fops
 from tslb.tpm import Tpm2
-from tslb.utils import is_mounted, thread_inspector
+from tslb.basic_utils import is_mounted, thread_inspector, replace_output_streams
 import multiprocessing
 import os
 import shutil
@@ -446,6 +446,10 @@ def start_in_chroot(root, f, *args, **kwargs):
     q = multiprocessing.Queue()
 
     def enter(root, f, *args, **kwargs):
+        # Replace stdout and stderr as they may have acquired locks from
+        # forking when used in a multi-threaded environment.
+        replace_output_streams()
+
         # Clear environment (but preserve TERM)
         TERM = os.getenv('TERM')
         os.environ.clear()

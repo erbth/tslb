@@ -1,7 +1,5 @@
   * [ ] flatten strategy
 
-  * [ ] concurrent stripping
-
   * [ ] packages incl. TPM2
 
   * [ ] tools

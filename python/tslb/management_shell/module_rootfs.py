@@ -1,8 +1,9 @@
-import os
-from tslb.management_shell import *
+from tslb import Architecture
 from tslb import rootfs
 from tslb import tclm
-from tslb import Architecture
+from tslb.management_shell import *
+import os
+import subprocess
 
 
 class RootDirectory(Directory):
@@ -16,6 +17,7 @@ class RootDirectory(Directory):
             ImagesDirectory(),
             ToolsDirectory(),
             ActionList(),
+            ActionShowLineage(),
             ActionCreateEmpty(),
             ActionCowClone(),
             ActionDelete()
@@ -47,6 +49,62 @@ class ActionList(Action):
 
         for i,name,published in text:
             print(" %-*s  %-*s  %s" % (c1, i, c2, name, "Yes" if published else "No"))
+
+
+class ActionShowLineage(Action):
+    """
+    Show the 'family tree' of rootfs images.
+
+    Arguments: [-g, --graph] to display a graph using a dot viewer.
+    """
+    def __init__(self):
+        super().__init__()
+        self.name = 'show_lineage'
+
+
+    def run(self, *args):
+        display = False
+
+        if len(args) > 1:
+            if len(args) == 2 and args[1] in ('-g', '--graph'):
+                display = True
+
+            else:
+                print("Invalid arguments. Use [-g, --graph].")
+                return
+
+        imgs = { i: None for i in rootfs.list_images() }
+        for img in list(imgs.keys()):
+            for c in rootfs.Image(img).list_children():
+                if c in imgs:
+                    imgs[c] = img
+
+        # Format a graph in dot
+        dot = 'digraph "rootfs images" {\n'
+
+        for img in imgs:
+            dot += '    %d [label="%d", shape=box];\n' % (img, img)
+
+        dot += '\n'
+
+        # Add edges to the graph
+        for img in imgs:
+            if imgs[img] is not None:
+                dot += '    %d -> %d;\n' % (img, imgs[img])
+
+        # Put all roots on the same level
+        roots = [ str(img) for img in imgs if imgs[img] is None ]
+        if roots:
+            dot += "\n    {rank=same; %s}\n" % ' '.join(roots)
+
+        dot += '}'
+
+        if display:
+            p = subprocess.Popen(['xdot', '-'], stdin=subprocess.PIPE)
+            p.communicate(dot.encode('utf8'))
+
+        else:
+            print(dot)
 
 
 class ActionCreateEmpty(Action):

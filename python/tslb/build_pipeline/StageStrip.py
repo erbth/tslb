@@ -31,7 +31,8 @@ class StageStrip:
             try:
                 stripping.strip_and_create_debug_links_in_root(
                         chroot_install_location,
-                        out)
+                        out=out,
+                        parallel=6)
 
             except BaseException as e:
                 out.write(Color.RED + "Error: " + Color.NORMAL + str(e) + '\n')
