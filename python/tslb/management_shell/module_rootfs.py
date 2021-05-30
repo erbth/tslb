@@ -1,5 +1,6 @@
 from tslb import Architecture
 from tslb import rootfs
+from tslb import rootfs_balancer
 from tslb import tclm
 from tslb.management_shell import *
 import os
@@ -20,7 +21,8 @@ class RootDirectory(Directory):
             ActionShowLineage(),
             ActionCreateEmpty(),
             ActionCowClone(),
-            ActionDelete()
+            ActionDelete(),
+            ActionBalanceForest()
         ]
 
 
@@ -202,6 +204,19 @@ class ActionDelete(Action):
             return
 
         print("Deleted image %d." % img_id)
+
+
+class ActionBalanceForest(Action):
+    """
+    Balance the forest of rootf images.
+    """
+    def __init__(self):
+        super().__init__(writes=True)
+        self.name = "balance_forest"
+
+
+    def run(self, *args):
+        rootfs_balancer.balance_forest(rootfs_balancer.SimpleBalancer(5, 3))
 
 
 #************************** Presenting an image *******************************

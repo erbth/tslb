@@ -76,13 +76,17 @@ class PackageBuilder(object):
 
         # Find a rootfs image that satisfies the package's compiletime
         # dependencies
-        # cdeps is a DependencyList with source package names as objects.
+        # cdeps is a DependencyList with source package names as objects. tools
+        # too, however tools are only relevant to the package_builder (=this
+        # module), while cdeps form the cdep graph.
         cdeps = spkgv.get_cdeps()
+        tools = spkgv.get_tools() or DependencyList()
 
 
         # The package manager is essential and should be always
         # installed.
-        # cdeps.add_constring(VersionConstraint('', '0'), ('tpm2', arch))
+        # TODO: Add once tpm2 is packaged? or add to tools?
+        # cdeps.add_constraint(VersionConstraint('', '0'), ('tpm2', arch))
 
         # Find the binary packages of the newest source packages that match the
         # requirements.
@@ -91,8 +95,7 @@ class PackageBuilder(object):
         spl = SourcePackage.SourcePackageList(arch)
         available_source_packages = set(spl.list_source_packages())
 
-        # TODO: Remove when we have tools
-        for dep_name in set(cdeps.get_required() + ['glibc', 'zlib']):
+        for dep_name in set(cdeps.get_required() + tools.get_required()):
             if dep_name not in available_source_packages:
                 raise CannotFulfillDependencies(
                     'Required source package "%s" does not exist.' % dep_name)
@@ -103,7 +106,7 @@ class PackageBuilder(object):
             found = False
 
             for v in available_versions:
-                if (dep_name, v) in cdeps:
+                if (dep_name, v) in cdeps and (dep_name, v) in tools:
                     dep_spv = dep_sp.get_version(v)
 
                     last_complete_build = build_state.get_last_successful_stage_event(
@@ -156,10 +159,6 @@ class PackageBuilder(object):
         for n,a,v in required_binary_packages:
             cbpdeps.add_constraint(VersionConstraint('=', v), (n,a))
 
-        # TODO: Remove once we have tools attributes ...
-        cbpdeps.add_constraint(VersionConstraint('', '0'), ('zlib-all', Architecture.to_int('amd64')))
-        cbpdeps.add_constraint(VersionConstraint('', '0'), ('glibc-all', Architecture.to_int('amd64')))
-
         # Finally find the best fitting rootfs image.
         image = rootfs.find_image(cbpdeps)
         if not image:
@@ -202,34 +201,6 @@ class PackageBuilder(object):
             try:
                 mount_pseudo_filesystems(mountpoint, spkgv)
                 tpm_native = Tpm2()
-
-                # # Remove disruptive packages in a chroot environment
-                # Console.print_status_box(
-                #     "Removing disruptive packages ...", self.out)
-
-                # try:
-                #     # Update the image's package list
-
-                #     Console.update_status_box(True, self.out)
-
-                # except BaseException as e:
-                #     Console.update_status_box(False, self.out)
-                #     self.out.write(Color.RED + "  Error: %s" % e + Color.NORMAL)
-                #     raise e
-
-
-                # # Recalculate missing packages (children may have been removed)
-                # missing_pkgs = []
-
-                # for n,a in cdeps.get_required():
-                #     if (n,a) not in pkgs:
-                #         missing_pkgs.append((n,a))
-
-                # if len(missing_pkgs) > 0:
-                #     self.out.write("The following packages are missing:\n")
-                #     for n,a in missing_pkgs:
-                #         self.out.write("    %s@%s\n" % (n, Architecture.to_str(a)))
-
 
                 # Mark all packages in the image as automatically installed
                 self.out.write(Color.CYAN + 
@@ -388,8 +359,8 @@ class PackageBuilder(object):
 
 
         # Invariant here: image points to a rootfs image that satisfies the
-        # package's cdeps and is mounted. The required pseudo-filesystems are
-        # mounted, too.
+        # package's cdeps and tools, and is mounted. The required
+        # pseudo-filesystems are mounted, too.
 
         # Build the package using the build pipeline
         self.out.write(Color.YELLOW +

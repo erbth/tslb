@@ -1188,6 +1188,50 @@ class SourcePackageVersion:
 
             self.set_attribute('cdeps', ndl)
 
+    def get_tools(self):
+        """
+        :rtype: DependencyList or None
+        """
+        if self.has_attribute('tools'):
+            return self.get_attribute('tools')
+        else:
+            return None
+
+
+    def set_tools(self, dl):
+        if not isinstance(dl, DependencyList):
+            raise TypeError
+        else:
+            self.set_attribute('tools', dl)
+
+
+    def add_tool(self, pkg_name, c='', vn='0'):
+        """
+        e.g. add_tool('tpm2', '>=', '1.0')
+        """
+        if self.has_attribute('tools'):
+            dl = self.get_attribute('tools')
+            dl.add_constraint(pkg_name, VersionConstraint(c, vn))
+            self.set_attribute('tools', dl)
+
+        else:
+            dl = DependencyList()
+            dl.add_constraint(pkg_name, VersionConstraint(c, vn))
+            self.set_attribute('tools', dl)
+
+
+    def remove_tool(self, pkg_name):
+        if self.has_attribute('tools'):
+            dl = self.get_attribute('tools')
+            ndl = DependencyList()
+
+            for pn, cs in dl.l.items():
+                if pn != pkg_name:
+                    for c in cs:
+                        ndl.add_constraint(pn, c)
+
+            self.set_attribute('tools', ndl)
+
 
     #************** Convenience methods for the scratch space *****************
     @property

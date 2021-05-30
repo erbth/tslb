@@ -433,7 +433,12 @@ class RealBuildNodeProxy(BuildNodeProxy):
         self._current_addr = None
 
         # The node's state
-        self._state = self.STATE_BUSY
+        self._state = self.STATE_IDLE
+
+        # State change in progress (waiting for response from node) - signal to
+        # external as STATE_BUSY and remove when the node's state changed.
+        self._busy = False
+
         self._pkg_name = None
         self._pkg_arch = None
         self._pkg_version = None
@@ -510,6 +515,9 @@ class RealBuildNodeProxy(BuildNodeProxy):
                 (new_pkg_version is not None and new_pkg_version != self._pkg_version) or \
                 (new_fail_reason is not None and new_fail_reason != self._fail_reason):
 
+            # Node performed state change
+            self._busy = False
+
             if new_state == 'idle':
                 self._state = self.STATE_IDLE
 
@@ -563,7 +571,10 @@ class RealBuildNodeProxy(BuildNodeProxy):
         return self._identity
 
     def get_state(self):
-        if self._state in (self.STATE_IDLE, self.STATE_MAINTENANCE, self.STATE_BUSY):
+        if self._busy:
+            return (self.STATE_BUSY,)
+
+        elif self._state in (self.STATE_IDLE, self.STATE_MAINTENANCE):
             return (self._state,)
 
         elif self._state in (self.STATE_BUILDING, self.STATE_FINISHED):
@@ -575,7 +586,7 @@ class RealBuildNodeProxy(BuildNodeProxy):
     def start_build(self, package):
         pkg, version = package
 
-        self._state = self.STATE_BUSY
+        self._busy = True
         self._notify_subscribers()
 
         self._send_message_to_node({
@@ -586,7 +597,7 @@ class RealBuildNodeProxy(BuildNodeProxy):
         })
 
     def reset(self):
-        self._state = self.STATE_BUSY
+        self._busy = True
         self._notify_subscribers()
 
         self._send_message_to_node({'action': 'reset'})
