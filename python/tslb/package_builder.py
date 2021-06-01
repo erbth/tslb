@@ -7,13 +7,14 @@ from tslb import build_pipeline
 from tslb import build_state
 from tslb import rootfs
 from tslb import settings
+from tslb import tclm
 from tslb.Console import Color
 from tslb.Constraint import DependencyList, VersionConstraint
 from tslb.VersionNumber import VersionNumber
+from tslb.basic_utils import is_mounted, thread_inspector, replace_output_streams
 from tslb.build_pipeline import BuildPipeline
 from tslb.filesystem import FileOperations as fops
 from tslb.tpm import Tpm2
-from tslb.basic_utils import is_mounted, thread_inspector, replace_output_streams
 import multiprocessing
 import os
 import shutil
@@ -190,6 +191,8 @@ class PackageBuilder(object):
 
             new_image = rootfs.cow_clone_image(image)
             image = new_image
+            del new_image
+
             Console.update_status_box(True, self.out)
             self.out.write(Color.YELLOW + "New rootfs image is %s.\n" % image
                 + Color.NORMAL)
@@ -333,6 +336,12 @@ class PackageBuilder(object):
             self.out.write("  finished.\n")
 
             image.publish()
+
+            lk = image.db_lock
+            with tclm.lock_Splus(lk):
+                imgid = image.id
+                image = None
+                image = rootfs.Image(imgid)
 
             image.mount(self.mount_namespace)
             mountpoint = image.get_mountpoint(self.mount_namespace)

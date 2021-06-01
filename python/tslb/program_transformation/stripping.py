@@ -46,6 +46,7 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=Non
 
             exe = futures.ThreadPoolExecutor(parallel)
 
+        inode_set = set()
         fs = []
 
         for d in lib_dirs:
@@ -57,7 +58,8 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=Non
                     target,
                     max_level='unneeded',
                     out=out,
-                    exe=exe)
+                    exe=exe,
+                    inode_set=inode_set)
 
         for d in exec_dirs:
             target = os.path.join(root_path, d)
@@ -68,7 +70,8 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=Non
                     target,
                     max_level='all',
                     out=out,
-                    exe=exe)
+                    exe=exe,
+                    inode_set=inode_set)
 
         # Wait for futures in case of parallel execution
         if exe:
@@ -81,10 +84,12 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=Non
             exe.shutdown(wait=True)
 
 
-def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.stdout,
-        exe=None):
+def strip_and_create_debug_links_in_directory(path, max_level='all',
+        out=sys.stdout, exe=None, inode_set=None):
     """
-    This function finds and strips all ELF files in a given directory.
+    This function finds and strips all ELF files in a given directory. The
+    directory must not cross multiple filesystems because inode numbers must be
+    from the same namespace.
 
     :param str path: The path which should be searched for ELF files
     :param str max_level: The maximum level of symbols to strip, can be 'debug'
@@ -92,6 +97,11 @@ def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.std
     :param out: An output stream to which this function shall report what it
         does.
     :param exe: An executor for performing (potentially concurrent) stripping
+    :param set() inode_set: A set to pass to all calls for identifying hard
+        links and not processing the corresponding file multiple times. Leave
+        None when calling this function. An empty set will be created
+        automatically and passed to recursive calls. However it may be set to
+        an empty set() for multiple calls to this function.
 
     :returns: A list of futures if :param exe: is given, else an empty list.
 
@@ -102,6 +112,15 @@ def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.std
     if max_level != 'all' and max_level != 'unneeded' and max_level != 'debug':
         raise ValueError("Invalid max_level: `%s'" % max_level)
 
+    # Don't strip a file with multiple hard links multiple times.
+    if inode_set is None:
+        inode_set = set()
+
+    if stbuf.st_ino in inode_set:
+        return []
+
+    inode_set.add(stbuf.st_ino)
+
     if stat.S_ISDIR(stbuf.st_mode):
         # Recursively process directory
         ret = []
@@ -110,7 +129,8 @@ def strip_and_create_debug_links_in_directory(path, max_level='all', out=sys.std
                     os.path.join(path, elem),
                     max_level,
                     out,
-                    exe)
+                    exe,
+                    inode_set)
 
         return ret
 
