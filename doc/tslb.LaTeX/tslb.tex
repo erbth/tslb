@@ -21,6 +21,8 @@
 \newcommand{\module}[1]{\texttt{#1}}
 \newcommand{\script}[1]{\texttt{#1}}
 
+\newcommand{\python}[1]{\texttt{`#1'}}
+
 \newcommand{\green}[1]{\textcolor{green}{#1}}
 
 \title{The TSClient LEGACY Build System}
@@ -31,26 +33,33 @@
 	\maketitle
 	\tableofcontents
 	
+	\pagebreak
+	
 	\section{Package attributes}
 	\label{sec:package_attributes}
 	
-	\begin{tabularx}{\textwidth}{lX}
-		Command & Description \\
+	\begin{tabularx}{\textwidth}{llX}
+		Command & Typical type & Description \\
 		\hline
-		configure\_command & \\
-		build\_command & \\
-		install\_to\_destdir\_command & \\
-		skip\_rdeps & Optionally skip adding rdeps \\
-		adapt\_command & \\
-		additional\_file\_placement & \\
-		additional\_rdeps & \\
-		cdeps & \\
-		tools & DependencyList like cdeps, but only used for rootfs creation \\
-		enabled & \\
-		source\_archive & \\
-		unpack\_command & \\
-		patch\_command & \\
-		unpacked\_source\_directory & \\
+		configure\_command & str & \\
+		build\_command & str & \\
+		install\_to\_destdir\_command & str & \\
+		skip\_rdeps & str & Optionally skip adding rdeps (parsed into bool) \\
+		adapt\_command & str & \\
+		additional\_file\_placement && \\
+		additional\_rdeps & List(Tuple(str,DependencyList)) & \\
+		cdeps & DependencyList & \\
+		tools & DependencyList&  Like cdeps, but only used for rootfs creation \\
+		enabled & str & parsed into bool \\
+		source\_archive & str & \\
+		unpack\_command & str & \\
+		patch\_command & str & \\
+		unpacked\_source\_directory & str & \\
 	\end{tabularx}
+
+	\subsection{\texttt{additional\_rdeps}}
+	\label{sec:additional_rdeps}
+	
+	A version of \texttt{current} (will be translated to \texttt{2184801924} by \python{tslb.VersionNumber}) will be substituted with the binary version of the dependency, which is installed in the rootfs image during compilation. In a similar way \texttt{built} will be substituted by the currently built version number (for internal dependencies).
 	
 \end{document}

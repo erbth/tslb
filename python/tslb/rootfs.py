@@ -1122,6 +1122,13 @@ def delete_probably_recreatable_images():
     _delete_multiple_images(to_delete)
 
 
+def get_image_id_from_mountpoint(mp):
+    """
+    Retrieve the id of the rootfs image mounted at the specified mountpoint.
+    """
+    return int(mp.split('/')[-1])
+
+
 # *************************** Exceptions **************************************
 class RootFSException(Exception):
     def __init__(self, *args, **kwargs):

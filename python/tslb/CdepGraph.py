@@ -1,11 +1,12 @@
-from tslb import Graph
-from tslb.SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
-from tslb.tclm import lock_S
-
 """
 Build graph containing all packages with edges that show compiletime
 dependencies.
 """
+from tslb import Graph
+from tslb import utils
+from tslb.SourcePackage import SourcePackageList, SourcePackage, SourcePackageVersion
+from tslb.tclm import lock_S
+
 
 class CdepGraph(object):
     def __init__(self, arch):
@@ -17,18 +18,22 @@ class CdepGraph(object):
         self.arch = arch
         self.nodes = {}
 
-    def build(self):
+    def build(self, only_enabled=False):
         """
         Populates self.nodes according to the current package database.
+
+        :param bool only_enabled: Include only packages with at least one
+            enabled version. If cdeps of enabled packages are not enabled, an
+            error will be thrown.
         """
-        l = SourcePackageList(self.arch)
+        spl = SourcePackageList(self.arch)
 
         # Make sure nothing moves while we look at it
-        with lock_S(l.db_root_lock):
+        with lock_S(spl.db_root_lock):
             # Clear the current graph
             self.nodes = {}
 
-            pkgs = l.list_source_packages()
+            pkgs = utils.list_enabled_source_packages(spl)
 
             # Add each package to the graph.
             for pkg in pkgs:

@@ -1,18 +1,23 @@
+from tslb import rootfs
+from tslb.Console import Color
+from tslb.Constraint import DependencyList, VersionConstraint, CONSTRAINT_TYPE_NONE
+from tslb.VersionNumber import VersionNumber
+from tslb.build_pipeline.common_functions import update_binary_package_files
+from tslb.filesystem.FileOperations import simplify_path_static
+from tslb.program_analysis import shared_library_tools as sotools
+import copy
 import os
 import re
 import stat
 import tslb.database as db
 import tslb.database.BinaryPackage
-from tslb.Console import Color
-from tslb.Constraint import DependencyList, VersionConstraint, CONSTRAINT_TYPE_NONE
-from tslb.filesystem.FileOperations import simplify_path_static
-from tslb.program_analysis import shared_library_tools as sotools
-from tslb.build_pipeline.common_functions import update_binary_package_files
 
-class StageAddRdeps(object):
+
+class StageAddRdeps:
     name = 'add_rdeps'
 
-    def flow_through(spv, rootfs_mountpoint, out):
+    @classmethod
+    def flow_through(cls, spv, rootfs_mountpoint, out):
         """
         :param spv: The source package version that flows though this segment
             of the pipeline.
@@ -229,6 +234,12 @@ class StageAddRdeps(object):
 
                     continue
 
+                # Substitute the currently installed- and currently built
+                # version numbers of binary packages
+                dl = cls._substitute_version_numbers(dl, spv, bps, rootfs_mountpoint, out)
+                if dl is None:
+                    return False
+
                 for dep, constraints in dl.get_object_constraint_list():
                     # NOTE: Again, this bypasses locks.
                     versions = db.BinaryPackage.find_binary_packages(session, dep, bp.architecture)
@@ -265,3 +276,62 @@ class StageAddRdeps(object):
             bps[bp_name].set_attribute('rdeps', rdeps[bp_name])
 
         return True
+
+
+    @staticmethod
+    def _substitute_version_numbers(orig_dl, spv, bps, rootfs_mountpoint, out):
+        """
+        :returns: A DependencyList or None in case of failure.
+        """
+        # Don't modify the original dl ...
+        new_dl = DependencyList()
+
+        for dep, constraints in orig_dl.get_object_constraint_list():
+            subs_required = False
+            for c in constraints:
+                if c.version_number == VersionNumber('current'):
+                    # Find version installed in rootfs image
+                    img = rootfs.Image(rootfs.get_image_id_from_mountpoint(rootfs_mountpoint))
+                    res = img.query_packages(name=dep, arch=spv.architecture)
+
+                    if len(res) == 1:
+                        _,_,v = res[0]
+                        out.write(("  Substituting version number `%s' "
+                            "for `current' in additional rdep `%s'." % (v, dep)) + '\n')
+
+                    else:
+                        v = VersionNumber(c.version_number)
+                        out.write(Color.MAGENTA + ("  WARNING: Additional rdep `%s' requested "
+                            "the currently installed version but is not installed." % dep) +
+                            Color.NORMAL + "\n")
+
+                    del img
+
+                    new_dl.add_constraint(
+                        VersionConstraint(c.constraint_type, v),
+                        dep)
+
+                elif c.version_number == VersionNumber('built'):
+                    # Find currently built version
+                    bp = bps.get(dep, None)
+                    if bp is None:
+                        v = VersionNumber(c.version_number)
+                        out.write(Color.MAGENTA + ("  WARNING: Additional rdep `%s' requested "
+                            "the currently built version but is not built." % dep) +
+                            Color.NORMAL + "\n")
+
+                    else:
+                        v = bp.version_number
+                        out.write(("  Substituting version number `%s' for `built' in "
+                            "additional rdep `%s'." % (v, dep)) + '\n')
+
+                    del bp
+
+                    new_dl.add_constraint(
+                        VersionConstraint(c.constraint_type, v),
+                        dep)
+
+                else:
+                    new_dl.add_constraint(copy.deepcopy(c), dep)
+
+        return new_dl

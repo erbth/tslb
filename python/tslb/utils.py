@@ -6,6 +6,7 @@ from concurrent import futures
 from datetime import datetime, timezone
 from tslb import Architecture
 from tslb import build_pipeline
+from tslb import parse_utils
 from tslb import rootfs
 from tslb import scratch_space
 from tslb import tclm
@@ -195,6 +196,34 @@ def remove_old_snapshots_from_scratch_spaces_in_arch(arch, keep, print_fn=None):
         # Let potential exceptions occur
         for r in res.done:
             r.result()
+
+
+def is_source_package_enabled(sp):
+    """
+    :param SourcePackage:
+    :returns bool: True if the source package has at least one enabled version
+    """
+    for v in sp.list_version_numbers():
+        spv = sp.get_version(v)
+        if spv.has_attribute('enabled') and parse_utils.is_yes(spv.get_attribute('enabled')):
+            return True
+
+    return False
+
+
+def list_enabled_source_packages(spl):
+    """
+    Given a `SourcePackageList` :param spl: list all source packages in the
+    list's architecture that have at least one enabled version.
+
+    :rtype: Sequence(str)
+    """
+    l = []
+    for pkg in spl.list_source_packages():
+        if is_source_package_enabled(SourcePackage(pkg, spl.architecture)):
+            l.append(pkg)
+
+    return l
 
 
 #*********************************** Exceptions *******************************

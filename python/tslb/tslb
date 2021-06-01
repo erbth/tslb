@@ -111,12 +111,12 @@ def unmount(args):
     else:
         Console.update_status_box(True)
 
-def show_cdep_graph(arch):
+def show_cdep_graph(arch, only_enabled):
     Console.print_status_box('Building cdep graph', file=sys.stderr)
 
     try:
         g = CdepGraph(arch)
-        g.build()
+        g.build(only_enabled=only_enabled)
         Console.update_status_box(True, file=sys.stderr)
 
     except:
@@ -156,6 +156,9 @@ def main():
 
     parser_show_cdep_graph = subparsers.add_parser('show-cdep-graph', help='Show the cdep graph.')
     parser_show_cdep_graph.add_argument('arch')
+    parser_show_cdep_graph.add_argument(
+        '--only-enabled', help='Include only packages with at least one enabled version.',
+        action='store_true')
 
     parser_psql = subparsers.add_parser('psql', help='Launch a psql shell with TSLB\'s user, password and database.')
 
@@ -193,7 +196,7 @@ def main():
             exit(1)
 
         arch = architectures_reverse[args.arch]
-        show_cdep_graph(arch)
+        show_cdep_graph(arch, args.only_enabled)
 
     elif args.command == 'psql':
         db_root = settings.get('Database')

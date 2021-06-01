@@ -55,17 +55,27 @@ all_stages = [
         ]
 
 outdates_child = {
-        'unpack': StageConfigure,
-        'patch': StageConfigure,
-        'configure': StageConfigure,
-        'build': StageConfigure,
-        'install_to_destdir': StageConfigure,
-        'strip': StageConfigure,
-        'adapt': StageConfigure,
-        'find_shared_libraries': StageAddRdeps,
-        'detect_man_info': StageAddRdeps,
-        'add_readme': StageAddRdeps,
-        'add_rdeps': StageAddRdeps,
+        'unpack': StagePatch,
+        'patch': StagePatch,
+        'configure': StagePatch,
+        'build': StagePatch,
+        'install_to_destdir': StagePatch,
+        'strip': StagePatch,
+        'adapt': StagePatch,
+
+        # Adding new redeps may change what is installed by a package. Hence
+        # all dependent packages need to be rebuilt, because a new rdep may
+        # have pulled in, which changes their state.
+        # 'find_shared_libraries': StageAddRdeps,
+        # 'detect_man_info': StageAddRdeps,
+        # 'add_readme': StageAddRdeps,
+        # 'add_rdeps': StageAddRdeps,
+
+        'find_shared_libraries': StagePatch,
+        'detect_man_info': StagePatch,
+        'add_readme': StagePatch,
+        'add_rdeps': StagePatch,
+
         'create_pm_packages': StageAddRdeps
 }
 
@@ -314,6 +324,7 @@ class BuildPipeline(object):
                 self.output_buffer.clear()
                 success = stage.flow_through(spv, rootfs_mountpoint, FDWrapper(slave))
 
+                bg_writer.flush()
                 Console.print_finished_status_box(Color.CYAN +
                     'Flowing through stage %s' % stage.name + Color.NORMAL,
                     success,
@@ -353,7 +364,7 @@ class BuildPipeline(object):
             return True
 
         finally:
-            # Stop the worker thread
+            # Stop the worker thread if not yet stopped (close() is idempotent)
             bg_writer.close()
 
             # Close the pty
@@ -361,7 +372,7 @@ class BuildPipeline(object):
             os.close(slave)
 
 
-class PipeReaderThread(object):
+class PipeReaderThread:
     """
     A class wrapping a thread and required communications machinery for reading
     from a pipe in the background. The content is stored in a console buffer
@@ -386,6 +397,7 @@ class PipeReaderThread(object):
         self.thread = threading.Thread(target=self._worker_func, daemon=True)
         self.thread.start()
         self._closed = False
+        self._flush_complete = threading.Event()
 
 
     def _worker_func(self):
@@ -408,6 +420,16 @@ class PipeReaderThread(object):
                 if cmd == b'q':
                     break
 
+                elif cmd == b'f':
+                    self._flush_complete.set()
+                    pass
+
+
+    def flush(self):
+        if not self._closed:
+            self._flush_complete.clear()
+            os.write(self.pwrite, b'f')
+            self._flush_complete.wait()
 
     def close(self):
         if not self._closed:

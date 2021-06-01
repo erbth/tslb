@@ -8,6 +8,7 @@ from tslb.build_pipeline.utils import PreparedBuildCommand
 class StageAdapt:
     name = 'adapt'
 
+    @staticmethod
     def flow_through(spv, rootfs_mountpoint, out):
         """
         :param spv: The source package version that flows though this segment
