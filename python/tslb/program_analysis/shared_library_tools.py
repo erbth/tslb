@@ -233,7 +233,7 @@ class SharedLibrary(object):
                 break
 
         if not so_named_file:
-            raise ces.AnalyzeError ("Shared library %s seems to have no SONAME'd file." % self.name)
+            raise NoSONAMEdFileError(self.name)
 
         # Link chain from SONAME'd file to a regular file
         link_chain = set()
@@ -413,3 +413,9 @@ def determine_required_shared_objects(path, out=sys.stdout):
                 required_sos.add(interpreter)
 
     return required_sos
+
+
+#************************* More specific exceptions ***************************
+class NoSONAMEdFileError(ces.AnalyzeError):
+    def __init__(self, name):
+        super().__init__("Shared library %s seems to have no SONAME'd file." % name)

@@ -8,9 +8,10 @@ from tslb.program_analysis import shared_library_tools as so_tools
 from tslb.filesystem.FileOperations import simplify_path_static
 
 
-class StageFindSharedLibraries(object):
+class StageFindSharedLibraries:
     name = 'find_shared_libraries'
 
+    @staticmethod
     def flow_through(spv, rootfs_mountpoint, out):
         """
         :param spv: The source package version that flows though this segment
@@ -78,7 +79,13 @@ class StageFindSharedLibraries(object):
                             if f.read(4) != b'\x7fELF':
                                 continue
 
-                    libs.append(so_tools.SharedLibrary(lib_name, *files, fs_base=base))
+                    # Ignore shared libraries with no SONAMEd file. Linking to
+                    # them will not work probably, anyway. This could e.g.
+                    # shared objects for use with LD_PRELOAD.
+                    try:
+                        libs.append(so_tools.SharedLibrary(lib_name, *files, fs_base=base))
+                    except so_tools.NoSONAMEdFileError:
+                        pass
 
                 queue.put(libs)
 

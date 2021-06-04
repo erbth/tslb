@@ -8,10 +8,11 @@ from tslb.Console import Color
 from tslb.filesystem import FileOperations as fops
 from tslb.program_analysis import shared_library_tools as so_tools
 
-class StageSplitIntoBinaryPackages(object):
+class StageSplitIntoBinaryPackages:
     name = 'split_into_binary_packages'
 
-    def flow_through(spv, rootfs_mountpoint, out):
+    @classmethod
+    def flow_through(cls, spv, rootfs_mountpoint, out):
         """
         :param spv: The source package version that flows though this segment
             of the pipeline.
@@ -340,6 +341,14 @@ class StageSplitIntoBinaryPackages(object):
                 s.add(_file)
 
 
+        # Now there are many small binary packages. Some of them might form a
+        # native package in a programming language, such as perl- or python
+        # packages. Merge these together.
+        out.write("\nLooking for higher level packages from programming languages etc. ...\n")
+        cls._merge_perl_packages(spv, package_file_map, out)
+        out.write("\n")
+
+
         # Apply additional file assignments specified as attributes
         if spv.has_attribute('additional_file_placement'):
             out.write("\nProcessing additional file placement rules ...\n")
@@ -407,12 +416,12 @@ class StageSplitIntoBinaryPackages(object):
                     assigned_files.add(_file)
 
 
-            # Remove empty packages
-            bp_names = list(package_file_map.keys())
-            for name in bp_names:
-                if not package_file_map[name]:
-                    out.write("  Removing empty binary package `%s'.\n" % name)
-                    del package_file_map[name]
+        # Remove empty packages
+        bp_names = list(package_file_map.keys())
+        for name in bp_names:
+            if not package_file_map[name]:
+                out.write("  Removing empty binary package `%s'.\n" % name)
+                del package_file_map[name]
 
 
         # Add an empty package that can be used to install all binary packages
@@ -460,3 +469,87 @@ class StageSplitIntoBinaryPackages(object):
         spv.set_current_binary_packages([bp.name for bp in bps])
 
         return True
+
+
+    @staticmethod
+    def _merge_perl_packages(spv, package_file_map, out):
+        # Look for `.packlist'-files
+        packlist_regex = re.compile(r'^/usr/.*lib/perl\d+/[^/]+/.+/\.packlist$')
+
+        perl_packages = {}
+        for pkg in package_file_map:
+            packlist_paths = []
+
+            for file_ in package_file_map[pkg]:
+                if re.match(packlist_regex, file_):
+                    packlist_paths.append(file_)
+
+            if packlist_paths:
+                perl_packages[pkg] = packlist_paths
+
+        if not perl_packages:
+            return
+
+        print("  Found perl packages in the following binary packages:", file=out)
+        for pkg, packlists in perl_packages.items():
+            print("    %s: %s" % (pkg, packlists), file=out)
+
+        # Find binary packages that have files part of other perl-packages
+        file_package_map = {}
+        for bp_name, bp_files in package_file_map.items():
+            for file_ in bp_files:
+                file_package_map[file_] = bp_name
+
+        perl_package_for_package = {}
+        for pkg, packlists in perl_packages.items():
+            files = []
+            for pl in packlists:
+                full_path = fops.simplify_path_static(spv.install_location + '/' + pl)
+                with open(full_path, 'r', encoding='utf8') as f:
+                    for l in f:
+                        files.append(l.strip().replace(
+                            '/tmp/tslb/scratch_space/install_location', '')
+                            .split(' ')[0])
+
+            for file_ in files:
+                associated_pkg = file_package_map.get(file_)
+                if not associated_pkg:
+                    out.write(Color.ORANGE + "  File `%s' in .packlist but in no binary package." %
+                            file_ + Color.NORMAL + "\n")
+
+                    continue
+
+                # Don't merge packages into themselves
+                if associated_pkg == pkg:
+                    continue
+
+                # Don't merge the -doc package
+                if associated_pkg == spv.name + '-doc':
+                    continue
+
+                perl_package_for_package[associated_pkg] = pkg
+
+        del file_package_map
+
+        # Move all files from those binary packages to the perl-package,
+        # effectively merging them into the perl-package (they will be removed
+        # later because they are empty).
+        print(file=out)
+
+        generic_dbg_pkg = spv.name + '-dbgsym'
+        for pkg, perl_pkg in perl_package_for_package.items():
+            print("    Merging `%s' into `%s'." % (pkg, perl_pkg), file=out)
+            package_file_map[perl_pkg] |= package_file_map[pkg]
+            package_file_map[pkg].clear()
+
+            # If there is a -dbgsym packages for the merged package, merge it
+            # with the generic -dbgsym package
+
+            dbg_pkg = pkg + "-dbgsym"
+            if dbg_pkg in package_file_map:
+                print("    Merging `%s' into `%s'." % (dbg_pkg, generic_dbg_pkg), file=out)
+                if generic_dbg_pkg not in package_file_map:
+                    package_file_map[generic_dbg_pkg] = set()
+
+                package_file_map[generic_dbg_pkg] |= package_file_map[dbg_pkg]
+                package_file_map[dbg_pkg].clear()

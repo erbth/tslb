@@ -687,7 +687,12 @@ class SourcePackageVersionAddAttributeAction(Action, SourcePackageVersionFactory
         key = args[1]
         val = str(args[2]) if len(args) > 2 else None
 
-        self.create_spv(True).set_attribute(key, val)
+        spv = self.create_spv(True)
+        if spv.has_attribute(key):
+            print("This attribute exists already.")
+            return
+
+        spv.set_attribute(key, val)
 
 
 class SourcePackageVersionUnsetAttributeAction(Action, SourcePackageVersionFactoryBase):

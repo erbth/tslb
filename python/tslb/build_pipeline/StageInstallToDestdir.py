@@ -1,8 +1,8 @@
+from tslb.Console import Color
+from tslb.build_pipeline.utils import PreparedBuildCommand
 import multiprocessing
 import os
 import subprocess
-from tslb.Console import Color
-from tslb.build_pipeline.utils import PreparedBuildCommand
 
 class StageInstallToDestdir(object):
     name = 'install_to_destdir'
@@ -30,13 +30,35 @@ class StageInstallToDestdir(object):
         chroot_build_location = '/tmp/tslb/scratch_space/build_location'
         chroot_install_location = '/tmp/tslb/scratch_space/install_location'
 
-        # Check if we have a install to destdir command.
-        if spv.has_attribute('install_to_destdir_command'):
-            install_to_destdir_command = spv.get_attribute('install_to_destdir_command')
+        # Check if we have a install to destdir command. If not, try to guess
+        # one.
+        if not spv.has_attribute('install_to_destdir_command'):
+            cmd = None
 
-        else:
-            out.write("No install-to-destdir command specified and failed to guess one.\n")
-            return False
+            # Is there a Makefile in the build location that looks like it
+            # would respect the variable `DESTDIR'?
+            makefile_supports_destdir = False
+            makefile_path = os.path.join(spv.build_location,
+                    spv.get_attribute('unpacked_source_directory'), 'Makefile')
+
+            if os.path.exists(makefile_path):
+                with open(makefile_path, 'r', encoding='utf8') as f:
+                    for l in f:
+                        if '$(DESTDIR)' in l:
+                            makefile_supports_destdir = True
+                            break
+
+            if makefile_supports_destdir:
+                cmd = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) DESTDIR=$(DESTDIR) install"
+
+            if not cmd:
+                out.write("No install-to-destdir command specified and failed to guess one.\n")
+                return False
+
+            spv.set_attribute('install_to_destdir_command', cmd)
+            out.write("Guessed install-to-destdir command to be `%s'\n" % cmd)
+
+        install_to_destdir_command = spv.get_attribute('install_to_destdir_command')
 
 
         # Add .5 to round up.

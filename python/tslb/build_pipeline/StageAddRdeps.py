@@ -199,6 +199,11 @@ class StageAddRdeps:
                     rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)
 
 
+        # Adding dependencies for perl packages
+        if not cls._add_perl_dependencies(bps, rdeps, out):
+            return False
+
+
         # Add additional dependencies, which are specified in attributes.
         if spv.has_attribute('additional_rdeps'):
             out.write("\nAdding additional constraints specified by attributes ...\n")
@@ -335,3 +340,58 @@ class StageAddRdeps:
                     new_dl.add_constraint(copy.deepcopy(c), dep)
 
         return new_dl
+
+
+    def _add_perl_dependencies(bps, rdeps, out):
+        # Perl-packages depend on perl
+        perl_packages = []
+
+        for bp in bps.values():
+            # Skip -dbgsym packages
+            if bp.name.endswith('-dbgsym'):
+                continue
+
+            for file_,sha512 in bp.get_files():
+                if file_.startswith('/usr/lib/perl') or file_.startswith('/usr/local/lib/perl'):
+
+                    perl_packages.append(bp)
+                    break
+
+        if not perl_packages:
+            return True
+
+        out.write("\nAdding runtime dependency on perl for perl-packages ...\n")
+
+        # Find perl
+        with db.session_scope() as session:
+            paths = ['/bin/perl', '/usr/bin/perl']
+
+            # `perl' is of type List(Tuple(name, version))
+            perl = None
+            for path in paths:
+                perl = db.BinaryPackage.find_binary_packages_with_file(
+                        session,
+                        bp.architecture,
+                        path,
+                        True,
+                        only_newest=True)
+
+                if perl:
+                    break
+
+            if not perl:
+                out.write(Color.RED + "  ERROR: Could not find the binary package "
+                    "containing perl." + Color.NORMAL + "\n")
+                return False
+
+            perl = perl[0]
+
+            for bp in perl_packages:
+                # Don't add self loops ...
+                if bp.name == perl[0] or bp.name == perl[0] + '-common':
+                    continue
+
+                out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, perl[0], perl[1]))
+                rdeps[bp.name].add_constraint(VersionConstraint('>=', perl[1]), perl[0])
+
+        return True
