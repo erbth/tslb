@@ -199,6 +199,10 @@ class StageAddRdeps:
                     rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)
 
 
+        # Add dependencies based on shebang in scripts
+        if not cls._add_script_dependencies(bps, rdeps, out):
+            return False
+
         # Adding dependencies for perl packages
         if not cls._add_perl_dependencies(bps, rdeps, out):
             return False
@@ -342,6 +346,56 @@ class StageAddRdeps:
         return new_dl
 
 
+    def _add_script_dependencies(bps, rdeps, out):
+        out.write("\nAdding runtime dependencies based on 'shebang'-requested interpreters...\n")
+
+        with db.session_scope() as session:
+            for bp in bps.values():
+                base = os.path.join(bp.scratch_space_base, 'destdir')
+
+                for file_, sha512 in bp.get_files():
+                    full_path = simplify_path_static(base + '/' + file_)
+                    st_buf = os.lstat(full_path)
+
+                    # Only consider executable files
+                    if not stat.S_ISREG(st_buf.st_mode) or not \
+                            st_buf.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+                        continue
+
+                    with open(full_path, 'rb') as f:
+                        if f.read(2) == b'#!':
+                            line = f.readline().decode('ascii').strip()
+                        else:
+                            line = None
+
+                    # Does the file have a 'shebang'?
+                    if not line or not line.startswith('#!'):
+                        continue
+
+                    interpreter = line[2:]
+
+                    # Find the package containing the interpreter.
+                    deps = db.BinaryPackage.find_binary_packages_with_file(
+                            session,
+                            bp.architecture,
+                            interpreter,
+                            True,
+                            only_newest=True)
+
+                    if len(deps) != 1:
+                        out.write("Did not find a binary package containing interpreter `%s'." %
+                            interpreter)
+                        return False
+
+                    name, version = deps[0]
+
+                    # Add depencency
+                    out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, name, version))
+                    rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)
+
+        return True
+
+        
     def _add_perl_dependencies(bps, rdeps, out):
         # Perl-packages depend on perl
         perl_packages = []

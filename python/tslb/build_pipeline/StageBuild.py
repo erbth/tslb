@@ -31,9 +31,15 @@ class StageBuild(object):
 
         else:
             # Guess one.
-            if os.path.exists(os.path.join(spv.build_location,
-                spv.get_attribute('unpacked_source_directory'), 'Makefile')):
+            source_dir = os.path.join(spv.build_location, spv.get_attribute('unpacked_source_directory'))
 
+            if os.path.exists(os.path.join(source_dir, 'build', 'build.ninja')):
+                build_command = "#!/bin/bash\nset -e\ncd build\nninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)\n"
+
+            elif os.path.exists(os.path.join(source_dir, 'build.ninja')):
+                build_command = "ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)"
+
+            elif os.path.exists(os.path.join(source_dir, 'Makefile')):
                 build_command = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)"
 
             else:

@@ -35,25 +35,34 @@ class StageInstallToDestdir(object):
         if not spv.has_attribute('install_to_destdir_command'):
             cmd = None
 
+            source_dir = os.path.join(spv.build_location, spv.get_attribute('unpacked_source_directory'))
+            # Does the package use ninja?
+            if not cmd:
+                if os.path.exists(os.path.join(source_dir, "build", "build.ninja")):
+                    cmd = "#!/bin/bash\nset -e\ncd build\nDESTDIR=$(DESTDIR) ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) install\n"
+
+                elif os.path.exists(os.path.join(source_dir, "build.ninja")):
+                    cmd = "#!/bin/bash\nset -e\nDESTDIR=$(DESTDIR) ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) install\n"
+
             # Is there a Makefile in the build location that looks like it
             # would respect the variable `DESTDIR'?
-            makefile_supports_destdir = False
-            makefile_path = os.path.join(spv.build_location,
-                    spv.get_attribute('unpacked_source_directory'), 'Makefile')
-
-            if os.path.exists(makefile_path):
-                with open(makefile_path, 'r', encoding='utf8') as f:
-                    for l in f:
-                        if '$(DESTDIR)' in l:
-                            makefile_supports_destdir = True
-                            break
-
-            if makefile_supports_destdir:
-                cmd = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) DESTDIR=$(DESTDIR) install"
-
             if not cmd:
-                out.write("No install-to-destdir command specified and failed to guess one.\n")
-                return False
+                makefile_supports_destdir = False
+                makefile_path = os.path.join(source_dir, 'Makefile')
+
+                if os.path.exists(makefile_path):
+                    with open(makefile_path, 'r', encoding='utf8') as f:
+                        for l in f:
+                            if '$(DESTDIR)' in l or '${DESTDIR}' in l:
+                                makefile_supports_destdir = True
+                                break
+
+                if makefile_supports_destdir:
+                    cmd = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) DESTDIR=$(DESTDIR) install"
+
+                if not cmd:
+                    out.write("No install-to-destdir command specified and failed to guess one.\n")
+                    return False
 
             spv.set_attribute('install_to_destdir_command', cmd)
             out.write("Guessed install-to-destdir command to be `%s'\n" % cmd)

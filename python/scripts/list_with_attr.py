@@ -2,7 +2,8 @@
 from tslb.SourcePackage import SourcePackageList, SourcePackage
 
 # ATTR = "adapt_command"
-ATTR = "additional_rdeps"
+# ATTR = "additional_rdeps"
+ATTR = "skip_rdeps"
 arch = "amd64"
 
 for pkg in SourcePackageList(arch).list_source_packages():

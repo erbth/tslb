@@ -21,7 +21,7 @@ ordered_lfs_packages = [
     "m4",
     "bc",
     "flex",
-    "tcl",
+    "tcl-core",
     "expect",
     "dejagnu",
     "binutils",
@@ -55,7 +55,7 @@ ordered_lfs_packages = [
     "elfutils",
     "libffi",
     "openssl",
-    "python",
+    "python3",
     "ninja",
     "meson",
     "coreutils",
@@ -77,18 +77,16 @@ ordered_lfs_packages = [
     "texinfo",
     "vim",
     "systemd",
-    "d-bus",
+    "dbus",
     "procps-ng",
     "util-linux",
     "e2fsprogs",
 ]
 
 excluded_packages = [
-    "check",
     "groff",
     "man-db",
     "libpipeline",
-    "tcl",
     "zstd"
 ]
 
