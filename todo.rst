@@ -2,11 +2,9 @@
 
   * [ ] multiple nodes per host and max num threads.
 
-  * [ ] Version numbers of grub and openssl
-
   * [ ] licenses
 
-  * [ ] tpm2 config files
+  * [ ] tpm2 and config files
 
 
 Packages

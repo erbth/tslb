@@ -4,8 +4,8 @@ Mixed component types are also supported.
 
 And, 2.0 != 2.0.0. This is because Postgresql's integer array comparision is
 like that and I want to use it for comparing version numbers, and moreover
-it because it makes a difference if you say `Version 2' or `Version 2.0' (the
-last one tends to sound more like a big `thing').
+because it makes a difference if you say `Version 2' or `Version 2.0' (the last
+one tends to sound more like a big `thing').
 And 1.0 < 1.0.0 because a) Postgresql does that and b) it's nice to have a
 strict order (You'd said that, too, wouldn't you? ;-)).
 
