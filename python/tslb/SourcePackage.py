@@ -94,6 +94,7 @@ class SourcePackageList:
                 s.close()
 
     def destroy_source_package(self, name):
+        # TODO: delete scratch spaces
         # Lock the source package list
         with lock_X(self.db_root_lock):
             # Remove the db tuple(s)

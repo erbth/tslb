@@ -30,6 +30,9 @@ class StageUnpack(object):
         # Look if the package has a source archive configured
         if spv.has_attribute('source_archive'):
             source_archive = spv.get_attribute('source_archive')
+            if source_archive is None:
+                return True
+
             source_archive_path = os.path.join(source_location, source_archive)
 
             if not os.path.exists(source_archive_path):

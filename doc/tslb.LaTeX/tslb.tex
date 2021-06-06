@@ -46,12 +46,12 @@
 		install\_to\_destdir\_command & str & \\
 		skip\_rdeps & str & Optionally skip adding rdeps (parsed into bool) \\
 		adapt\_command & str & \\
-		additional\_file\_placement && \\
+		additional\_file\_placement & List(Tuple(str, str|List(str))) & [(dst pkg name, regex | [regex])]\\
 		additional\_rdeps & List(Tuple(str,DependencyList)) & \\
 		cdeps & DependencyList & \\
 		tools & DependencyList&  Like cdeps, but only used for rootfs creation \\
 		enabled & str & parsed into bool \\
-		source\_archive & str & \\
+		source\_archive & str|NoneType & \\
 		unpack\_command & str & \\
 		patch\_command & str & \\
 		unpacked\_source\_directory & str & \\

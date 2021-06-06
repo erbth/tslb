@@ -1061,7 +1061,7 @@ def _delete_multiple_images(imgs):
                     Image(c).flatten()
 
                 futures = [exe.submit(work, img_id) for img_id in img.list_children()]
-                res = concurrent.futures.wait(futures, return_when=concurrent.futures.ALL_COMPLETED)
+                res = concurrent.futures.wait(futures, return_when=concurrent.futures.ALL_COMPLETED).done
 
                 # Let potential exceptions occur
                 for r in res:

@@ -2,7 +2,12 @@
 
   * [ ] multiple nodes per host and max num threads.
 
-  * Version numbers of grub and openssl
+  * [ ] Version numbers of grub and openssl
+
+  * [ ] licenses
+
+  * [ ] delete scratch spaces of source packages when the entire source package
+        is deleted (maybe just delete all versions first).
 
 
 Packages
@@ -20,4 +25,4 @@ Packages
 
   * maybe run test suites of basic packages.
 
-  * infere cdeps from rdeps
+  * infer cdeps from rdeps

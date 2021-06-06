@@ -38,7 +38,7 @@ class StageConfigure(object):
             if os.path.exists(os.path.join(spv.build_location,
                 spv.get_attribute('unpacked_source_directory'), 'CMakeLists.txt')):
 
-                configure_command = "cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr"
+                configure_command = "cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib ."
 
             elif os.path.exists(os.path.join(spv.build_location,
                 spv.get_attribute('unpacked_source_directory'), 'configure')):

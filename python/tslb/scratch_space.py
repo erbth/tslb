@@ -161,6 +161,8 @@ class ScratchSpacePool:
         Deletes the given scratch space if it exists.
 
         :param str name: The scratch space's name
+        :returns: True if the scratch space has been deleted, False if no such
+            scratch space existed.
         :raises BaseException: if something fails.
         """
         with self.get_ioctx() as ioctx:
@@ -176,7 +178,7 @@ class ScratchSpacePool:
                         break
 
                 if not exists:
-                    return
+                    return False
 
                 # Delete the image and its snapshots
                 with lock_X(tclm.define_lock(self.space_lock_base + name.replace('.', '_'))):
@@ -189,6 +191,8 @@ class ScratchSpacePool:
                     del img
 
                     rbd_inst.remove(ioctx, name)
+
+        return True
 
 
     def list_scratch_spaces(self):

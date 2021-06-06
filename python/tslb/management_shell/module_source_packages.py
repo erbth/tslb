@@ -1,6 +1,8 @@
 import datetime
+import dateutil
 import locale
 import subprocess
+import tempfile
 import tslb.database as db
 import tslb.database.BuildPipeline
 from sqlalchemy.orm import aliased
@@ -1159,6 +1161,7 @@ class SourcePackageVersionBuildStateDirectory(Directory, SourcePackageVersionFac
     def listdir(self):
         return [
             SourcePackageVersionBuildStateListAction(self),
+            SourcePackageVersionBuildStateShowEventDetailsAction(self),
             SourcePackageVersionBuildStateOutdateAction(self),
             SourcePackageVersionBuildStateListStagesAction()
         ]
@@ -1193,6 +1196,104 @@ class SourcePackageVersionBuildStateListAction(Action):
                 db.BuildPipeline.BuildPipelineStageEvent.status_values.str_map[event.status],
                 event.stage,
                 event.snapshot_name))
+
+
+class SourcePackageVersionBuildStateShowEventDetailsAction(Action):
+    """
+    Show details of a build event.
+    """
+    def __init__(self, build_state_directory):
+        super().__init__()
+
+        self.build_state_directory = build_state_directory
+        self.name = 'show_event_details'
+
+
+    def run(self, *args):
+        if len(args) < 2:
+            print("Usage: %s <timestamp as shown by `list'>" % args[0])
+            return
+
+        try:
+            ts = datetime.datetime.strptime(
+                    ' '.join(args[1:]),
+                    locale.nl_langinfo(locale.D_T_FMT).replace('%e', '%d'))\
+                            .replace(tzinfo=dateutil.tz.tzlocal())
+
+        except ValueError as e:
+            print("Invalid timestamp format: %s" % e)
+            return
+
+        # Find all events that match the queried timestamp (it has only second
+        # precision) and present a list to select from.
+        with db.session_scope() as s:
+            se = aliased(db.BuildPipeline.BuildPipelineStageEvent)
+            events = list(s.query(se)\
+                .filter(se.source_package == self.build_state_directory.pkg_name,
+                        se.architecture == self.build_state_directory.arch,
+                        se.version_number == self.build_state_directory.version,
+                        se.time >= ts,
+                        se.time < ts + datetime.timedelta(seconds=1))\
+                .order_by(se.time))
+
+            if len(events) > 1:
+                print("Multiple events match the given timestamp:")
+
+                for i, event in enumerate(events):
+                    print("%-5d: %-10s %-30s (%s)" % (
+                        i,
+                        db.BuildPipeline.BuildPipelineStageEvent.status_values.str_map[event.status],
+                        event.stage,
+                        event.snapshot_name))
+
+                event = None
+
+                while not event:
+                    j = input("Please chose one [0..%d]: " % (len(events) - 1))
+                    try:
+                        j = int(j)
+                    except ValueError:
+                        print("Must be a number.")
+                        continue
+
+                    if j < 0 or j >= len(events):
+                        print("Out of range.")
+                        continue
+
+                    event = events[j]
+
+            elif len(events) == 1:
+                event = events[0]
+
+            else:
+                print("No event at the givent timestamp.")
+                return
+
+            # Display information about the chosen event and the associated
+            # console output.
+            with tempfile.NamedTemporaryFile('w', encoding='utf8') as f:
+                f.write("Package: %s@%s:%s\n\n" % (
+                    event.source_package,
+                    Architecture.to_str(event.architecture),
+                    event.version_number))
+
+                f.write("Time:          %s\n" % event.time.strftime('%a %b %e %H:%M:%S.%f %Y %z'))
+                f.write("Stage:         %s\n" % event.stage)
+                f.write("Status:        %s\n" % db.BuildPipeline.BuildPipelineStageEvent
+                        .status_values.str_map[event.status])
+
+                f.write("Snapshot name: %s\n\n" % event.snapshot_name)
+
+                if event.output:
+                    f.write("Console output:\n")
+                    f.write(event.output)
+
+                else:
+                    f.write("No console output.\n")
+
+                f.flush()
+
+                subprocess.run(['pager', '-r', f.name])
 
 
 class SourcePackageVersionBuildStateOutdateAction(Action):

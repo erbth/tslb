@@ -10,13 +10,17 @@ for pkg in pkgs:
     for v in sp.list_version_numbers():
         spv = sp.get_version(v)
         if spv.has_attribute('enabled') and is_yes(spv.get_attribute('enabled')):
-            if spv.has_attribute('tools'):
+            if spv.name == 'basic_build_tools':
                 continue
+
+            # if spv.has_attribute('tools'):
+            #     continue
 
             print(spv)
 
             dl = DependencyList()
-            dl.add_constraint(VersionConstraint('', '0'), "glibc")
-            dl.add_constraint(VersionConstraint('', '0'), "zlib")
+            # dl.add_constraint(VersionConstraint('', '0'), "glibc")
+            # dl.add_constraint(VersionConstraint('', '0'), "zlib")
+            dl.add_constraint(VersionConstraint('>=', '1.0.0'), "basic_build_tools")
 
             spv.set_tools(dl)

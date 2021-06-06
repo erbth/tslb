@@ -19,7 +19,8 @@ class RootDirectory(Directory):
     def listdir(self):
         return [
             SpacesDirectory(),
-            SpacesDeleteOldSnapshots()
+            SpacesDeleteOldSnapshots(),
+            SpacesDelete()
         ]
 
 
@@ -62,6 +63,30 @@ class SpacesDeleteOldSnapshots(Action):
             print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + "\n")
 
 
+class SpacesDelete(Action):
+    """
+    Delete a scratch space.
+    """
+    def __init__(self):
+        super().__init__(True)
+        self.name = "delete"
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage %s <scratch space>" % args[0])
+            return
+
+        try:
+            if ScratchSpacePool().delete_scratch_space(args[1]):
+                print("deleted.")
+            else:
+                print("did not exist.")
+
+        except BaseException as e:
+            print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + "\n")
+
+
 #************************ Individual scratch spaces ***************************
 class SpaceDirectory(Directory):
     """
@@ -76,6 +101,7 @@ class SpaceDirectory(Directory):
         return [
             SpaceListSnapshots(self.name),
             SpaceInspectSnapshot(self.name),
+            SpaceRevertSnapshot(self.name),
             SpaceDeleteOldSnapshots(self.name)
         ]
 
@@ -132,7 +158,7 @@ class SpaceInspectSnapshot(Action, SpaceBaseFactory):
 
     def run(self, *args):
         if len(args) != 2:
-            print("Usage: %s <snapshots name>" % args[0])
+            print("Usage: %s <snapshot's name>" % args[0])
             return
 
         snap_name = args[1]
@@ -149,6 +175,32 @@ class SpaceInspectSnapshot(Action, SpaceBaseFactory):
             print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + "\n")
         finally:
             s.unmount_snapshot(snap_name)
+
+
+class SpaceRevertSnapshot(Action, SpaceBaseFactory):
+    """
+    Revert to a specific snapshot.
+    """
+    def __init__(self, name):
+        super().__init__(True)
+        self.space_name = name
+        self.name = "revert_snapshot"
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <snapshot's name>" % args[0])
+            return
+
+        snap_name = args[1]
+
+        s = self.create_space(True)
+        try:
+            s.revert_snapshot(snap_name)
+        except NoSuchSnapshot:
+            print("No such snapshot.")
+        except BaseException as e:
+            print(Color.RED + "FAILED: " + Color.NORMAL + str(e) + "\n")
 
 
 class SpaceDeleteOldSnapshots(Action, SpaceBaseFactory):
