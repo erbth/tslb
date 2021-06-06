@@ -6,8 +6,7 @@
 
   * [ ] licenses
 
-  * [ ] delete scratch spaces of source packages when the entire source package
-        is deleted (maybe just delete all versions first).
+  * [ ] tpm2 config files
 
 
 Packages

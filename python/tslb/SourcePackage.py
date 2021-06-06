@@ -94,9 +94,30 @@ class SourcePackageList:
                 s.close()
 
     def destroy_source_package(self, name):
-        # TODO: delete scratch spaces
+        # First try to delete all versions of the package s.t. scratch spaces
+        # are deleted.
+        sp = None
+        try:
+            sp = SourcePackage(name, self.architecture, write_intent=True)
+
+            for v in sp.list_version_numbers():
+                sp.delete_version(v)
+
+        except NoSuchSourcePackage:
+            pass
+        except AttributeManuallyHeld:
+            raise
+        except RuntimeError as e:
+            if str(e) == "No such lock.":
+                pass
+            else:
+                raise
+
         # Lock the source package list
         with lock_X(self.db_root_lock):
+            # Release Source package
+            del sp
+
             # Remove the db tuple(s)
             with database.session_scope() as s:
                 spkg = s.query(dbspkg.SourcePackage).\

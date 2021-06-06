@@ -135,7 +135,7 @@ class SourcePackageActionDestroy(Action):
         print("This will destroy source package `%s'." % name)
 
         while True:
-            i = input("Are you sure? [y/n] ")
+            i = input_no_history("Are you sure? [y/n] ")
             if i in ('y', 'Y'):
                 break
 
@@ -148,7 +148,11 @@ class SourcePackageActionDestroy(Action):
         if not exists:
             print("WARNING: Source package `%s' does not exist in the database." % name)
 
-        spl.destroy_source_package(name)
+        try:
+            spl.destroy_source_package(name)
+        except Exception as e:
+            print(Color.RED + "ERROR: " + str(e) + Color.NORMAL)
+            return
 
         if exists:
             print("Destroyed `%s'." % name)

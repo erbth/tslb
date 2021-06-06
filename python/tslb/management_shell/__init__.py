@@ -1,3 +1,6 @@
+import readline
+
+
 class Element:
     """
     A common base class for elements. Elements can be directories or anything
@@ -105,3 +108,15 @@ class Property(Element):
             raise RuntimeError("This property is read only")
 
         raise NotImplementedError
+
+
+def input_no_history(*args, **kwargs):
+    """
+    Like the built-in `input`, but does not append the user input to the
+    history.
+    """
+    i = input(*args, **kwargs)
+    if i:
+        readline.remove_history_item(readline.get_current_history_length() - 1)
+
+    return i
