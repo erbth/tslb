@@ -497,10 +497,8 @@ class ImageRunBashAction(Action, ImageBaseFactory):
                 try:
                     pb.mount_pseudo_filesystems(mountpoint)
 
-                    def f():
-                        return os.execlp('bash', 'bash', '--login', '+h')
-
-                    pb.execute_in_chroot(mountpoint, f)
+                    pb.execute_in_chroot(mountpoint,
+                            subprocess.run, ['bash', '--login', '+h'])
 
                 finally:
                     pb.unmount_pseudo_filesystems(mountpoint, raises=True)
