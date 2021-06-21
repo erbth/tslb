@@ -5,6 +5,7 @@ from tslb import Console
 from tslb import SourcePackage
 from tslb import build_pipeline
 from tslb import build_state
+from tslb import parse_utils
 from tslb import rootfs
 from tslb import settings
 from tslb import tclm
@@ -109,6 +110,10 @@ class PackageBuilder(object):
             for v in available_versions:
                 if (dep_name, v) in cdeps and (dep_name, v) in tools:
                     dep_spv = dep_sp.get_version(v)
+
+                    # Only consider enabled versions
+                    if not parse_utils.is_yes(dep_spv.get_attribute_or_default('enabled', 'false')):
+                        continue
 
                     last_complete_build = build_state.get_last_successful_stage_event(
                             dep_spv, build_pipeline.all_stages[-1].name)

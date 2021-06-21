@@ -72,6 +72,7 @@ outdates_child = {
         # 'add_rdeps': StageAddRdeps,
 
         'find_shared_libraries': StagePatch,
+        'split_into_binary_packages': StagePatch,
         'detect_man_info': StagePatch,
         'add_readme': StagePatch,
         'add_rdeps': StagePatch,

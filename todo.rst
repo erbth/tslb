@@ -1,5 +1,7 @@
   * [ ] enable new perl
 
+  * [ ] enable gettext attrs
+
   * [ ] packages incl. TPM2
 
   * [ ] multiple nodes per host and max num threads.

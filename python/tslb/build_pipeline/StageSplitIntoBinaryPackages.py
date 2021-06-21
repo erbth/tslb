@@ -223,11 +223,16 @@ class StageSplitIntoBinaryPackages:
                         (_file.endswith('.a') or \
                         _file.endswith('.so') or \
                         _file.endswith('.o') or \
+                        _file.endswith('.la') or \
                         # _file.endswith('.dbg') or \
                         _file.endswith('.pc'))
                     ) or \
                     _file.startswith('/usr/share/pkgconfig') or \
-                    _file.startswith('/usr/local/share/pkgconfig'):
+                    _file.startswith('/usr/local/share/pkgconfig') or \
+                    _file.startswith('/usr/share/aclocal') or \
+                    _file.startswith('/usr/share/automake') or \
+                    _file.startswith('/usr/lib/cmake/') or \
+                    _file.startswith('/usr/share/cmake/'):
 
                 dev_files.add(_file)
                 copied_files.add(_file)

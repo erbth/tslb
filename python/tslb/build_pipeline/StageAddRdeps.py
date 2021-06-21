@@ -1,3 +1,4 @@
+from tslb import parse_utils
 from tslb import rootfs
 from tslb.Console import Color
 from tslb.Constraint import DependencyList, VersionConstraint, CONSTRAINT_TYPE_NONE
@@ -48,20 +49,19 @@ class StageAddRdeps:
 
 
         # If requested, skip this stage by adding dymm.
+        skip_rdeps = False
+
         if spv.has_attribute("skip_rdeps"):
             val = spv.get_attribute("skip_rdeps")
 
             if (isinstance(val, bool) and val) or \
-                    (isinstance(val, str) and val.lower() == 'true'):
+                    (isinstance(val, str) and parse_utils.is_yes(val)):
 
                 out.write(Color.YELLOW +
-                        "WARNING: Not adding rdeps because of attribute `skip_rdeps'!" +
+                        "WARNING: Not adding rdeps (except for -all) because of attribute `skip_rdeps'!" +
                         Color.NORMAL + '\n')
 
-                for bp in bps.values():
-                    bp.set_attribute('rdeps', DependencyList())
-
-                return True
+                skip_rdeps = True
 
 
         # Sort the binary packages into categories
@@ -99,6 +99,16 @@ class StageAddRdeps:
                 rdeps[name].add_constraint(
                         VersionConstraint('=', bps[dep_name].version_number),
                         dep_name)
+
+        # Skip remaining rdeps if requested
+        if skip_rdeps:
+            for name, bp in bps.items():
+                if name in cat_all:
+                    bp.set_attribute('rdeps', rdeps[name])
+                else:
+                    bp.set_attribute('rdeps', DependencyList())
+
+            return True
 
         # 'debug' packages depend on the corresponding 'other' packages.
         for name in cat_debug:
@@ -362,17 +372,17 @@ class StageAddRdeps:
                             st_buf.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
                         continue
 
+                    # Does the file have a 'shebang'?
                     with open(full_path, 'rb') as f:
                         if f.read(2) == b'#!':
                             line = f.readline().decode('ascii').strip()
                         else:
                             line = None
 
-                    # Does the file have a 'shebang'?
-                    if not line or not line.startswith('#!'):
+                    if not line:
                         continue
 
-                    interpreter = line[2:]
+                    interpreter = line.split(' ')[0]
 
                     # Find the package containing the interpreter.
                     deps = db.BinaryPackage.find_binary_packages_with_file(

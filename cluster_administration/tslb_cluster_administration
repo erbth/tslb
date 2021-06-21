@@ -7,6 +7,7 @@ declare -a tools_hosts
 tools_hosts=(
 #	"Releeshan"
 	"node04"
+	"node03"
 )
 
 PYTHON_PACKAGE=../python
