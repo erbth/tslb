@@ -393,7 +393,7 @@ class StageAddRdeps:
                             only_newest=True)
 
                     if len(deps) != 1:
-                        out.write("Did not find a binary package containing interpreter `%s'." %
+                        out.write("Did not find a binary package containing interpreter `%s'.\n" %
                             interpreter)
                         return False
 

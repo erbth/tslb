@@ -368,7 +368,9 @@ class Controller(BMInterface):
             available.
         """
         # Choose the node whose host has least active builds compared to the
-        # number of nodes running on it.
+        # number of nodes running on it. If multiple nodes have the same
+        # relative number of running builds, choose the host with more nodes as
+        # it is probably faster.
         nodes_per_host = {}
         builds_per_host = {}
 
@@ -400,7 +402,11 @@ class Controller(BMInterface):
 
             ratio = builds_per_host[host] / nodes_per_host[host]
 
-            if ratio < best_ratio:
+            # Note that the second and-clause will only be executed if best
+            # contains a valid number.
+            if \
+                    ratio < best_ratio or \
+                    (ratio == best_ratio and nodes_per_host[host] > nodes_per_host[get_host(nodes[best])]):
                 best_ratio = ratio
                 best = i
 

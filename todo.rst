@@ -1,6 +1,13 @@
+  * [ ] ldconfig in configure scripts (or similar; would actually be a candidate
+        for a trigger...)
+
+  * [ ] glibc: remove /etc/ld.so.cache and run ldconfig in configure script...
+
   * [ ] enable new perl
 
-  * [ ] enable gettext attrs
+  * [ ] enable gettext rdeps
+
+  * [ ] enable vim rdeps
 
   * [ ] packages incl. TPM2
 

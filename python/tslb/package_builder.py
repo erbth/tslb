@@ -85,10 +85,9 @@ class PackageBuilder(object):
         tools = spkgv.get_tools() or DependencyList()
 
 
-        # The package manager is essential and should be always
+        # NOTE: The package manager is essential and should be always
         # installed.
-        # TODO: Add once tpm2 is packaged? or add to tools?
-        # cdeps.add_constraint(VersionConstraint('', '0'), ('tpm2', arch))
+        # It must always be added to tools or otherwise provided.
 
         # Find the binary packages of the newest source packages that match the
         # requirements.
