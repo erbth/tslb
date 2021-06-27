@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import tempfile
 from tslb import Constraint
@@ -28,9 +29,10 @@ def edit_object_None(rw):
     while True:
         print("The current value is `None'.\nChoose a new type from the list below or input nothing to abort.")
         print("  (1) str")
-        print("  (2) list(tuple(str, str|list(str)))")
-        print("  (3) DependencyList with str objects")
-        print("  (4) list(tuple(str, DependencyList(str)))")
+        print("  (2) List(str)")
+        print("  (3) List(Tuple(str, str|List(str)))")
+        print("  (4) DependencyList with str objects")
+        print("  (5) List(Tuple(str, DependencyList(str)))")
 
         _type = input("> ")
 
@@ -41,12 +43,15 @@ def edit_object_None(rw):
             return edit_object_str('', rw)
 
         elif _type == '2':
-            return edit_object_list_pair_of_str_str_list([], rw)
+            return edit_object_list_str([], rw)
 
         elif _type == '3':
-            return edit_object_dependency_list_str(DependencyList(), rw)
+            return edit_object_list_pair_of_str_str_list([], rw)
 
         elif _type == '4':
+            return edit_object_dependency_list_str(DependencyList(), rw)
+
+        elif _type == '5':
             return edit_object_list_pair_of_str_dependency_list_str(list(), rw)
 
 
@@ -81,6 +86,33 @@ def edit_object_str(string, rw):
     finally:
         # Delete the temporary file again
         os.unlink(path)
+
+
+def edit_object_list_str(obj, rw):
+    # Convert the list to a config-file like string
+    string = "# You are editing a list of str.\n" \
+             "# Be aware that order matters. Empty lines are removed.\n"
+
+    for e in obj:
+        string += e + "\n"
+
+    # Edit and parse back
+    # Let the user view / edit the string
+    string = edit_object_str(string, rw)
+
+    if not rw:
+        return obj
+
+    # Remove comments and interpret as newline-separated list
+    list_ = []
+    for line in string.split('\n'):
+        line = re.sub(r'#.*', '', line).strip()
+        if not line:
+            continue
+
+        list_.append(line)
+
+    return list_
 
 
 def edit_object_list_pair_of_str_str_list(obj, rw):
@@ -304,6 +336,17 @@ def edit_object(obj, rw):
         return edit_object_str(obj, rw)
 
     elif isinstance(obj, list):
+        # Look for list(str)
+        valid = True
+
+        for e in obj:
+            if not isinstance(e, str):
+                valid = False
+                break
+
+        if valid:
+            return edit_object_list_str(obj, rw)
+
         # Look for list(tuple(str, str|list(str)))
         valid = True
 

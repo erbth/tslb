@@ -4,6 +4,7 @@ import stat
 import subprocess
 import zlib
 from tslb import BinaryPackage as bpkg
+from tslb import attribute_types
 from tslb.Console import Color
 from tslb.filesystem import FileOperations as fops
 from tslb.program_analysis import shared_library_tools as so_tools
@@ -473,6 +474,12 @@ class StageSplitIntoBinaryPackages:
         # the source package.
         spv.set_current_binary_packages([bp.name for bp in bps])
 
+
+        # Copy lists of package manager triggers specified in the source
+        # package version to the binary packages.
+        if not cls._collect_package_manager_triggers(spv, bps, out):
+            return False
+
         return True
 
 
@@ -558,3 +565,59 @@ class StageSplitIntoBinaryPackages:
 
                 package_file_map[generic_dbg_pkg] |= package_file_map[dbg_pkg]
                 package_file_map[dbg_pkg].clear()
+
+
+    @staticmethod
+    def _collect_package_manager_triggers(spv, bps, out):
+        out.write("\nCopying package manager trigger lists ...\n")
+
+        for trg_type in ('activated', 'interested'):
+            # Enumerate attributes
+            unqualified = trg_type + '_triggers'
+            attrs = []
+            if spv.has_attribute(unqualified):
+                attrs.append(unqualified)
+
+            attrs += spv.list_attributes(unqualified + "_*")
+
+            # Read trigger lists and verify their types
+            trg_lists = []
+
+            for attr in attrs:
+                try:
+                    trg_list = spv.get_attribute(attr)
+                    attribute_types.ensure_package_manager_trigger_list_sp(trg_list)
+                    trg_lists.append((attr, trg_list))
+
+                except attribute_types.InvalidAttributeType as e:
+                    out.write(Color.RED + "ERROR" + Color.NORMAL + ": %s: %s\n" % (attr, e))
+                    return False
+
+            # Copy lists to matching binary packages
+            attrs_set = { bp.name: set() for bp in bps }
+            for t in trg_lists:
+                sp_attr, l = t
+                bp_attr = sp_attr.replace(unqualified, unqualified + '_from_sp')
+
+                for bp in bps:
+                    collated_trg_list = []
+
+                    for bpl in l:
+                        if re.fullmatch(bpl[0], bp.name):
+                            collated_trg_list += bpl[1] if isinstance(bpl[1], list) else [bpl[1]]
+
+                    if collated_trg_list:
+                        out.write("  %s -> %s:%s\n" % (sp_attr, bp.name, bp_attr))
+                        collated_trg_list.sort()
+                        bp.set_attribute(bp_attr, collated_trg_list)
+                        attrs_set[bp.name].add(bp_attr)
+
+            # Remove _from_sp attributes that do not exist anymore.
+            # Note that this is currently never called as
+            # split_into_binary_packages always creates a new bp version.
+            for bp in bps:
+                for attr in bp.list_attributes(unqualified + "_from_sp"):
+                    if attr not in attrs_set[bp.name]:
+                        bp.unset_attribute(attr)
+
+        return True

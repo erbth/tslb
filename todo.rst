@@ -1,3 +1,5 @@
+  * [ ] rdeps for maintainer scripts, also pre-deps.
+
   * [ ] ldconfig in configure scripts (or similar; would actually be a candidate
         for a trigger...)
 
@@ -16,6 +18,8 @@
   * [ ] licenses
 
   * [ ] tpm2 and config files
+
+  * [ ] compile python code
 
 
 Packages

@@ -399,6 +399,10 @@ class StageAddRdeps:
 
                     name, version = deps[0]
 
+                    # Don't add self-loops...
+                    if name == bp.name:
+                        continue
+
                     # Add depencency
                     out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, name, version))
                     rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)

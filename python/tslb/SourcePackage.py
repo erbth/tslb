@@ -948,19 +948,26 @@ class SourcePackageVersion:
 
 
     # Key-Value-Store like attributes
-    def list_attributes(self):
+    def list_attributes(self, pattern=None):
         """
+        :param str pattern: A pattern that the attributes must match. May contain
+            '*' as wildcard-character.
         :returns: A list of all keys
         """
         with database.session_scope() as s:
             pa = aliased(dbspkg.SourcePackageVersionAttribute)
-            l = s.query(pa.key)\
+            q = s.query(pa.key)\
                     .filter(pa.source_package == self.source_package.name,
                             pa.architecture == self.architecture,
-                            pa.version_number == self.version_number)\
-                    .all()
+                            pa.version_number == self.version_number)
 
-            return [e[0] for e in l]
+            if pattern is not None:
+                pattern = pattern.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')\
+                        .replace('*', '%')
+
+                q = q.filter(pa.key.like(pattern, escape='\\'))
+
+            return [e[0] for e in q.all()]
 
 
     def has_attribute(self, key):

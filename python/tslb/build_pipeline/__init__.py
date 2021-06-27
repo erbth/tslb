@@ -35,6 +35,7 @@ from .StageFindSharedLibraries import StageFindSharedLibraries
 from .StageDetectManInfo import StageDetectManInfo
 from .StageSplitIntoBinaryPackages import StageSplitIntoBinaryPackages
 from .StageAddReadme import StageAddReadme
+from .StageGenerateMaintainerScripts import StageGenerateMaintainerScripts
 from .StageAddRdeps import StageAddRdeps
 from .StageCreatePMPackages import StageCreatePMPackages
 
@@ -50,6 +51,7 @@ all_stages = [
         StageSplitIntoBinaryPackages,
         StageDetectManInfo,
         StageAddReadme,
+        StageGenerateMaintainerScripts,
         StageAddRdeps,
         StageCreatePMPackages
         ]
@@ -68,6 +70,7 @@ outdates_child = {
         # have pulled in, which changes their state.
         # 'find_shared_libraries': StageAddRdeps,
         # 'detect_man_info': StageAddRdeps,
+        # 'generate_maintainer_scripts': StageAddRdeps,
         # 'add_readme': StageAddRdeps,
         # 'add_rdeps': StageAddRdeps,
 
@@ -75,6 +78,7 @@ outdates_child = {
         'split_into_binary_packages': StagePatch,
         'detect_man_info': StagePatch,
         'add_readme': StagePatch,
+        'generate_maintainer_scripts': StagePatch,
         'add_rdeps': StagePatch,
 
         'create_pm_packages': StageAddRdeps

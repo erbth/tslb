@@ -155,7 +155,7 @@ def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_
         cte = cte.filter(bpf.architecture == arch, bpf.path == path)
     else:
         cte = cte.filter(bpf.architecture == arch, bpf.path.like('%' +
-            path.replace('%', '\%').replace('_', '\_')))
+            path.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_'), escape='\\'))
 
     cte = cte.cte('candidates')
     cand1 = aliased(cte)
