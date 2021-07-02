@@ -9,6 +9,8 @@ from tslb.Console import Color
 from tslb.filesystem import FileOperations as fops
 from tslb.program_analysis import shared_library_tools as so_tools
 
+LDCONFIG_TRIGGER_ATTR = "activated_triggers_auto_ldconfig"
+
 class StageSplitIntoBinaryPackages:
     name = 'split_into_binary_packages'
 
@@ -406,7 +408,7 @@ class StageSplitIntoBinaryPackages:
 
                 for pattern in patterns:
                     for _file in installed_items - assigned_files:
-                        m = re.match(pattern, _file)
+                        m = re.fullmatch(pattern, _file)
                         if m:
                             files.add(_file)
 
@@ -478,6 +480,11 @@ class StageSplitIntoBinaryPackages:
         # Copy lists of package manager triggers specified in the source
         # package version to the binary packages.
         if not cls._collect_package_manager_triggers(spv, bps, out):
+            return False
+
+
+        # Add ldconfig triggers based on shared libraries in packages
+        if not cls._add_ldconfig_triggers(spv, bps, package_file_map, out):
             return False
 
         return True
@@ -619,5 +626,31 @@ class StageSplitIntoBinaryPackages:
                 for attr in bp.list_attributes(unqualified + "_from_sp"):
                     if attr not in attrs_set[bp.name]:
                         bp.unset_attribute(attr)
+
+        return True
+
+
+    @classmethod
+    def _add_ldconfig_triggers(cls, spv, bps, package_file_map, out):
+        out.write("\nAdding ldconfig-triggers for packages with shared libraries ...\n")
+
+        file_package_map = { f: bp_name for bp_name, fs in package_file_map.items() for f in fs }
+        libs = spv.get_shared_libraries()
+        lib_files = [f for l in libs for f in l.get_files()]
+
+        for bp in bps:
+            has_shared_libraries = False
+            for f in lib_files:
+                if file_package_map.get(f) == bp.name:
+                    has_shared_libraries = True
+                    break
+
+            if has_shared_libraries:
+                print("  %s" % bp.name, file=out)
+                bp.set_attribute(LDCONFIG_TRIGGER_ATTR, ["ldconfig"])
+
+            else:
+                if bp.has_attribute(LDCONFIG_TRIGGER_ATTR):
+                    bp.unset(LDCONFIG_TRIGGER_ATTR)
 
         return True

@@ -299,6 +299,17 @@ class BinaryPackage(object):
                 return None
 
 
+    def get_attribute_or_default(self, key, default):
+        """
+        Like `get_attribute`, but return a default value instead of raising a
+        `NoSuchAttribute` if the attribute does not exist.
+        """
+        if not self.has_attribute(key):
+            return default
+
+        return self.get_attribute(key)
+
+
     def get_attribute_meta(self, key):
         """
         :param key: The attribute's key

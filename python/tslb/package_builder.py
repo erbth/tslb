@@ -95,6 +95,7 @@ class PackageBuilder(object):
 
         spl = SourcePackage.SourcePackageList(arch)
         available_source_packages = set(spl.list_source_packages())
+        del spl
 
         for dep_name in set(cdeps.get_required() + tools.get_required()):
             if dep_name not in available_source_packages:

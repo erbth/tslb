@@ -154,6 +154,7 @@ class StageGenerateMaintainerScripts:
 
             del bp
 
+        out.write("\n")
         return True
 
 

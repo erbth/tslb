@@ -626,7 +626,7 @@ class SourcePackageVersion:
     def get_shared_libraries(self):
         """
         :returns: list(shared libraries)
-        :rtype: list(SharedLibraryTools.SharedLibrary)
+        :rtype: list(shared_library_tools.SharedLibrary)
         """
         libs = []
 
@@ -654,7 +654,7 @@ class SourcePackageVersion:
     def set_shared_libraries(self, libs):
         """
         :param libs: list(shared libraries)
-        :rtype: list(SharedLibraryTools.SharedLibrary)
+        :rtype: list(shared_library_tools.SharedLibrary)
         """
         with lock_X(self.db_root_lock):
             with database.session_scope() as s:

@@ -42,23 +42,24 @@ def desc_from_binary_package(bp, xml_declaration=True):
     ET.SubElement(root, 'version').text = str(bp.version_number)
     ET.SubElement(root, 'source_version').text = str(bp.source_package_version.version_number)
 
-    # Add the runtime dependencies of the binary package
-    rdeps = bp.get_attribute('rdeps')
+    # Add the runtime (pre-) dependencies of the binary package
+    for attr, section in (('rpredeps', 'pre-dependencies'), ('rdeps', 'dependencies')):
+        rdeps = bp.get_attribute_or_default(attr, Constraint.DependencyList())
 
-    if rdeps.get_required():
-        elem_deps = ET.SubElement(root, 'dependencies')
+        if rdeps.get_required():
+            elem_deps = ET.SubElement(root, section)
 
-        for dep, constraints in rdeps.get_object_constraint_list():
-            elem_dep = ET.SubElement(elem_deps, 'dep')
-            ET.SubElement(elem_dep, 'name').text = dep
-            ET.SubElement(elem_dep, 'arch').text = Architecture.to_str(bp.architecture)
+            for dep, constraints in rdeps.get_object_constraint_list():
+                elem_dep = ET.SubElement(elem_deps, 'dep')
+                ET.SubElement(elem_dep, 'name').text = dep
+                ET.SubElement(elem_dep, 'arch').text = Architecture.to_str(bp.architecture)
 
-            for constraint in constraints:
-                if constraint.constraint_type != Constraint.CONSTRAINT_TYPE_NONE:
-                    _type = constr_type_str_map[constraint.constraint_type]
+                for constraint in constraints:
+                    if constraint.constraint_type != Constraint.CONSTRAINT_TYPE_NONE:
+                        _type = constr_type_str_map[constraint.constraint_type]
 
-                    ET.SubElement(elem_dep, 'constr', {'type': _type})\
-                            .text = str(constraint.version_number)
+                        ET.SubElement(elem_dep, 'constr', {'type': _type})\
+                                .text = str(constraint.version_number)
 
 
     # Add references to triggers

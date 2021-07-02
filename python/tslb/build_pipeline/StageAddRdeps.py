@@ -34,11 +34,13 @@ class StageAddRdeps:
         # Retrieve all binary packages of that build
         bps = {}
         rdeps = {}
+        rpredeps = {}
 
         for name in spv.list_current_binary_packages():
             version = max(spv.list_binary_package_version_numbers(name))
             bps[name] = spv.get_binary_package(name, version)
             rdeps[name] = DependencyList()
+            rpredeps[name] = DependencyList()
 
 
         # Update all binary packages' files
@@ -213,6 +215,10 @@ class StageAddRdeps:
         if not cls._add_script_dependencies(bps, rdeps, out):
             return False
 
+        # Add dependencies for maintainer scripts
+        if not cls._add_maintainer_script_deps(bps, rdeps, out):
+            return False
+
         # Adding dependencies for perl packages
         if not cls._add_perl_dependencies(bps, rdeps, out):
             return False
@@ -290,10 +296,17 @@ class StageAddRdeps:
                         out.write("  `%s' -> `%s'%s\n" % (bp_name, dep, value))
 
 
-        # Set binary packages' `rdeps' attribute
+        # pre-dependencies
+        # Add pre-dependencies for maintainer scripts
+        if not cls._add_maintainer_script_deps(bps, rpredeps, out, True):
+            return False
+
+        # Set binary packages' `rdeps' and `rpredeps' attributes
         for bp_name in bps:
             bps[bp_name].set_attribute('rdeps', rdeps[bp_name])
+            bps[bp_name].set_attribute('rpredeps', rpredeps[bp_name])
 
+        out.write("\n")
         return True
 
 
@@ -356,7 +369,8 @@ class StageAddRdeps:
         return new_dl
 
 
-    def _add_script_dependencies(bps, rdeps, out):
+    @classmethod
+    def _add_script_dependencies(cls, bps, rdeps, out):
         out.write("\nAdding runtime dependencies based on 'shebang'-requested interpreters...\n")
 
         with db.session_scope() as session:
@@ -365,47 +379,10 @@ class StageAddRdeps:
 
                 for file_, sha512 in bp.get_files():
                     full_path = simplify_path_static(base + '/' + file_)
-                    st_buf = os.lstat(full_path)
 
-                    # Only consider executable files
-                    if not stat.S_ISREG(st_buf.st_mode) or not \
-                            st_buf.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
-                        continue
-
-                    # Does the file have a 'shebang'?
-                    with open(full_path, 'rb') as f:
-                        if f.read(2) == b'#!':
-                            line = f.readline().decode('ascii').strip()
-                        else:
-                            line = None
-
-                    if not line:
-                        continue
-
-                    interpreter = line.split(' ')[0]
-
-                    # Find the package containing the interpreter.
-                    deps = db.BinaryPackage.find_binary_packages_with_file(
-                            session,
-                            bp.architecture,
-                            interpreter,
-                            True,
-                            only_newest=True)
-
-                    if len(deps) != 1:
-                        out.write("Did not find a binary package containing interpreter `%s'.\n" %
-                            interpreter)
+                    if not cls._add_file_dependencies_shebang(
+                            bp, rdeps, full_path, session, out):
                         return False
-
-                    name, version = deps[0]
-
-                    # Don't add self-loops...
-                    if name == bp.name:
-                        continue
-
-                    # Add depencency
-                    out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, name, version))
-                    rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)
 
         return True
 
@@ -462,4 +439,92 @@ class StageAddRdeps:
                 out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, perl[0], perl[1]))
                 rdeps[bp.name].add_constraint(VersionConstraint('>=', perl[1]), perl[0])
 
+        return True
+
+
+    # Add (pre-) dependencies for maintainer scripts
+    @classmethod
+    def _add_maintainer_script_deps(cls, bps, rdeps, out, add_predeps=False):
+        if add_predeps:
+            out.write("\nAdding pre-dependencies for maintainer scripts...\n")
+            scripts = ('collated_preinst_script', 'collated_postrm_script')
+        else:
+            out.write("\nAdding dependencies for maintainer scripts...\n")
+            scripts = ('collated_configure_script', 'collated_unconfigure_script')
+
+        with db.session_scope() as session:
+            for bp in bps.values():
+                for attr in scripts:
+                    val = bp.get_attribute_or_default(attr, None)
+                    if val:
+                        print("%s::%s" % (bp.name, attr), file=out)
+                        if not cls._add_file_dependencies_shebang_buffer(
+                                bp, rdeps, val, session, out):
+                            return False
+
+        return True
+
+
+    # Adding dependencies for a file.
+    @classmethod
+    def _add_file_dependencies_shebang(cls, bp, rdeps, full_path, db_session, out):
+        """
+        Add dependencies based on 'shebang'.
+        """
+        # Only consider executable files
+        st_buf = os.lstat(full_path)
+        if not stat.S_ISREG(st_buf.st_mode) or not \
+                st_buf.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+            return True
+
+        # Read the file and process it if it starts with a 'shebang'
+        with open(full_path, 'rb') as f:
+            if f.read(2) == b'#!':
+                line = f.readline().decode('ascii').strip()
+            else:
+                line = None
+
+        if not line:
+            return True
+
+        return cls._add_file_dependencies_shebang_buffer(bp, rdeps, '#!' + line, db_session, out)
+
+    def _add_file_dependencies_shebang_buffer(bp, rdeps, buf, db_session, out):
+        """
+        Add dependencies based on shebang given at least the first line of the
+        file to test in the buffer.
+
+        :type buf: bytes (interpreted as ascii text) | str
+        :returns bool: False in case of error
+        """
+        if isinstance(buf, bytes):
+            buf = buf.decode('ascii')
+
+        if buf[:2] != '#!':
+            return True
+
+        interpreter = buf.split('\n')[0].split(' ')[0][2:]
+
+        # Find the package containing the interpreter
+        deps = db.BinaryPackage.find_binary_packages_with_file(
+                db_session,
+                bp.architecture,
+                interpreter,
+                True,
+                only_newest=True)
+
+        if len(deps) != 1:
+            out.write("Did not find a binary package containing interpreter `%s'.\n" %
+                interpreter)
+            return False
+
+        name, version = deps[0]
+
+        # Don't add self-loops...
+        if name == bp.name:
+            return True
+
+        # Add depencency
+        out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, name, version))
+        rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)
         return True
