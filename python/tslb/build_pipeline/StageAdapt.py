@@ -1,8 +1,12 @@
+from tslb import parse_utils
+from tslb import program_transformation as progtrans
+from tslb.Console import Color
+from tslb.build_pipeline.utils import PreparedBuildCommand
+import math
 import multiprocessing
 import os
 import subprocess
-from tslb.Console import Color
-from tslb.build_pipeline.utils import PreparedBuildCommand
+import tslb.program_transformation.python
 
 
 class StageAdapt:
@@ -22,51 +26,62 @@ class StageAdapt:
         :returns: successful
         :rtype: bool
         """
-        # If this source package version has no adapt command, simply do
-        # nothing.
-        if not spv.has_attribute('adapt_command'):
-            return True
-
-        success = True
-
-        chroot_source_dir = os.path.join(
-            '/tmp/tslb/scratch_space/build_location',
-            spv.get_attribute('unpacked_source_directory'))
+        chroot_source_dir = None
+        if spv.has_attribute('unpacked_source_directory'):
+            chroot_source_dir = os.path.join(
+                '/tmp/tslb/scratch_space/build_location',
+                spv.get_attribute('unpacked_source_directory'))
 
         chroot_install_location = '/tmp/tslb/scratch_space/install_location'
+        max_parallel_threads = math.ceil(multiprocessing.cpu_count() * 1.2)
 
-        max_parallel_threads = round(multiprocessing.cpu_count() * 1.2 + 0.5)
+        # If this source package version has an adapt command, run it.
+        if spv.has_attribute('adapt_command'):
+            # Prepare the adapt command
+            adapt_command = PreparedBuildCommand(
+                spv.get_attribute('adapt_command'),
+                {
+                    'MAX_PARALLEL_THREADS': str(max_parallel_threads),
+                    'MAX_LOAD': str(max_parallel_threads),
+                    'SOURCE_DIR': str(chroot_source_dir),
+                    'SOURCE_VERSION': str(spv.version_number),
+                    'INSTALL_LOCATION': chroot_install_location
+                },
+                chroot=rootfs_mountpoint)
 
-        # Prepare the adapt command
-        adapt_command = PreparedBuildCommand(
-            spv.get_attribute('adapt_command'),
-            {
-                'MAX_PARALLEL_THREADS': str(max_parallel_threads),
-                'MAX_LOAD': str(max_parallel_threads),
-                'SOURCE_DIR': chroot_source_dir,
-                'INSTALL_LOCATION': chroot_install_location
-            },
-            chroot=rootfs_mountpoint)
+            try:
+                out.write(Color.YELLOW + str(adapt_command) + Color.NORMAL + '\n')
 
-        try:
-            out.write(Color.YELLOW + str(adapt_command) + Color.NORMAL + '\n')
+                from tslb.package_builder import execute_in_chroot
 
-            from tslb.package_builder import execute_in_chroot
+                with adapt_command as cmd:
+                    ret = execute_in_chroot(
+                        rootfs_mountpoint,
+                        subprocess.run,
+                        cmd,
+                        cwd=chroot_install_location,
+                        stdout=out.fileno(),
+                        stderr=out.fileno())
 
-            with adapt_command as cmd:
-                ret = execute_in_chroot(
+                    if ret != 0:
+                        return False
+
+            except BaseException as e:
+                out.write(str(e) + '\n')
+                return False
+
+
+        # Perform other transformations
+        # Compile python code; 4 cores / node -> max. concurrent workers = 6
+        if not parse_utils.is_yes(
+                spv.get_attribute_or_default('disable_python_compileall', None)):
+
+            out.write(Color.YELLOW + "Compiling python code if the package has such..." + Color.NORMAL + "\n")
+            if not progtrans.python.compile_base_in_chroot(
                     rootfs_mountpoint,
-                    subprocess.run,
-                    cmd,
-                    cwd=chroot_install_location,
-                    stdout=out.fileno(),
-                    stderr=out.fileno())
+                    chroot_install_location,
+                    out=out,
+                    concurrent_workers=6):
+                return False
 
-                if ret != 0:
-                    success = False
-
-        except BaseException as e:
-            success = False
-            out.write(str(e) + '\n')
-
-        return success
+        return True

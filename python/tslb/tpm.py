@@ -11,7 +11,12 @@ class Tpm2_pack:
     A simple wrapper that calls tpm_pack2.
     """
     def __init__(self, tpm2_pack='tpm2_pack'):
-        self.tpm2_pack = tpm2_pack
+        self._tpm2_pack = tpm2_pack
+
+    @property
+    def tpm2_pack(self):
+        return self._tpm2_pack
+
 
     def pack(self, directory, stdout=sys.stdout, stderr=sys.stderr):
         """
@@ -22,7 +27,7 @@ class Tpm2_pack:
         :param stderr: sys.stdout-like object for tpm2_pack's stderr
         :raises `CommonExceptions.CommandFailed`: If packaging fails.
         """
-        cmd = [self.tpm2_pack, '.']
+        cmd = [self._tpm2_pack, '.']
 
         res = subprocess.run(cmd, cwd=directory,
                 stdout=stdout.fileno(), stderr=stderr.fileno())
@@ -31,7 +36,7 @@ class Tpm2_pack:
             raise ces.CommandFailed(' '.join(cmd))
 
 
-class Tpm2(object):
+class Tpm2:
     """
     A simple wrapper that calls TPM version 2.
 
@@ -41,8 +46,17 @@ class Tpm2(object):
     :param tpm2: Path to the tpm2 executable
     """
     def __init__(self, target=None, tpm2='tpm2'):
-        super().__init__
-        self.tpm2 = tpm2
+        self._tpm2 = tpm2
+        self._target = target
+
+    @property
+    def tpm2(self):
+        return self._tpm2
+
+    @property
+    def target(self):
+        return self._target
+
 
     def install(self, pkgs):
         """
@@ -54,7 +68,10 @@ class Tpm2(object):
 
         :raises CommonExceptions.CommandFailed: if installing failes.
         """
-        cmd = [self.tpm2, '--install', '--assume-yes', '--adopt-all']
+        cmd = [self._tpm2, '--install', '--assume-yes', '--adopt-all']
+
+        if self._target:
+            cmd += ['--target', self._target]
 
         for e in pkgs:
             if len(e) == 2:
@@ -78,7 +95,10 @@ class Tpm2(object):
 
         :raises CommonExceptions.CommandFailed: if the operation fails.
         """
-        cmd = [self.tpm2, '--mark-auto']
+        cmd = [self._tpm2, '--mark-auto']
+
+        if self._target:
+            cmd += ['--target', self._target]
 
         for n,a in pkgs:
             cmd.append("%s@%s" % (n, Architecture.to_str(a)))
@@ -95,7 +115,10 @@ class Tpm2(object):
         :rtype:   List(Tuple(str , int         , VersionNumber))
         :raises CommonExceptions.CommandFailed: if the operation fails.
         """
-        cmd = [self.tpm2, '--list-installed']
+        cmd = [self._tpm2, '--list-installed']
+
+        if self._target:
+            cmd += ['--target', self._target]
 
         res = subprocess.run(cmd, stdout=subprocess.PIPE)
         if res.returncode != 0:
@@ -121,9 +144,12 @@ class Tpm2(object):
         """
         Remove unneeded packages.
 
-        :raises CommonExceptions.CommandFailed: if the oepration fails.
+        :raises CommonExceptions.CommandFailed: if the operation fails.
         """
-        cmd = [self.tpm2, '--remove-unneeded', '--assume-yes']
+        cmd = [self._tpm2, '--remove-unneeded', '--assume-yes']
+
+        if self._target:
+            cmd += ['--target', self._target]
 
         if subprocess.run(cmd).returncode != 0:
             raise ces.CommandFailed(' '.join(cmd))

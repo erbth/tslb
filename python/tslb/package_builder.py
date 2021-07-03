@@ -210,6 +210,33 @@ class PackageBuilder(object):
                 mount_pseudo_filesystems(mountpoint, spkgv)
                 tpm_native = Tpm2()
 
+
+                # If the image has no package manager (usually it is completely
+                # empty in such case), bootstrap it.
+                if rootfs_image_requires_bootstrapping(mountpoint):
+                    self.out.write(Color.CYAN + 
+                        "[------] Bootstrapping 'empty' image\n" + Color.NORMAL)
+
+                    try:
+                        # Flatten image first.
+                        print(Color.YELLOW + "Flattening image ..." + Color.NORMAL, file=self.out)
+                        image.flatten()
+
+                        bootstrap_rootfs_image(mountpoint, arch, self.out)
+
+                        Console.print_finished_status_box(Color.CYAN +
+                            "Bootstrapping 'empty' image" + Color.NORMAL,
+                            True,
+                            file=self.out)
+
+                    except BaseException as e:
+                        Console.print_finished_status_box(Color.CYAN +
+                            "Bootstrapping 'empty' image" + Color.NORMAL,
+                            False,
+                            file=self.out)
+                        raise
+
+
                 # Mark all packages in the image as automatically installed
                 self.out.write(Color.CYAN + 
                     '[------] Marking installed packages as automatically installed\n' + Color.NORMAL)
@@ -902,8 +929,83 @@ def _copy_config_file(root):
         os.path.join(root, 'tmp', 'tslb', 'system.ini'))
 
 
+#************************* Bootstrapping rootfs images ************************
+def rootfs_image_requires_bootstrapping(mountpoint):
+    """
+    The image must be mounted at the given mountpoint. The function uses the
+    simple heuristic of looking for an installed package manager to test if
+    bootstrapping is required.
+    """
+    for p in ('/bin/tpm2', '/usr/bin/tpm2'):
+        fp = fops.simplify_path_static(mountpoint + p)
+        if os.path.isfile(fp):
+            return False
 
-# *************************** Exceptions **************************************
+    return True
+
+
+def bootstrap_rootfs_image(mountpoint, arch, out):
+    """
+    The image must be mounted at the given mountpoint and the mountpoints for
+    the virtual 'pseudo-filesystems' need to be created already. The
+    pseudo-filesystems must be mounted, too, as the /tmp/tslb hieararchy holds
+    the collecting repo from which packages are installed, and as a
+    chroot-operation will be performed to configure the initial packages after
+    installation.
+
+    :param arch: The default architecture to configure at the package manager.
+        The package manager will also be installed for this architecture
+
+    :raises Exception: If anything fails.
+    """
+    # Create package manager configuration
+    print(Color.YELLOW + "Creating package manager configuration ..." + Color.NORMAL, file=out)
+
+    for d in ('/etc', '/etc/tpm'):
+        p = fops.simplify_path_static(mountpoint + d)
+        if not os.path.isdir(p):
+            os.mkdir(p)
+            os.chown(p, 0, 0)
+            os.chmod(p, 0o755)
+
+    conffile = fops.simplify_path_static(mountpoint + '/etc/tpm/config.xml')
+    with open(conffile, 'w', encoding='utf8') as f:
+        f.write(
+'''<?xml version="1.0"?>
+<tpm file_version="2.0">
+    <default_arch>%(arch)s</default_arch>
+    <repo type="dir">/tmp/tslb/collecting_repo</repo>
+</tpm>
+'''
+        % {'arch': Architecture.to_str(arch)})
+
+
+    # Install the package manager using the tools-system's version of TPM2
+    print(Color.YELLOW + "Installing the package manager ..." + Color.NORMAL, file=out)
+
+    tpm = Tpm2(target=mountpoint)
+    tpm.install([('tpm2', arch)])
+
+
+    # Finish installation (configure packages and run triggers) in the newly
+    # built chroot environment.
+    print(Color.YELLOW + "Running the package manager in the image ..." +
+        Color.NORMAL, file=out)
+
+    def _f():
+        try:
+            Tpm2().install([])
+            return 0
+
+        except BaseException as e:
+            print(e)
+            return 1
+
+    if execute_in_chroot(mountpoint, _f) != 0:
+        raise ce.CommandFailed("tpm2 --install (native)")
+
+
+#********************************** Exceptions ********************************
 class PkgBuildFailed(Exception):
     """
     To be raised when a package failed to build and the build system worked

@@ -503,28 +503,48 @@ class StageAddRdeps:
         if buf[:2] != '#!':
             return True
 
-        interpreter = buf.split('\n')[0].split(' ')[0][2:]
+        line = buf.split('\n')[0][2:].strip().split(' ')
+        interpreters = [line[0]]
+
+        # Handle #!/usr/bin/env specially
+        if interpreters[0] == '/usr/bin/env':
+            for arg in line[1:]:
+                if arg and not arg.startswith('-'):
+                    if arg.startswith('/'):
+                        interpreters.append(arg)
+                    else:
+                        interpreters += [
+                            '/usr/bin/' + arg,
+                            '/bin/' + arg,
+                        ]
 
         # Find the package containing the interpreter
-        deps = db.BinaryPackage.find_binary_packages_with_file(
-                db_session,
-                bp.architecture,
-                interpreter,
-                True,
-                only_newest=True)
+        for i, interpreter in enumerate(interpreters):
+            deps = db.BinaryPackage.find_binary_packages_with_file(
+                    db_session,
+                    bp.architecture,
+                    interpreter,
+                    True,
+                    only_newest=True)
 
-        if len(deps) != 1:
-            out.write("Did not find a binary package containing interpreter `%s'.\n" %
-                interpreter)
-            return False
+            # Try the best to find the interpreter /usr/bin/env would choose
+            # among multiple choices.
+            if len(deps) == 0 and i > 0:
+                continue
 
-        name, version = deps[0]
+            if len(deps) != 1:
+                out.write("Did not find a binary package containing interpreter `%s'.\n" %
+                    interpreter)
+                return False
 
-        # Don't add self-loops...
-        if name == bp.name:
-            return True
+            name, version = deps[0]
 
-        # Add depencency
-        out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, name, version))
-        rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)
+            # Don't add self-loops...
+            if name == bp.name:
+                return True
+
+            # Add depencency
+            out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, name, version))
+            rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)
+
         return True

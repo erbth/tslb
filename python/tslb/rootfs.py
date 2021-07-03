@@ -766,10 +766,11 @@ def find_image(requirements):
         for a, b in error_function:
             print("    %f: %s" % (a, b))
 
-        print("Minimum: %s" % min(error_function)[1])
-
         if len(error_function) > 0:
-            return Image(min(error_function)[1])
+            min_err = min(error_function)[1]
+            print("Minimum: %s" % min_err)
+            return Image(min_err)
+
         else:
             return None
 

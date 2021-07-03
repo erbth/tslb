@@ -35,8 +35,8 @@
 	
 	\pagebreak
 	
-	\section{Package attributes}
-	\label{sec:package_attributes}
+	\section{Source package attributes}
+	\label{sec:source_package_attributes}
 	
 	\begin{tabularx}{\textwidth}{llX}
 		Command & Typical type & Description \\
@@ -45,6 +45,7 @@
 		build\_command & str & \\
 		install\_to\_destdir\_command & str & \\
 		skip\_rdeps & str & Optionally skip adding rdeps (parsed into bool) \\
+		disable\_python\_compileall & str & \\
 		adapt\_command & str & \\
 		additional\_file\_placement & List(Tuple(str, str|List(str))) & [(dst pkg name, regex | [regex])]\\
 		additional\_rdeps & List(Tuple(str,DependencyList)) & \\
@@ -55,10 +56,10 @@
 		unpack\_command & str & \\
 		patch\_command & str & \\
 		unpacked\_source\_directory & str & \\
-		activated\_triggers & List(str) & \\
-		activated\_triggers\_* & List(str) & \\
-		interested\_triggers & List(str) & \\
-		interested\_triggers\_* & List(str) & \\
+		activated\_triggers & List(Tuple(str, str|List(str))) & \\
+		activated\_triggers\_* & List(Tuple(str, str|List(str))) & \\
+		interested\_triggers & List(Tuple(str, str|List(str))) & \\
+		interested\_triggers\_* & List(Tuple(str, str|List(str))) & \\
 		maintainer\_script\_* & str & \\
 	\end{tabularx}
 

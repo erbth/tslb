@@ -1,9 +1,4 @@
-  * [ ] rdeps for maintainer scripts, also pre-deps.
-
-  * [ ] ldconfig in configure scripts (or similar; would actually be a candidate
-        for a trigger...)
-
-  * [ ] glibc: remove /etc/ld.so.cache and run ldconfig in configure script...
+  * [ ] bootstrap empty images
 
   * [ ] enable new perl
 
@@ -17,17 +12,11 @@
 
   * [ ] licenses
 
-  * [ ] tpm2 and config files
-
-  * [ ] compile python code
-
 
 Packages
 ---
 
   * shadow: configure script: pwconv / grpconv
-
-  * bash: configure/unconfigure script for /bin/sh
 
   * grub: had to disable libfreetype as it's not available as package yet.
 
