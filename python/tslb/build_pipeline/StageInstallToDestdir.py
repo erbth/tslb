@@ -89,7 +89,9 @@ class StageInstallToDestdir(object):
                 {
                     'MAX_PARALLEL_THREADS': str(max_parallel_threads),
                     'MAX_LOAD': str(max_parallel_threads),
-                    'DESTDIR': chroot_install_location
+                    'DESTDIR': chroot_install_location,
+                    'SOURCE_DIR': os.path.join(chroot_build_location, spv.get_attribute('unpacked_source_directory')),
+                    'SOURCE_VERSION': str(spv.version_number),
                 },
                 chroot=rootfs_mountpoint)
 

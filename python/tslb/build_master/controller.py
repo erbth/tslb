@@ -400,7 +400,9 @@ class Controller(BMInterface):
         for i, node in enumerate(nodes):
             host = get_host(node)
 
-            ratio = builds_per_host[host] / nodes_per_host[host]
+            # Bias s.t. light-loaded nodes compare equally and their power
+            # plays a bigger role.
+            ratio = max(builds_per_host[host] / nodes_per_host[host], 0.25)
 
             # Note that the second and-clause will only be executed if best
             # contains a valid number.

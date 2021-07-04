@@ -1,22 +1,16 @@
-  * [ ] bootstrap empty images
-
-  * [ ] enable new perl
-
-  * [ ] enable gettext rdeps
-
-  * [ ] enable vim rdeps
-
   * [ ] packages incl. TPM2
 
   * [ ] multiple nodes per host and max num threads.
 
   * [ ] licenses
 
+  * [ ] rtc, ... - see in general what LFS configures.
+
+  * firmware, microcode, ...
+
 
 Packages
 ---
-
-  * shadow: configure script: pwconv / grpconv
 
   * grub: had to disable libfreetype as it's not available as package yet.
 
