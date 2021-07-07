@@ -174,6 +174,7 @@ class SourcePackageDirectory(Directory):
     def listdir(self):
         return [
             SourcePackageVersionsDirectory(self.arch, self.name),
+            SourcePackageAttributesDirectory(self.name, self.arch),
             SourcePackageGenericAction(self.name, self.arch, 'get_creation_time')
         ]
 
@@ -221,6 +222,132 @@ class SourcePackageGenericAction(SourcePackageBaseAction):
 
         else:
             print_element(ret)
+
+
+#****************** Presenting a source package's attributes ******************
+class SourcePackageAttributesDirectory(Directory):
+    """
+    A directory that represents a source package's kv-attributes.
+    """
+    def __init__(self, pkg_name, arch):
+        super().__init__()
+
+        self.pkg_name = pkg_name
+        self.arch = arch
+
+        self.name = 'attributes'
+
+
+    def listdir(self):
+        children = []
+
+        sp = spkg.SourcePackage(self.pkg_name, self.arch)
+        for attr in sp.list_attributes():
+            children.append(SourcePackageAttributeProperty(
+                self.pkg_name, self.arch, attr, not sp.attribute_manually_held(attr)))
+
+        children.append(GetAttributeMetaAction(lambda: spkg.SourcePackage(self.pkg_name, self.arch)))
+        children.append(ManuallyHoldAttributeAction(lambda: spkg.SourcePackage(
+            self.pkg_name, self.arch, write_intent=True)))
+
+        children.append(ManuallyUnholdAttributeAction(lambda: spkg.SourcePackage(
+            self.pkg_name, self.arch, write_intent=True)))
+
+        children.append(SourcePackageAddAttributeAction(self.pkg_name, self.arch))
+        children.append(SourcePackageUnsetAttributeAction(self.pkg_name, self.arch))
+
+        return children
+
+
+class SourcePackageAttributeProperty(Property):
+    """
+    Objects of this class represent a property of a source package.
+    """
+    # :param writable: Set to False if the attribute cannot be written (i.e. is
+    #     manually held)
+    def __init__(self, pkg_name, arch, property_key, writable):
+        super().__init__(writable=writable)
+
+        self.pkg_name = pkg_name
+        self.arch = arch
+
+        self.name = property_key
+
+
+    def read_raw(self):
+        return spkg.SourcePackage(self.pkg_name, self.arch).get_attribute(self.name)
+
+
+    def read(self):
+        val = self.read_raw()
+
+        if isinstance(val, str):
+            return 'str: "%s"' % val
+        elif isinstance(val, int):
+            return 'int: "%d"' % val
+        elif val is None:
+            return 'None'
+        else:
+            return str(val)
+
+
+    def write(self, value):
+        spkg.SourcePackage(self.pkg_name, self.arch, write_intent=True)\
+                .set_attribute(self.name, value)
+
+
+class SourcePackageAddAttributeAction(Action):
+    """
+    Add an attribute to a source package.
+    """
+    def __init__(self, pkg_name, arch):
+        super().__init__(writes=True)
+
+        self.pkg_name = pkg_name
+        self.arch = arch
+
+        self.name = 'add'
+
+
+    def run(self, *args):
+        if len(args) < 2 or len(args) > 3:
+            print("Usage: %s <attr. name> [<attr. value>]" % args[0])
+            return
+
+        key = args[1]
+        val = str(args[2]) if len(args) > 2 else None
+
+        sp = spkg.SourcePackage(self.pkg_name, self.arch, write_intent=True)
+        if sp.has_attribute(key):
+            print("This attribute exists already.")
+            return
+
+        sp.set_attribute(key, val)
+
+
+class SourcePackageUnsetAttributeAction(Action):
+    """
+    Unset an attribute of a source package.
+    """
+    def __init__(self, pkg_name, arch):
+        super().__init__(writes=True)
+
+        self.pkg_name = pkg_name
+        self.arch = arch
+
+        self.name = 'unset'
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <attr. name>" % args[0])
+            return
+
+        try:
+            spkg.SourcePackage(self.pkg_name, self.arch, write_intent=True)\
+                    .unset_attribute(args[1])
+        except ces.NoSuchAttribute:
+            print("No such attribute.")
 
 
 #********************* Presenting SourcePackageVersions ***********************
@@ -626,10 +753,15 @@ class SourcePackageVersionAttributesDirectory(Directory, SourcePackageVersionFac
     def listdir(self):
         children = []
 
-        for attr in self.create_spv().list_attributes():
+        spv = self.create_spv()
+        for attr in spv.list_attributes():
             children.append(SourcePackageVersionAttributeProperty(
-                self.pkg_name, self.arch, self.version, attr))
+                self.pkg_name, self.arch, self.version, attr,
+                not spv.attribute_manually_held(attr)))
 
+        children.append(GetAttributeMetaAction(lambda: self.create_spv()))
+        children.append(ManuallyHoldAttributeAction(lambda: self.create_spv(True)))
+        children.append(ManuallyUnholdAttributeAction(lambda: self.create_spv(True)))
         children.append(SourcePackageVersionAddAttributeAction(self.pkg_name, self.arch, self.version))
         children.append(SourcePackageVersionUnsetAttributeAction(self.pkg_name, self.arch, self.version))
 
@@ -640,8 +772,10 @@ class SourcePackageVersionAttributeProperty(Property, SourcePackageVersionFactor
     """
     Objects of this class represent a propery of a source package version.
     """
-    def __init__(self, name, arch, version, property_key):
-        super().__init__(writable=True)
+    # :param writable: Set to False if the attribute cannot be written (i.e. is
+    #     manually held)
+    def __init__(self, name, arch, version, property_key, writable):
+        super().__init__(writable=writable)
 
         self.pkg_name = name
         self.arch = arch
@@ -862,9 +996,14 @@ class BinaryPackageVersionAttributesDirectory(Directory):
     def listdir(self):
         children = [BinaryPackageVersionIsCurrentProperty(self.bpvd)]
 
-        for prop_name in self.bpvd.create_bp().list_attributes():
-            children.append(BinaryPackageVersionAttributeProperty(self.bpvd, prop_name))
+        bp = self.bpvd.create_bp()
+        for prop_name in bp.list_attributes():
+            children.append(BinaryPackageVersionAttributeProperty(self.bpvd, prop_name,
+                not bp.attribute_manually_held(prop_name)))
 
+        children.append(GetAttributeMetaAction(lambda: self.bpvd.create_bp()))
+        children.append(ManuallyHoldAttributeAction(lambda: self.bpvd.create_bp(True)))
+        children.append(ManuallyUnholdAttributeAction(lambda: self.bpvd.create_bp(True)))
         children.append(BinaryPackageVersionAddAttributeAction(self.bpvd))
         children.append(BinaryPackageVersionUnsetAttributeAction(self.bpvd))
 
@@ -939,8 +1078,10 @@ class BinaryPackageVersionAttributeProperty(Property):
     :type bpvd: BinaryPackageVersionDirectory
     :param str name: The propertie's name (key).
     """
-    def __init__(self, bpvd, name):
-        super().__init__(writable=True)
+    # :param writable: Set to False if the attribute cannot be written (i.e. is
+    #     manually held)
+    def __init__(self, bpvd, name, writable):
+        super().__init__(writable=writable)
 
         self.bpvd = bpvd
         self.name = name
@@ -989,7 +1130,12 @@ class BinaryPackageVersionAddAttributeAction(Action):
         key = args[1]
         value = str(args[2]) if len(args) > 2 else None
 
-        self.bpvd.create_bp(True).set_attribute(key, value)
+        bpv = self.bpvd.create_bp(True)
+        if bpv.has_attribute(key):
+            print("This attribute exists already.")
+            return
+        
+        bpv.set_attribute(key, value)
 
 
 class BinaryPackageVersionUnsetAttributeAction(Action):
@@ -1348,3 +1494,81 @@ class SourcePackageVersionBuildStateListStagesAction(Action):
     def run(self, *args):
         for stage in bpp.all_stages:
             print(stage.name)
+
+
+#************************ Common actions for attributes ***********************
+class GetAttributeMetaAction(Action):
+    """
+    Print an attributes' metadata.
+    """
+    def __init__(self, factory):
+        super().__init__(writes=False)
+
+        self.factory = factory
+
+        self.name = "get_meta"
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <attr. name>" % args[0])
+            return
+
+        entity = self.factory()
+        try:
+            modified, reassured, manually_held = entity.get_attribute_meta(args[1])
+
+            modified = localtime(modified).strftime(locale.nl_langinfo(locale.D_T_FMT))
+            reassured = localtime(reassured).strftime(locale.nl_langinfo(locale.D_T_FMT))
+
+            if manually_held is None:
+                manually_held = "---"
+            else:
+                manually_held = localtime(manually_held).strftime(locale.nl_langinfo(locale.D_T_FMT))
+
+            print("modified:      %s" % modified)
+            print("reassured:     %s" % reassured)
+            print("manually held: %s" % manually_held)
+
+        except ces.NoSuchAttribute:
+            print("No such attribute.")
+
+
+class _ManuallyHoldAttributeAction(Action):
+    """
+    Manually hold- of unhold an attribute.
+    """
+    def __init__(self, factory, hold):
+        super().__init__(writes=True)
+
+        self.factory = factory
+        self.hold = hold
+
+        self.name = 'hold' if self.hold else 'unhold'
+
+
+    def run(self, *args):
+        if len(args) != 2:
+            print("Usage: %s <attr. name>" % args[0])
+            return
+
+        entity = self.factory()
+        try:
+            entity.manually_hold_attribute(args[1], remove=not self.hold)
+
+        except ces.NoSuchAttribute:
+            print("No such attribute.")
+
+class ManuallyHoldAttributeAction(_ManuallyHoldAttributeAction):
+    """
+    Manually hold an attribute.
+    """
+    def __init__(self, factory):
+        super().__init__(factory, True)
+
+class ManuallyUnholdAttributeAction(_ManuallyHoldAttributeAction):
+    """
+    Manually unhold an attribute.
+    """
+    def __init__(self, factory):
+        super().__init__(factory, False)

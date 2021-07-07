@@ -177,6 +177,38 @@ class SourcePackageVersionCurrentBinaryPackage(Base):
         self.name = name
 
 # KV-like attributes
+class SourcePackageAttribute(Base):
+    __tablename__ = 'source_package_attributes'
+
+    source_package = Column(types.String, primary_key = True)
+    architecture = Column(types.Integer, primary_key = True)
+
+    modified_time = Column(types.DateTime(timezone=True), nullable = False)
+    reassured_time = Column(types.DateTime(timezone=True), nullable = False)
+    manual_hold_time = Column(types.DateTime(timezone=True))
+
+    key = Column(types.String, primary_key = True)
+    value = Column(types.String)
+
+    __table_args__ = (ForeignKeyConstraint(
+        (source_package, architecture),
+        (SourcePackage.name, SourcePackage.architecture),
+        onupdate='CASCADE', ondelete='CASCADE'), )
+
+    def __init__(self, source_package, architecture, key, value, time=None):
+        if time is None:
+            time = timezone.now()
+
+        self.source_package = source_package
+        self.architecture = architecture
+
+        self.modified_time = time
+        self.reassured_time = time
+        self.manual_hold_time = None
+
+        self.key = key
+        self.value = value
+
 class SourcePackageVersionAttribute(Base):
     __tablename__ = 'source_package_version_attributes'
 

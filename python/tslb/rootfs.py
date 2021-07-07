@@ -7,12 +7,13 @@ from tslb.CommonExceptions import *
 from tslb.VersionNumber import VersionNumber
 from tslb.filesystem.FileOperations import mkdir_p
 from tslb.tclm import lock_X, lock_Splus, lock_S
-import tslb.database.rootfs
 import concurrent.futures
 import errno
 import os
+import rbd
 import re
 import subprocess
+import tslb.database.rootfs
 
 
 class Image(object):
@@ -916,15 +917,9 @@ def cow_clone_image(src):
             s.add(db.rootfs.ImageContent(img_id, p, a, v))
 
         # Clone the source image
-        cmd = ['rbd', 'clone', *settings.get_ceph_cmd_conn_params(),
-            settings.get_ceph_rootfs_rbd_pool() + '/' + str(src.id) +
-            '@ro_base',
-            settings.get_ceph_rootfs_rbd_pool() + '/' + str(img_id)]
-
-        r = subprocess.call(cmd)
-
-        if r != 0:
-            raise CommandFailed(cmd, r)
+        with ceph.ioctx_rootfs() as ioctx:
+            with ceph.ioctx_rootfs() as ioctx2:
+                rbd.RBD().clone(ioctx, str(src.id), 'ro_base', ioctx2, str(img_id))
 
         try:
             # Commit to DB and return a new rootfs.Image object

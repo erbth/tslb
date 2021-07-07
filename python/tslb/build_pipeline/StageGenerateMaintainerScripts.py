@@ -117,7 +117,7 @@ class StageGenerateMaintainerScripts:
             type_, bpn = k
             bp = bps[bpn]
 
-            generator = msg.MaintainerScriptGenerator()
+            generator = msg.MaintainerScriptGenerator(bp)
             for s in sorted_scripts[k]:
                 try:
                     out.write("  `%s': %s-script `%s' with shebang `%s'.\n" %
@@ -140,6 +140,7 @@ class StageGenerateMaintainerScripts:
                         (type_, bpn, e))
                 return False
 
+            del generator
             del bp
 
 

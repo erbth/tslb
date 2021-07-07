@@ -419,9 +419,236 @@ class SourcePackage:
                 self.dbo.versions_manual_hold_time)
 
 
+    # Key-Value-Store like attributes
+    def list_attributes(self, pattern=None):
+        """
+        :param str pattern: A pattern that the attributes must match. May contain
+            '*' as wildcard-character.
+        :returns: A list of all keys
+        """
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageAttribute)
+            q = s.query(pa.key)\
+                    .filter(pa.source_package == self.name,
+                            pa.architecture == self.architecture)
+
+            if pattern is not None:
+                pattern = pattern.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')\
+                        .replace('*', '%')
+
+                q = q.filter(pa.key.like(pattern, escape='\\'))
+
+            return [e[0] for e in q.all()]
+
+
+    def has_attribute(self, key):
+        """
+        :returns: True or False
+        :rtype: bool
+        """
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageAttribute)
+            return len(s.query(pa.key)\
+                    .filter(pa.source_package == self.name,
+                            pa.architecture == self.architecture,
+                            pa.key == key)\
+                    .all()) != 0
+
+
+    def get_attribute(self, key):
+        """
+        :param key: The attribute's key
+        :type key: str
+        :returns: The stored string or object in its appropriate type
+        :rtype: str or virtually anything else
+        """
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageAttribute)
+            v = s.query(pa.value)\
+                    .filter(pa.source_package == self.name,
+                            pa.architecture == self.architecture,
+                            pa.key == key)\
+                    .all()
+
+            if len(v) == 0:
+                raise NoSuchAttribute("Source package `%s@%s'" %
+                        (self.name, architectures[self.architecture]), key)
+
+            v = v[0][0]
+
+            if v is None or len(v) == 0:
+                return None
+            elif v[0] == 's':
+                return v[1:]
+            elif v[0] == 'p':
+                return pickle.loads(base64.b64decode(v[1:].encode('ascii')))
+            else:
+                return None
+
+    def get_attribute_or_default(self, key, default):
+        """
+        Like `get_attribute`, but return a default value instead of raising a
+        `NoSuchAttribute` if the attribute does not exist.
+        """
+        if not self.has_attribute(key):
+            return default
+
+        return self.get_attribute(key)
+
+
+    def get_attribute_meta(self, key):
+        """
+        :param key: The attribute's key
+        :type key: str
+        :returns: tuple(modified_time, reassured_time, manual_hold_time or None)
+        :rtype: tuple(datetime, datetime, datetime or None)
+        """
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageAttribute)
+            v = s.query(pa.modified_time, pa.reassured_time, pa.manual_hold_time)\
+                    .filter(pa.source_package == self.name,
+                            pa.architecture == self.architecture,
+                            pa.key == key)\
+                    .all()
+
+            if len(v) == 0:
+                raise NoSuchAttribute("Source package `%s@%s'" %
+                        (self.name, architectures[self.architecture]), key)
+
+            return v[0]
+
+
+    def manually_hold_attribute(self, key, remove=False, time=None):
+        self.ensure_write_intent()
+
+        with lock_X(self.db_root_lock):
+            with database.session_scope() as s:
+                pa = aliased(dbspkg.SourcePackageAttribute)
+                v = s.query(pa)\
+                        .filter(pa.source_package == self.name,
+                                pa.architecture == self.architecture,
+                                pa.key == key)\
+                        .all()
+
+                if len(v) == 0:
+                    raise NoSuchAttribute("Source package `%s@%s'" %
+                            (self.name, architectures[self.architecture]), key)
+
+                v = v[0]
+
+                if not time:
+                    time = timezone.now()
+
+                if remove:
+                    v.manual_hold_time = None
+                else:
+                    v.manual_hold_time = time
+
+
+    def attribute_manually_held(self, key):
+        """
+        :returns: The time the attribute was manually held or None
+        :rtype: datetime or None
+        """
+        with database.session_scope() as s:
+            pa = aliased(dbspkg.SourcePackageAttribute)
+            v = s.query(pa.manual_hold_time)\
+                    .filter(pa.source_package == self.name,
+                            pa.architecture == self.architecture,
+                            pa.key == key)\
+                    .all()
+
+            if len(v) == 0:
+                raise NoSuchAttribute("Source package `%s@%s'" %
+                        (self.name, architectures[self.architecture]), key)
+
+            return v[0][0]
+
+
+    def set_attribute(self, key, value, time = None):
+        """
+        :param key: The attribute's key
+        :type key: str
+        :param value: The string or object to be assigned as value
+        :type value: str or virtually any type
+        :param time: If not None, this will be used for the timestamps
+        :type time: datetime or None
+        """
+        self.ensure_write_intent()
+
+        if not time:
+            time = timezone.now()
+
+        # Serialize object
+        if value.__class__ == str:
+            o = "s" + value
+        else:
+            o = "p" + base64.b64encode(pickle.dumps(value)).decode('ascii')
+
+        # Eventually update the attribute
+        with lock_X(self.db_root_lock):
+            with database.session_scope() as s:
+                pa = aliased(dbspkg.SourcePackageAttribute)
+                a = s.query(pa)\
+                        .filter(pa.source_package == self.name,
+                                pa.architecture == self.architecture,
+                                pa.key == key)\
+                        .all()
+
+                if len(a) == 0:
+                    # Create a new attribute tuple
+                    s.add(dbspkg.SourcePackageAttribute(
+                            self.name,
+                            self.architecture,
+                            key, o, time))
+                else:
+                    a = a[0]
+
+                    # This attribute manually locked?
+                    if a.manual_hold_time is not None:
+                        raise AttributeManuallyHeld(key)
+
+                    if a.value != o:
+                        a.value = o;
+                        a.modified_time = time
+
+                    a.reassured_time = time
+
+
+    def unset_attribute(self, key):
+        self.ensure_write_intent()
+
+        with lock_X(self.db_root_lock):
+            with database.session_scope() as s:
+                pa = aliased(dbspkg.SourcePackageAttribute)
+                a = s.query(pa)\
+                        .filter(pa.source_package == self.name,
+                                pa.architecture == self.architecture,
+                                pa.key == key)\
+                        .all()
+
+                if len(a) == 0:
+                    raise NoSuchAttribute("Source package `%s@%s'" %
+                            (self.name, architectures[self.architecture]), key)
+
+                a = a[0]
+
+                # Manually held?
+                if a.manual_hold_time is not None:
+                    raise AttributeManuallyHeld(key)
+
+                s.delete(a)
+
+
     def __str__(self):
         return "SourcePackage(%s@%s)" % (self.name,
             Architecture.to_str(self.architecture))
+
+    def short_str(self):
+        """
+        :returns: A string of the form %s@%s
+        """
+        return "%s@%s" % (self.name, Architecture.to_str(self.architecture))
 
 
     def __repr__(self):

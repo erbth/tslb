@@ -1,3 +1,8 @@
+  * tclm?
+
+  * systemd config
+
+
   * [ ] packages incl. TPM2
 
   * [ ] multiple nodes per host and max num threads.

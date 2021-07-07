@@ -2,8 +2,17 @@
 Generate single maintainer scripts out of sets of maintainer scripts.
 Essentially this is a reducer for the various maintainer script parts created
 while the package flows through the build pipeline.
+
+The generator does also substitute the following variables in the maintainer
+script:
+    * $(SOURCE_VERSION)
+    * $(BINARY_VERSION)
+    * $(NOW_STR)                Current date and time with timezone in a human
+                                readable format.
+
 """
 from dataclasses import dataclass
+from tslb import timezone
 import re
 
 
@@ -32,8 +41,9 @@ class MaintainerScript:
 
 
 class MaintainerScriptGenerator:
-    def __init__(self):
+    def __init__(self, binary_package):
         self._scripts = []
+        self._binary_package = binary_package
 
     @staticmethod
     def _test_exit0_compatible(text):
@@ -98,38 +108,42 @@ class MaintainerScriptGenerator:
         if not self._scripts:
             return None
 
+        collated_text = ""
         if len(self._scripts) == 1:
-            return self._scripts[0].text
+            collated_text = self._scripts[0].text
 
+        else:
+            # Non-trivial case.
+            # Build graph of scripts
+            G = self._build_graph(self._scripts)
 
-        # Non-trivial case.
-        # Build graph of scripts
-        G = self._build_graph(self._scripts)
+            # Connect the graph if it is not connected
+            self._connect_graph(G)
 
-        # Connect the graph if it is not connected
-        self._connect_graph(G)
+            # Ensure that it is cycle-free
+            self._ensure_cycle_freeness(G)
 
-        # Ensure that it is cycle-free
-        self._ensure_cycle_freeness(G)
+            # Compute topological sorting
+            order = self._compute_topological_order(G)
 
-        # Compute topological sorting
-        order = self._compute_topological_order(G)
+            # Concatenate scripts, stripping of the shebang and trailing 'exit 0'.
+            # Then surround the collated script by them.
+            collated = [order[0].shebang]
+            exit_statement = None
+            for script in order:
+                lines = script.text.split('\n')
+                while not lines[-1].strip():
+                    lines.pop()
 
-        # Concatenate scripts, stripping of the shebang and trailing 'exit 0'.
-        # Then surround the collated script by them.
-        collated = [order[0].shebang]
-        exit_statement = None
-        for script in order:
-            lines = script.text.split('\n')
-            while not lines[-1].strip():
-                lines.pop()
+                collated += lines[1:-1]
+                exit_statement = lines[-1]
 
-            collated += lines[1:-1]
-            exit_statement = lines[-1]
+            collated.append(exit_statement)
 
-        collated.append(exit_statement)
+            collated_text = '\n'.join(collated)
 
-        return '\n'.join(collated)
+        # Substitute variables
+        return self._substitute_variables(collated_text)
 
 
     @staticmethod
@@ -305,6 +319,19 @@ class MaintainerScriptGenerator:
                     queue.append(u)
 
         return output
+
+
+    def _substitute_variables(self, text):
+        ctx = {
+            'SOURCE_VERSION': str(self._binary_package.source_package_version.version_number),
+            'BINARY_VERSION': str(self._binary_package.version_number),
+            'NOW_STR': timezone.localtime(timezone.now()).strftime('%c %z')
+        }
+
+        for key, value in ctx.items():
+            text = text.replace('$(' + key + ')', value)
+
+        return text
 
 
 #********************************** Exceptions ********************************

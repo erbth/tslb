@@ -195,6 +195,7 @@ class PackageBuilder(object):
                 self.out)
 
             new_image = rootfs.cow_clone_image(image)
+            del image
             image = new_image
             del new_image
 
@@ -218,9 +219,17 @@ class PackageBuilder(object):
                         "[------] Bootstrapping 'empty' image\n" + Color.NORMAL)
 
                     try:
-                        # Flatten image first.
+                        # Flatten image first. Unmount the image while
+                        # flattening as flattening a mounted image can trigger
+                        # a whole read of the image (slow).
                         print(Color.YELLOW + "Flattening image ..." + Color.NORMAL, file=self.out)
+
+                        unmount_pseudo_filesystems(mountpoint)
+                        image.unmount(self.mount_namespace)
                         image.flatten()
+                        image.mount(self.mount_namespace)
+                        mountpoint = image.get_mountpoint(self.mount_namespace)
+                        mount_pseudo_filesystems(mountpoint, spkgv)
 
                         bootstrap_rootfs_image(mountpoint, arch, self.out)
 

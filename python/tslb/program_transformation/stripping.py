@@ -143,7 +143,7 @@ def strip_and_create_debug_links_in_directory(path, max_level='all',
 
         # Use a filename ending based heuristics to find an appropriate strip
         # level.
-        if path.endswith('.a'):
+        if path.endswith('.a') or path.endswith('.ko'):
             strip_type = 'debug'
         elif re.match(r'.*\.so.*$', path):
             strip_type = 'unneeded'

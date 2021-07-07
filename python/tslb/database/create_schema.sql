@@ -87,6 +87,23 @@ create table source_package_version_current_binary_packages (
 	primary key (source_package, version_number, architecture, name)
 );
 
+create table source_package_attributes (
+	source_package varchar,
+	"architecture" integer,
+	foreign key (source_package, "architecture")
+		references source_packages(name, "architecture")
+		on update cascade on delete cascade,
+
+	modified_time timestamp with time zone not null,
+	reassured_time timestamp with time zone not null,
+	manual_hold_time timestamp with time zone,
+
+	"key" varchar,
+	"value" varchar,
+
+	primary key (source_package, "architecture", "key")
+);
+
 create table source_package_version_attributes (
 	source_package varchar,
 	"architecture" integer,
@@ -205,6 +222,18 @@ create index on rootfs_image_contents (
 	package,
 	version,
 	arch
+);
+
+
+-- Upstream versions
+create table upstream_versions (
+	name varchar,
+	version_number integer[],
+	download_url varchar not null,
+	signature_download_url varchar,
+	retrieval_time timestamp with time zone not null,
+
+	primary key (name, version_number)
 );
 
 COMMIT;
