@@ -106,3 +106,6 @@ class AttributeManuallyHeld(Exception):
     def __init__(self, attr_name):
         super().__init__("Attribute %s was manually held." % attr_name)
 
+class VersionExists(Exception):
+    def __init__(self, version_number):
+        super().__init__("Version `%s' exists already." % version_number)

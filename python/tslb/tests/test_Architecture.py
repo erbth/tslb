@@ -1,6 +1,7 @@
 from tslb import Architecture
 from tslb.Architecture import architectures
 from tslb.Architecture import architectures_reverse
+import pytest
 
 
 def TestReverse():
@@ -27,5 +28,8 @@ class TestToStr:
             assert Architecture.to_str(i) == architectures[i]
 
     def test_str(self):
-        for s in ['', 'test', 'test2']:
+        for s in ['i386', 'amd64']:
             assert Architecture.to_str(s) == s
+
+        with pytest.raises(ValueError):
+            Architecture.to_str('test')

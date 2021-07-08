@@ -5,10 +5,13 @@ Update source package versions if newer versions are available.
 from sqlalchemy.orm import aliased
 from tslb import Architecture
 from tslb import SourcePackage as spkg
-from tslb.parse_utils import is_yes
+from tslb import higher_order_tools as hot
+from tslb.Console import Color
+from tslb.parse_utils import is_yes, query_user_input
 import sys
 import tslb.database as db
 import tslb.database.upstream_versions
+import tslb.higher_order_tools.source_package
 
 
 def update_versions(arch):
@@ -18,14 +21,17 @@ def update_versions(arch):
     """
     for name in spkg.SourcePackageList(arch).list_source_packages():
         sp = spkg.SourcePackage(name, arch)
-        enabled = False
+        newest_enabled = None
         vs = sp.list_version_numbers()
 
         for v in vs:
             if is_yes(sp.get_version(v).get_attribute_or_default('enabled', None)):
-                enabled = True
+                if newest_enabled is None:
+                    newest_enabled = v
+                else:
+                    newest_enabled = max(newest_enabled, v)
 
-        if not enabled:
+        if newest_enabled is None:
             continue
 
         newest_configured = max(vs)
@@ -45,6 +51,8 @@ def update_versions(arch):
                     ).first()
 
             if not newest_available:
+                print(Color.YELLOW +
+                        "No upstream source package for `%s'." % sp.name + Color.NORMAL)
                 continue
 
             newest_available = newest_available[0]
@@ -53,13 +61,50 @@ def update_versions(arch):
             print("Newever version (%s) for `%s' available (is %s):" %
                     (newest_available, sp.name, newest_configured))
 
-            update = None
-            while update is None:
-                i = input('  update [yN]? ').lower()
-                if i == 'y':
-                    update = True
-                elif i == 'n' or i == '':
-                    update = False
+            u = query_user_input('  update (a: abort)?', 'yNa')
+            if u == 'a':
+                print("User aborted.")
+                exit(0)
+            elif u != 'y':
+                continue
+
+            # Copy newest enabled or configured version shallowly and disable
+            # the new copy.
+            if newest_enabled != newest_configured:
+                print("  The newest enabled version is not the newest configured version.")
+                u = query_user_input('  Copy from the newest enabled (e) or configured (c) version?', 'ec')
+                if u == 'e':
+                    src_version = newest_enabled
+                else:
+                    src_version = newest_configured
+
+            else:
+                src_version = newest_configured
+
+            # Upgrade lock on source package
+            sp2 = spkg.SourcePackage(sp.name, sp.architecture, write_intent=True)
+            sp = sp2
+
+            spv = sp.get_version(src_version)
+            new_spv = hot.source_package.shallow_version_copy(spv, newest_available)
+            del spv
+
+            new_spv.set_attribute('enabled', 'false')
+            print("  Disabled new version.")
+
+            # Disable old version and enable new version
+            u = query_user_input(
+                    '  Should the old version now be disabled and the new versionen be enabled?',
+                    'yn')
+
+            if u == 'y':
+                sp.get_version(newest_enabled).set_attribute('enabled', 'false')
+                new_spv.set_attribute('enabled', 'true')
+
+            del new_spv
+
+        else:
+            print(Color.GREEN + "`%s' already up-to-date." % sp.name + Color.NORMAL)
 
 
 # Update versions
@@ -74,7 +119,10 @@ def main():
         print(str(e))
         exit(1)
 
+    print("Checking for available newer versions...")
     update_versions(arch)
+
+    print("\nChecking for missing source archives...")
 
 if __name__ == '__main__':
     main()

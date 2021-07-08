@@ -18,17 +18,18 @@ import tslb.database.upstream_versions
 def fetch_versions_for_package(sp, out=sys.stdout):
     """
     :param SourcePackage sp: Source Package
-    :returns: True on success, otherwise False.
+    :returns: True on success, False on error, None if the package has no url.
     """
     if not sp.has_attribute('upstream_source_url'):
         print(Color.YELLOW + "WARNING: Source package `%s' has no attribute `upstream_source_url'." %
                 sp.short_str() + Color.NORMAL, file=out)
-        return False
+        return None
 
     # Find upstream version numbers
     Console.print_status_box("Finding versions of `%s'" % sp.short_str(), file=out)
     try:
-        versions = fvn.find_versions_at_url(sp.name, sp.get_attribute('upstream_source_url'))
+        versions = fvn.find_versions_at_url(sp.name, sp.get_attribute('upstream_source_url'),
+                out, verbose=True)
         Console.update_status_box(True, file=out)
     except fvn.FindException as e:
         Console.update_status_box(False, file=out)
@@ -61,7 +62,13 @@ def fetch_versions_for_enabled_packages(arch, out=sys.stdout):
     """
     Fetch versions for all packages that have at least one version enabled.
     """
-    for name in spkg.SourcePackageList(arch).list_source_packages():
+    pkgs = spkg.SourcePackageList(arch).list_source_packages()
+    cnt_total = len(pkgs)
+    cnt_enabled = 0
+    cnt_ok = 0
+    cnt_no_url = 0
+
+    for name in pkgs:
         sp = spkg.SourcePackage(name, arch)
         enabled = False
         for v in sp.list_version_numbers():
@@ -69,9 +76,21 @@ def fetch_versions_for_enabled_packages(arch, out=sys.stdout):
                 enabled = True
 
         if enabled:
-            fetch_versions_for_package(sp, out)
+            cnt_enabled += 1
+            ret = fetch_versions_for_package(sp, out)
+
+            if ret is None:
+                cnt_no_url += 1
+            elif ret is True:
+                cnt_ok += 1
 
         del sp
+
+    print("\n"
+            "Success: %d\n"
+            "Failed:  %d\n"
+            "No url:  %d" % (cnt_ok, cnt_enabled - cnt_ok - cnt_no_url, cnt_no_url),
+            file=out)
 
 
 # Download lists of version numbers

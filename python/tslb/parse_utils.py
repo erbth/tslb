@@ -1,9 +1,10 @@
-import re
-from tslb import CommonExceptions as ces
-
 """
 General utilities for parsing user input and other string expressions.
 """
+import re
+from tslb import CommonExceptions as ces
+
+
 def is_yes(e):
     if not e:
         return False
@@ -98,3 +99,23 @@ def stringify_escapes(s):
             output += c
 
     return output
+
+
+def query_user_input(prompt, options):
+    """
+    Query user input from stdin using `input`.
+
+    :param str options: e.g. yNa -> y, n, or a with n being the default
+    """
+    default = None
+    for o in options:
+        if o.isupper():
+            default = o
+
+    loptions = options.lower()
+    while True:
+        r = input("%s [%s]: " % (prompt, '/'.join(options))).lower()
+        if not r and default:
+            return default
+        elif len(r) == 1 and r in loptions:
+            return r

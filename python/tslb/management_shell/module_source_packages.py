@@ -10,11 +10,13 @@ from tslb.Console import Color
 from tslb import Architecture
 from tslb import CommonExceptions as ces
 from tslb import SourcePackage as spkg
+from tslb import higher_order_tools as hot
 from tslb.management_shell import *
 from tslb.VersionNumber import VersionNumber
 from tslb.timezone import localtime
 from tslb.build_state import outdate_package_stage, outdate_enabled_versions_in_arch
 import tslb.build_pipeline as bpp
+import tslb.higher_order_tools.source_package
 
 
 class RootDirectory(Directory):
@@ -525,46 +527,27 @@ class SourcePackageVersionsCopyShallow(SourcePackageBaseAction):
             print("Invalid version number: %s" % e)
             return
 
+        # Find SourcePackageVersion
         sp = self.create_spkg(True)
-
-        versions = sp.list_version_numbers()
-        src_found = False
-
-        for v in versions:
+        src_spv = None
+        for v in sp.list_version_numbers():
             if src == v:
-                src_found = True
+                src_spv = sp.get_version(src)
 
-            if dst == v:
-                print("Destination version number exists already.")
-                return
-
-        if not src_found:
+        if not src_spv:
             print("No such source version number")
             return
 
-        src = sp.get_version(src)
-
         try:
-            dst = sp.add_version(dst)
+            hot.source_package.shallow_version_copy(src_spv, dst)
 
         except ces.AttributeManuallyHeld:
             print("Versions are manually held.")
             return
 
-        old_version_string = str(src.version_number)
-        new_version_string = str(dst.version_number)
-
-        for attr in src.list_attributes():
-            value = src.get_attribute(attr)
-
-            # Replace the old version number
-            if isinstance(value, str) and old_version_string in value:
-                print("Attribute `%s': replacing version string `%s' with `%s'." %
-                    (attr, old_version_string, new_version_string))
-
-                value = value.replace(old_version_string, new_version_string)
-
-            dst.set_attribute(attr, value)
+        except ces.VersionExists:
+            print("Destination version number exists already.")
+            return
 
 
 #*************** Presenting a single source package version *******************
