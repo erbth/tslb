@@ -260,7 +260,7 @@ class StageAddRdeps:
 
                     if not res:
                         if report_not_found:
-                            out.write("Did not find a binary package that contains file `%s'.\n" %
+                            out.write("  Did not find a binary package that contains file `%s'.\n" %
                                     dep.filename)
                         return False
 
@@ -294,8 +294,17 @@ class StageAddRdeps:
             # Actually run analyzers on all binary packages
             try:
                 for analyzer in dependencies.ALL_ANALYZERS:
+                    disabled = spv.get_attribute_or_default(
+                            'disable_dependency_analyzer_%s_for' % analyzer.name, [])
+                    attribute_types.ensure_disable_dependency_analyzer_for(disabled)
+
                     out.write("\nRunning dependency analyzer `%s'...\n" % analyzer.name)
                     for bp in bps.values():
+                        if bp.name in disabled:
+                            out.write(Color.YELLOW + "  skipping disabled package `%s'..." %
+                                    bp.name + Color.NORMAL + "\n")
+                            continue
+
                         deps = analyzer.analyze_root(
                                 os.path.join(bp.scratch_space_base, 'destdir'),
                                 bp.architecture,

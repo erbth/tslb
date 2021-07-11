@@ -70,7 +70,10 @@ class ShellAnalyzer(BaseDependencyAnalyzer):
         if can_interpret:
             path = full_path.replace(root, '') if root else full_path
             out.write("  Analyzing shell script '%s'...\n" % path)
-            return cls._analyze_buffer(root, read_file(full_path, 'utf8'), arch, out)
+            return cls._analyze_buffer(
+                    root,
+                    read_file(full_path, 'utf8', fallback='iso8859-15'),
+                    arch, out)
 
         return set()
 
@@ -98,7 +101,7 @@ class ShellAnalyzer(BaseDependencyAnalyzer):
                 out.write(Color.MAGENTA + "    Loading included file '%s'..." % path +
                         Color.NORMAL + "\n")
 
-                return read_file(full_path, 'utf8')
+                return read_file(full_path, 'utf8', fallback='iso8859-15')
 
             except FileNotFoundError:
                 out.write(Color.MAGENTA + "    Included file '%s' not found." % path +

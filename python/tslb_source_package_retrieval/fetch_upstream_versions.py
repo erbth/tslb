@@ -9,7 +9,7 @@ from tslb import SourcePackage as spkg
 from tslb import timezone
 from tslb.Console import Color
 from tslb.parse_utils import is_yes
-from tslb.source_package_retrieval import find_version_numbers as fvn
+from tslb_source_package_retrieval import find_version_numbers as fvn
 import sys
 import tslb.database as db
 import tslb.database.upstream_versions

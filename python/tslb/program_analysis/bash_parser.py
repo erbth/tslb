@@ -317,13 +317,18 @@ def _find_simple_commands_tokens(tokens):
                 sub_cmd = []
 
         for t in _cmd:
+            if not t:
+                continue
+
             if in_subst == '$(' and t == ')':
                 emit()
                 in_subst = None
                 cmd.append('')
 
             elif t == '(' and last.endswith('$'):
-                cmd.pop()
+                if cmd:
+                    cmd.pop()
+
                 if last != '$':
                     cmd.append(last[:-1])
                 in_subst = '$('

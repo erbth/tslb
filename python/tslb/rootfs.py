@@ -570,7 +570,7 @@ class Image(object):
                     s.delete(ac)
 
 
-    def __str(self):
+    def __str__(self):
         return "Image(%d)" % self.id
 
 
@@ -802,8 +802,8 @@ def create_empty_image():
         # Create and aquire a lock for the image
         lk = tclm.define_lock('tslb.rootfs.images.{:d}'.format(img_id))
 
-        with lock_Splus(tclm.define_lock('tslb.rootfs.images')):
-            lk.create(True)
+        # with lock_Splus(tclm.define_lock('tslb.rootfs.images')):
+        lk.create(True)
 
     except:
         s.rollback()
@@ -895,8 +895,8 @@ def cow_clone_image(src):
         # Create and aquire a lock for the image
         lk = tclm.define_lock('tslb.rootfs.images.{:d}'.format(img_id))
 
-        with lock_Splus(tclm.define_lock('tslb.rootfs.images')):
-            lk.create(True)
+        # with lock_Splus(tclm.define_lock('tslb.rootfs.images')):
+        lk.create(True)
 
     except:
         s.rollback()

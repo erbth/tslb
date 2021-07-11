@@ -31,7 +31,7 @@ class conn:
     def get_session():
         if getattr(thlocal, 'db_sessionmaker', None) is None:
             url = 'postgresql://%s:%s@%s/%s' % (db_user, db_password, db_host, db_name)
-            engine = sqlalchemy.create_engine(url)
+            engine = sqlalchemy.create_engine(url, pool_pre_ping=True)
             thlocal.db_sessionmaker = sqlalchemy.orm.sessionmaker(bind=engine)
 
         return thlocal.db_sessionmaker()
