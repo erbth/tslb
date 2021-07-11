@@ -23,9 +23,11 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
 
             for c in os.listdir(d):
                 full_path = simplify_path_static(d + '/' + c)
-                if os.path.isdir(full_path):
+                st_buf = os.lstat(full_path)
+
+                if stat.S_ISDIR(st_buf.st_mode):
                     analyze(full_path)
-                else:
+                elif stat.S_ISREG(st_buf.st_mode):
                     deps |= cls.analyze_file(full_path, arch, out)
 
         analyze(dirname)

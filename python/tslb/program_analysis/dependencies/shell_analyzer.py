@@ -23,9 +23,11 @@ class ShellAnalyzer(BaseDependencyAnalyzer):
 
             for c in os.listdir(d):
                 full_path = simplify_path_static(d + '/' + c)
-                if os.path.isdir(full_path):
+                st_buf = os.lstat(full_path)
+
+                if stat.S_ISDIR(st_buf.st_mode):
                     analyze(full_path)
-                else:
+                elif stat.S_ISREG(st_buf.st_mode):
                     deps |= cls._analyze_file(dirname, full_path, arch, out)
 
         analyze(dirname)
@@ -33,6 +35,10 @@ class ShellAnalyzer(BaseDependencyAnalyzer):
 
     @classmethod
     def analyze_file(cls, filename, arch, out):
+        st_buf = os.lstat(filename)
+        if not stat.S_ISREG(st_buf.st_mode):
+            return set()
+
         return cls._analyze_file(None, full_path, arch, out)
 
     @classmethod
