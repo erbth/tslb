@@ -40,6 +40,8 @@ def ensure_list_of_tuples_of_strings_and_strings_or_lists_of_strings(val):
 ensure_package_manager_trigger_list = ensure_list_of_strings
 ensure_package_manager_trigger_list_sp = ensure_list_of_tuples_of_strings_and_strings_or_lists_of_strings
 
+ensure_remove_rdeps = ensure_list_of_tuples_of_strings_and_strings_or_lists_of_strings
+
 
 #******************************** Exceptions **********************************
 class InvalidAttributeType(Exception):

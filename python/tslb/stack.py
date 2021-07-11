@@ -27,3 +27,6 @@ class stack(object):
 
     def __len__(self):
         return len(self.l)
+
+    def __in__(self, e):
+        return e in self.l

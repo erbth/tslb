@@ -183,3 +183,21 @@ def replace_output_streams():
                 raw=io.FileIO(2, mode='wb', closefd=False)
             ),
             encoding='utf8')
+
+
+def read_file(filename, encoding=None):
+    """
+    Read a file and return its content. If :param encoding: is given, the file
+    is read in text mode using the given encoding and a str is returned.
+    Otherwise it's read in binary mode and bytes are returned.
+
+    If :param encoding: is 'system', the system's default encoding is used.
+    """
+    with open(filename, 'rb') as f:
+        content = f.read()
+        if encoding == 'system':
+            return content.decode()
+        elif encoding:
+            return content.decode(encoding)
+        else:
+            return content

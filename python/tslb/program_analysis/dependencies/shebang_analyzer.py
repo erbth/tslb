@@ -2,8 +2,10 @@ import os
 import stat
 import tslb.database as db
 import tslb.database.BinaryPackage
+from tslb import Architecture
 from tslb.Constraint import VersionConstraint
 from tslb.VersionNumber import VersionNumber
+from tslb.filesystem.FileOperations import simplify_path_static
 from .dependency_analyzer import *
 
 
@@ -11,23 +13,27 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
     """
     Find dependencies based on 'shebang'-requested interpreters.
     """
-    display_name = "shebang"
+    name = "shebang"
 
-    def analyze_root(dirname, out):
-        out.write("\nAdding runtime dependencies based on 'shebang'-requested interpreters...\n")
+    @classmethod
+    def analyze_root(cls, dirname, arch, out):
+        deps = set()
+        def analyze(d):
+            nonlocal deps
 
-        # TODO: stopped here.
-        for file_, sha512 in bp.get_files():
-            full_path = simplify_path_static(base + '/' + file_)
+            for c in os.listdir(d):
+                full_path = simplify_path_static(d + '/' + c)
+                if os.path.isdir(full_path):
+                    analyze(full_path)
+                else:
+                    deps |= cls.analyze_file(full_path, arch, out)
 
-            if not cls._add_file_dependencies_shebang(
-                    bp, rdeps, full_path, session, out):
-                return False
-
-        return True
+        analyze(dirname)
+        return deps
 
 
-    def analyze_file(filename, out):
+    @classmethod
+    def analyze_file(cls, filename, arch, out):
         # Only consider executable files
         st_buf = os.lstat(filename)
         if not stat.S_ISREG(st_buf.st_mode) or not \
@@ -44,15 +50,16 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
         if not line:
             return set()
 
-        return analyze_buffer(bp, rdeps, '#!' + line, db_session, out)
+        return cls.analyze_buffer('#!' + line, arch, out)
 
 
-    def analyze_buffer(buf, out):
+    def analyze_buffer(buf, arch, out):
         """
         Add dependencies based on shebang given at least the first line of the
         file to test in the buffer.
 
         :type buf: bytes (interpreted as ascii text) | str
+        :param arch: The architecture in which dependencies shall be searched.
         :returns: Set(Dependency)
         :raises AnalyzeError: If an error has been encountered
         """
@@ -80,26 +87,27 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
                         ]
 
         # Find the package containing the interpreter
-        for i, interpreter in enumerate(interpreters):
-            deps = db.BinaryPackage.find_binary_packages_with_file(
-                    db_session,
-                    bp.architecture,
-                    interpreter,
-                    True,
-                    only_newest=True)
+        with db.session_scope() as session:
+            for i, interpreter in enumerate(interpreters):
+                deps = db.BinaryPackage.find_binary_packages_with_file(
+                        session,
+                        Architecture.to_int(arch),
+                        interpreter,
+                        True,
+                        only_newest=True)
 
-            # Try the best to find the interpreter /usr/bin/env would choose
-            # among multiple choices.
-            if len(deps) == 0 and i > 0:
-                continue
+                # Try the best to find the interpreter /usr/bin/env would choose
+                # among multiple choices.
+                if len(deps) == 0 and i > 0:
+                    continue
 
-            if len(deps) != 1:
-                raise AnalyzeError("Did not find a binary package containing interpreter `%s'." %
-                    interpreter)
+                if len(deps) != 1:
+                    raise AnalyzeError("Did not find a binary package containing interpreter `%s'." %
+                        interpreter)
 
-            name, version = deps[0]
+                name, version = deps[0]
 
-            # Add depencency
-            rdeps.add(BinaryPackageDependency(name, [VersionConstraint('>=', version)]))
+                # Add depencency
+                rdeps.add(BinaryPackageDependency(name, [VersionConstraint('>=', version)]))
 
-        return rdeps
+            return rdeps

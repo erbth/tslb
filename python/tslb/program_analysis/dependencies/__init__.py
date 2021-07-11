@@ -7,7 +7,9 @@ This uses binary packages as well and hence breaks with he
 from .dependency_analyzer import *
 
 from .shebang_analyzer import ShebangAnalyzer
+from .shell_analyzer import ShellAnalyzer
 
 ALL_ANALYZERS = [
-    ShebangAnalyzer
+    ShebangAnalyzer,
+    ShellAnalyzer
 ]

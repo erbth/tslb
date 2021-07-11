@@ -2,31 +2,34 @@ class BaseDependencyAnalyzer:
     """
     A base class to define the interface of all dependency analyzers.
     """
-    display_name = ""
+    name = ""
 
-    def analyze_root(dirname, out):
+    def analyze_root(dirname, arch, out):
         """
         Analyze the root directory tree rooted at :param str dirname:.
 
+        :param arch: The architecture in which dependencies shall be searched.
         :returns: Set(Dependency)
         :raises AnalyzeError: If an error has been encountered
         """
         raise NotImplementedError
 
-    def analyze_file(filename, out):
+    def analyze_file(filename, arch, out):
         """
         Analyze a single file.
 
+        :param arch: The architecture in which dependencies shall be searched.
         :returns: Set(Dependency)
         :raises AnalyzeError: If an error has been encountered
         """
         raise NotImplementedError
 
-    def analyze_buffer(buf, out):
+    def analyze_buffer(buf, arch, out):
         """
         Analyze an in-memory buffer that is a read file.
 
         :type buf: bytes (interpreted as ascii text) | str
+        :param arch: The architecture in which dependencies shall be searched.
         :returns: Set(Dependency)
         :raises AnalyzeError: If an error has been encountered
         """
@@ -72,7 +75,7 @@ class BinaryPackageDependency(Dependency):
             return false
 
         return self.bp_name == o.bp_name and \
-                self.version_contraints == o.version_constraints
+                self.version_constraints == o.version_constraints
 
     def __hash__(self):
         return hash((self.bp_name, *self.version_constraints))

@@ -156,6 +156,11 @@ create table binary_package_files (
 	primary key(binary_package, "architecture", version_number, "path")
 );
 
+create index binary_package_files_search_index on binary_package_files (
+	"path",
+	version_number
+);
+
 create table binary_package_attributes (
 	binary_package varchar,
 	"architecture" integer,
@@ -218,7 +223,7 @@ create table available_rootfs_images (
 	id bigint primary key references rootfs_images
 );
 
-create index on rootfs_image_contents (
+create index rootfs_image_contents_index on rootfs_image_contents (
 	package,
 	version,
 	arch

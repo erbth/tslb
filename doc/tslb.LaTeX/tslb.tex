@@ -58,6 +58,7 @@
 		adapt\_command & str & \\
 		additional\_file\_placement & List(Tuple(str, str|List(str))) & [(dst pkg name, regex | [regex])]\\
 		additional\_rdeps & List(Tuple(str,DependencyList)) & \\
+		remove\_rdeps & List(Tuple(str, str|List(str))) & bpkg -> fullmatch-regex; evaluated before \texttt{additional\_rdeps} \\
 		cdeps & DependencyList & \\
 		tools & DependencyList&  Like cdeps, but only used for rootfs creation \\
 		enabled & str & parsed into bool \\

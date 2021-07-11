@@ -184,6 +184,9 @@ class VersionConstraint(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        return hash((self.version_number, self.constraint_type))
+
     def __str__(self):
         return self.__repr__()
 
@@ -399,6 +402,15 @@ class DependencyList(object):
 
         else:
             self.l[o] = [vc]
+
+    def remove_dependency(self, o):
+        """
+        Remove a dependency from the DependencyList.
+
+        :param o: Object to remove
+        :raises KeyError: If the dependency is not in the DependencyList
+        """
+        del self.l[o]
 
     def get_required(self):
         """

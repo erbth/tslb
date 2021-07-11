@@ -1,3 +1,5 @@
+from tslb import CommonExceptions as ces
+from tslb import attribute_types
 from tslb import parse_utils
 from tslb import rootfs
 from tslb.Console import Color
@@ -5,6 +7,7 @@ from tslb.Constraint import DependencyList, VersionConstraint, CONSTRAINT_TYPE_N
 from tslb.VersionNumber import VersionNumber
 from tslb.build_pipeline.common_functions import update_binary_package_files
 from tslb.filesystem.FileOperations import simplify_path_static
+from tslb.program_analysis import dependencies
 from tslb.program_analysis import shared_library_tools as sotools
 import copy
 import os
@@ -211,20 +214,166 @@ class StageAddRdeps:
                     rdeps[bp.name].add_constraint(VersionConstraint('>=', version), name)
 
 
-        # Add dependencies based on shebang in scripts
-        if not cls._add_script_dependencies(bps, rdeps, out):
-            return False
-
-        # Add dependencies for maintainer scripts
-        if not cls._add_maintainer_script_deps(bps, rdeps, out):
-            return False
-
         # Adding dependencies for perl packages
         if not cls._add_perl_dependencies(bps, rdeps, out):
             return False
 
 
-        # Add additional dependencies, which are specified in attributes.
+        # Invoke dependency analyzers
+        with db.session_scope() as db_session:
+            # A function to add dependencies returned by analyzers
+            def _add_dep(dep, bp_name, rdeps, report_not_found=True):
+                """
+                :param dep: The dependencies.Dependency to add
+                :param bp_name: The binary package's name to which the
+                    dependency shall be added
+                :param rdeps: The dependency-map to which the dependency
+                    shall be added.
+                """
+                if isinstance(dep, dependencies.Or):
+                    i_max = len(dep.formulas) - 1
+                    for i,f in enumerate(dep.formulas):
+                        if _add_dep(f, bp_name, rdeps, report_not_found= i==i_max):
+                            return True
+
+                    return False
+
+                elif isinstance(dep, dependencies.FileDependency):
+                    # NOTE: Directly calling the low-level DB operation
+                    # effectively bypasses all locking. However it would be
+                    # difficult to lock "all binary packages that could
+                    # provide this file" without not locking all binary
+                    # packages in S-mode, therefore blocking the entire
+                    # build system. However writes to the database are
+                    # isolated on transaction level, so this should not
+                    # yield undefined dependencies but simply the right
+                    # ones or none per binary package on which this binary
+                    # package depends.
+                    #
+                    # `res' is of type list(tuple(name, version))
+                    res = db.BinaryPackage.find_binary_packages_with_file(
+                            db_session,
+                            bp.architecture,
+                            dep.filename if dep.filename.startswith('/') else '/' + dep.filename,
+                            dep.filename.startswith('/'),
+                            only_newest=True)
+
+                    if not res:
+                        if report_not_found:
+                            out.write("Did not find a binary package that contains file `%s'.\n" %
+                                    dep.filename)
+                        return False
+
+                    if len(res) > 1:
+                        raise dependencies.AnalyzerError(
+                                "Found multiple binary packages that contain file `%s':\n%s\n" %
+                                (dep.filename, deps))
+
+                    name, version = res[0]
+                    bdep = dependencies.BinaryPackageDependency(
+                        name,
+                        [VersionConstraint('>=', version)])
+
+                    return _add_dep(bdep, bp_name, rdeps)
+
+                elif isinstance(dep, dependencies.BinaryPackageDependency):
+                    # Don't add self loops
+                    if bp_name == dep.bp_name:
+                        return True
+
+                    for c in dep.version_constraints:
+                        out.write("  Adding `%s' -> `%s' %s\n" % (bp_name, dep.bp_name, c))
+                        rdeps[bp_name].add_constraint(c, dep.bp_name)
+
+                    return True
+
+                else:
+                    raise ces.SavedYourLife('Invalid dependencies.Dependency type.')
+
+
+            # Actually run analyzers on all binary packages
+            try:
+                for analyzer in dependencies.ALL_ANALYZERS:
+                    out.write("\nRunning dependency analyzer `%s'...\n" % analyzer.name)
+                    for bp in bps.values():
+                        deps = analyzer.analyze_root(
+                                os.path.join(bp.scratch_space_base, 'destdir'),
+                                bp.architecture,
+                                out)
+
+                        for dep in deps:
+                            _add_dep(dep, bp.name, rdeps)
+
+            except dependencies.AnalyzerError as e:
+                out.write(Color.RED + "ERROR: " + str(e) + "\n")
+                return False
+
+
+            # Invoke dependency analyzers on maintainer scripts
+            # Add (pre-) dependencies for maintainer scripts
+            def _add_maint(pre_deps):
+                if pre_deps:
+                    out.write("\nAdding pre-dependencies for maintainer scripts...\n")
+                    scripts = ('collated_preinst_script', 'collated_postrm_script')
+                else:
+                    out.write("\nAdding dependencies for maintainer scripts...\n")
+                    scripts = ('collated_configure_script', 'collated_unconfigure_script')
+
+                for bp in bps.values():
+                    for attr in scripts:
+                        val = bp.get_attribute_or_default(attr, None)
+                        if val:
+                            print(Color.YELLOW + "%s::%s" % (bp.name, attr) +
+                                    Color.NORMAL, file=out)
+
+                            for analyzer in dependencies.ALL_ANALYZERS:
+                                out.write("\nRunning dependency analyzer `%s'...\n" % analyzer.name)
+                                deps = analyzer.analyze_buffer(
+                                        val,
+                                        bp.architecture,
+                                        out)
+
+                                for dep in deps:
+                                    _add_dep(dep, bp.name, rpredeps if pre_deps else rdeps)
+
+            try:
+                _add_maint(False)
+                _add_maint(True)
+
+            except dependencies.AnalyzerError as e:
+                out.write(Color.RED + "ERROR: " + str(e) + "\n")
+                return False
+
+
+
+        # Remove dependencies specified in attribute
+        if spv.has_attribute('remove_rdeps'):
+            out.write("\nRemoving dependencies as specified in attribute:\n")
+
+            remove_rdeps = spv.get_attribute('remove_rdeps')
+            attribute_types.ensure_remove_rdeps(spv, remove_rdeps)
+
+            for bp_name, to_remove in remove_rdeps:
+                if bp_name not in bps:
+                    out.write(Color.MAGENTA +
+                            "  Binary package `%s' is not built out of this source package, "
+                            "ignoring its removed dependencies" % bp_name +
+                            Color.NORMAL + '\n')
+
+                    continue
+
+                if isinstance(to_remove, str):
+                    to_remove = [to_remove]
+
+                to_remove = map(re.compile, to_remove)
+
+                for dep, constraints in rdeps[bp_name].get_object_constraint_list():
+                    if any(re.fullmatch(regex, dep) for regex in to_remove):
+                        out.write("  `%s' -> `%s'\n" % (bp_name, dep))
+                        rdeps[bp_name].remove_dependency(dep)
+
+
+        # Add additional dependencies which are specified in attributes.
         if spv.has_attribute('additional_rdeps'):
             out.write("\nAdding additional constraints specified by attributes ...\n")
 
@@ -254,7 +403,7 @@ class StageAddRdeps:
                 if bp_name not in bps:
                     out.write(Color.MAGENTA +
                             "  Binary package `%s' is not built out of this source package, "
-                            "ignoring its dependencies" % bp_name +
+                            "ignoring its additional dependencies" % bp_name +
                             Color.NORMAL + '\n')
 
                     continue
@@ -295,11 +444,6 @@ class StageAddRdeps:
 
                         out.write("  `%s' -> `%s'%s\n" % (bp_name, dep, value))
 
-
-        # pre-dependencies
-        # Add pre-dependencies for maintainer scripts
-        if not cls._add_maintainer_script_deps(bps, rpredeps, out, True):
-            return False
 
         # Set binary packages' `rdeps' and `rpredeps' attributes
         for bp_name in bps:
@@ -533,7 +677,7 @@ class StageAddRdeps:
                 continue
 
             if len(deps) != 1:
-                out.write("Did not find a binary package containing interpreter `%s'.\n" %
+                out.write("  Did not find a binary package containing interpreter `%s'.\n" %
                     interpreter)
                 return False
 
