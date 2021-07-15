@@ -16,7 +16,7 @@ def find_versions_at_url(package, url, out=sys.stdout, verbose=False,
     """
     Finds version numbers of a package served at a given URL using heuristics.
     The function tries different heuristics and if none is applicable raises an
-    `UnknwonWebpageFormat` exception.
+    `UnknownWebpageFormat` exception.
 
     :param str package: Name of the package to search for (e.g. 'binutils')
     :param str url:

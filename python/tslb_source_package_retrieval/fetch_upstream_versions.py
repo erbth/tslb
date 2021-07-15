@@ -44,16 +44,17 @@ def fetch_versions_for_package(sp, out=sys.stdout):
         s.execute(t.delete().where(t.c.name == sp.name))
         s.flush()
 
-        s.execute(t.insert([
-            {
-                'name': sp.name,
-                'version_number': v,
-                'download_url': urls[0],
-                'signature_download_url': urls[1],
-                'retrieval_time': now
-            }
-            for v, urls in versions
-        ]))
+        if versions:
+            s.execute(t.insert([
+                {
+                    'name': sp.name,
+                    'version_number': v,
+                    'download_url': urls[0],
+                    'signature_download_url': urls[1],
+                    'retrieval_time': now
+                }
+                for v, urls in versions
+            ]))
 
     return True
 

@@ -26,3 +26,5 @@ Packages
   * maybe run test suites of basic packages.
 
   * infer cdeps from rdeps
+
+  * maybe use iana-etc from mic92?

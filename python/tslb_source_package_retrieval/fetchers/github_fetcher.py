@@ -10,7 +10,7 @@ from .base_fetcher import *
 
 
 class GitHubFetcher(BaseFetcher):
-    name = 'link_list'
+    name = 'github'
 
     def handles_url(session, package_name, url, out):
         if url.startswith('https://github.com') and url.endswith('.git'):

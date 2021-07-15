@@ -1,3 +1,4 @@
+import re
 import requests
 
 
@@ -76,6 +77,27 @@ EXT_COMP_MAP = {
     'tar.zstd': 'zstd',
     'zip': 'zip'
 }
+
+
+# Utility functions for parsing urls
+def parse_querystring(url):
+    """
+    url with querystring -> url without qs, {qs attributes}
+
+    :raises ValueError: If the querystring cannot be understood
+    """
+    qs = {}
+
+    m = re.match(r'^([^?]*)(\?(.*))?$', url)
+    if m[2]:
+        for param in m[3].split('&'):
+            comp = param.split('=')
+            if len(comp) != 2:
+                raise ValueError("invalid querystring")
+
+            qs[comp[0]] = comp[1].strip().strip("'").strip('"')
+
+    return (m[1], qs)
 
 
 #****************************** Exceptions ************************************
