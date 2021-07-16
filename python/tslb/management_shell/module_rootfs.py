@@ -216,7 +216,7 @@ class ActionBalanceForest(Action):
 
 
     def run(self, *args):
-        rootfs_balancer.balance_forest(rootfs_balancer.SimpleBalancer(5, 3))
+        rootfs_balancer.balance_forest(rootfs_balancer.SimpleBalancer(15, 3))
 
 
 #************************** Presenting an image *******************************

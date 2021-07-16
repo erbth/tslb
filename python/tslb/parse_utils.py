@@ -110,7 +110,7 @@ def query_user_input(prompt, options):
     default = None
     for o in options:
         if o.isupper():
-            default = o
+            default = o.lower()
 
     loptions = options.lower()
     while True:

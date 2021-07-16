@@ -122,8 +122,6 @@ def main():
     print("Checking for available newer versions...")
     update_versions(arch)
 
-    print("\nChecking for missing source archives...")
-
 if __name__ == '__main__':
     main()
     exit(0)

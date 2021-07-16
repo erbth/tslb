@@ -8,7 +8,7 @@ from . import fetchers
 from .fetchers import FindException
 
 
-CACHE_PATH = '/tmp/tslb_source_package_retrieval/cache.sqlite'
+CACHE_PATH = '/tmp/tslb_source_package_retrieval/cache'
 
 
 def find_versions_at_url(package, url, out=sys.stdout, verbose=False,

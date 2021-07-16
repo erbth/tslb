@@ -2,6 +2,12 @@
 
   * systemd config
 
+  * grub for wrong arch - and maybe disable stripping for modules...
+
+  * remove vim dependency on perl
+
+  * grub mkfont
+
 
   * [ ] packages incl. TPM2
 
