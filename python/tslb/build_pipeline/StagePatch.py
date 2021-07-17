@@ -37,7 +37,8 @@ class StagePatch(object):
             spv.get_attribute('patch_command'),
             {
                 'MAX_PARALLEL_THREADS': str(max_parallel_threads),
-                'MAX_LOAD': str(max_parallel_threads)
+                'MAX_LOAD': str(max_parallel_threads),
+                'SOURCE_VERSION': str(spv.version_number),
             },
             chroot=rootfs_mountpoint)
 

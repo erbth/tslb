@@ -70,9 +70,14 @@ class StageInstallToDestdir(object):
                 if makefile_supports_destdir:
                     cmd = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) DESTDIR=$(DESTDIR) install"
 
-                if not cmd:
-                    out.write("No install-to-destdir command specified and failed to guess one.\n")
-                    return False
+            # Python packgages that use setuptools
+            if not cmd:
+                if os.path.exists(os.path.join(source_dir, 'setup.py')):
+                    cmd = "python3 setup.py install --prefix=/usr --root $(DESTDIR)"
+
+            if not cmd:
+                out.write("No install-to-destdir command specified and failed to guess one.\n")
+                return False
 
             spv.set_attribute('install_to_destdir_command', cmd)
             out.write("Guessed install-to-destdir command to be `%s'\n" % cmd)

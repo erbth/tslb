@@ -42,6 +42,9 @@ class StageBuild(object):
             elif os.path.exists(os.path.join(source_dir, 'Makefile')):
                 build_command = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)"
 
+            elif os.path.exists(os.path.join(source_dir, 'setup.py')):
+                build_command = "python3 setup.py build -j $(MAX_PARALLEL_THREADS_REDUCED)"
+
             else:
                 out.write("No build command specified and failed to guess one.\n")
                 return False
@@ -53,12 +56,18 @@ class StageBuild(object):
         # Add .5 to round up.
         max_parallel_threads = round(multiprocessing.cpu_count() * 1.2 + 0.5)
 
+        # ~4 cores per build node - for packages the build system of which
+        # cannot use system load.
+        max_parallel_threads_reduced = 5
+
         if build_command:
             build_command = PreparedBuildCommand(
                 build_command,
                 {
                     'MAX_PARALLEL_THREADS': str(max_parallel_threads),
-                    'MAX_LOAD': str(max_parallel_threads)
+                    'MAX_PARALLEL_THREADS_REDUCED': str(max_parallel_threads_reduced),
+                    'MAX_LOAD': str(max_parallel_threads),
+                    'SOURCE_VERSION': str(spv.version_number),
                 },
                 chroot=rootfs_mountpoint)
 

@@ -43,7 +43,9 @@ class VersionDirectoryLinksFetcher(BaseFetcher):
         # Interpret URL
         url, params = parse_querystring(url)
 
-        directory_format = params.get('directory_format', r'v?[0-9]+(\.[0-9]+)*[a-zA-Z]?/?')
+        directory_format = params.get(
+                'directory_format',
+                r'(' + re.escape(package_name) + '-)?v?[0-9]+(\.[0-9]+)*[a-zA-Z]?/?')
         regex = re.compile(directory_format, flags=re.I)
 
         link_target_format = params.get('link_target_format',

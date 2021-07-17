@@ -20,7 +20,8 @@ import subprocess
 import sys
 
 
-def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=None):
+def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=None,
+        skip_paths=[]):
     """
     This function finds and strips ELF files in a given system root. It handles
     the library and executable directories different. In library directories
@@ -33,6 +34,8 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=Non
         does
     :param parallel: The number of stripping tasks to perform in parallel, or
         None if no parallel execution shall be done.
+    :param skip_paths: Paths that match (not fullmatch!) one of the compiled
+        regular expressions in this list won't be stripped.
     :raises: an exception on error.
     """
     lib_dirs = ['lib', 'usr/lib', 'usr/local/lib', 'lib64', 'opt']
@@ -59,7 +62,8 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=Non
                     max_level='unneeded',
                     out=out,
                     exe=exe,
-                    inode_set=inode_set)
+                    inode_set=inode_set,
+                    skip_paths=skip_paths)
 
         for d in exec_dirs:
             target = os.path.join(root_path, d)
@@ -71,7 +75,8 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=Non
                     max_level='all',
                     out=out,
                     exe=exe,
-                    inode_set=inode_set)
+                    inode_set=inode_set,
+                    skip_paths=skip_paths)
 
         # Wait for futures in case of parallel execution
         if exe:
@@ -85,7 +90,7 @@ def strip_and_create_debug_links_in_root(root_path, out=sys.stdout, parallel=Non
 
 
 def strip_and_create_debug_links_in_directory(path, max_level='all',
-        out=sys.stdout, exe=None, inode_set=None):
+        out=sys.stdout, exe=None, inode_set=None, skip_paths=[]):
     """
     This function finds and strips all ELF files in a given directory. The
     directory must not cross multiple filesystems because inode numbers must be
@@ -102,6 +107,8 @@ def strip_and_create_debug_links_in_directory(path, max_level='all',
         None when calling this function. An empty set will be created
         automatically and passed to recursive calls. However it may be set to
         an empty set() for multiple calls to this function.
+    :param skip_paths: Paths that match (not fullmatch!) one of the compiled
+        regular expressions in this list won't be stripped.
 
     :returns: A list of futures if :param exe: is given, else an empty list.
 
@@ -130,11 +137,16 @@ def strip_and_create_debug_links_in_directory(path, max_level='all',
                     max_level,
                     out,
                     exe,
-                    inode_set)
+                    inode_set,
+                    skip_paths)
 
         return ret
 
     elif stat.S_ISREG(stbuf.st_mode):
+        for r in skip_paths:
+            if r.match(path):
+                return []
+
         with open(path, 'rb') as f:
             magic = f.read(4)
 

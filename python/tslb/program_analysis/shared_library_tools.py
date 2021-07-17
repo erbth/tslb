@@ -393,6 +393,11 @@ def determine_required_shared_objects(path, out=sys.stdout):
         if f.read(4) != b'\x7fELF':
             return set()
 
+    # For now skip .dbg files as readelf appears to not handle the truncated
+    # .interp section in them correctly.
+    if path.endswith('.dbg'):
+        return set()
+
     cmd = ['readelf', '-d', '-l', path]
     ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=out)
     if ret.returncode != 0:

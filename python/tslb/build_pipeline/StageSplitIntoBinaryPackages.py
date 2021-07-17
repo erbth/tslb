@@ -124,7 +124,7 @@ class StageSplitIntoBinaryPackages:
 
 
         # If shared objects are left after packaging shared libraries, move
-        # them to an extra package.
+        # them to an extra package (except python modules).
         other_so_files = set()
 
         remaining_files = installed_files - copied_files
@@ -132,6 +132,9 @@ class StageSplitIntoBinaryPackages:
             remaining_files -= lib.get_dev_symlinks()
 
         for _file in remaining_files:
+            if re.match(r'/usr(/local)?/lib/python', _file):
+                continue
+
             # Don't assign linker scripts as these are development files.
             if _file.endswith('.so'):
                 with open(fops.simplify_path_static(spv.install_location + '/' + _file), 'rb') as f:
@@ -216,6 +219,10 @@ class StageSplitIntoBinaryPackages:
         # information.
         remaining_files = installed_files - copied_files
         for _file in remaining_files:
+            # Skip .so-files from python packages
+            if re.match(r'/usr(/local)?/lib/python', _file):
+                continue
+
             if \
                     _file.startswith('/usr/include/') or \
                     _file.startswith('/usr/local/include/') or \

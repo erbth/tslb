@@ -267,7 +267,7 @@ class StageAddRdeps:
                     if len(res) > 1:
                         raise dependencies.AnalyzerError(
                                 "Found multiple binary packages that contain file `%s':\n%s\n" %
-                                (dep.filename, deps))
+                                (dep.filename, res))
 
                     name, version = res[0]
                     bdep = dependencies.BinaryPackageDependency(
@@ -297,14 +297,29 @@ class StageAddRdeps:
                     disabled = spv.get_attribute_or_default(
                             'disable_dependency_analyzer_%s_for' % analyzer.name, [])
                     attribute_types.ensure_disable_dependency_analyzer_for(disabled)
+                    disabled = [re.compile(e) for e in disabled]
 
                     out.write("\nRunning dependency analyzer `%s'...\n" % analyzer.name)
                     for bp in bps.values():
-                        if bp.name in disabled:
-                            out.write(Color.YELLOW + "  skipping disabled package `%s'..." %
-                                    bp.name + Color.NORMAL + "\n")
+                        # Skip dependency analyzers disabled for this binary package
+                        skip = False
+                        for r in disabled:
+                            if r.fullmatch(bp.name):
+                                out.write(Color.YELLOW + "  skipping disabled package `%s'..." %
+                                        bp.name + Color.NORMAL + "\n")
+                                skip = True
+                                break
+
+                        if skip:
                             continue
 
+                        # Skip the -doc packages, which as they may contain
+                        # examples which should be installable without
+                        # requiring the runtime environment needed to run them.
+                        if bp.name.endswith('-doc'):
+                            continue
+
+                        # Run analyzer
                         deps = analyzer.analyze_root(
                                 os.path.join(bp.scratch_space_base, 'destdir'),
                                 bp.architecture,

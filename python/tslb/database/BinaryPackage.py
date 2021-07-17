@@ -1,5 +1,5 @@
 from .SourcePackage import SourcePackageVersion
-from tslb.VersionNumber import VersionNumberColumn
+from tslb.VersionNumber import VersionNumber, VersionNumberColumn
 from sqlalchemy import types, Column, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import aliased
@@ -168,3 +168,54 @@ def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_
                 .filter(cand2.c['version_number'] > cand1.c['version_number']).exists())
 
     return list(bpq.distinct().all())
+
+
+def find_binary_packages_with_file_pattern(session, arch, pattern):
+    """
+    This function searches in all known files of binary packages for binary
+    packages of the specified architecture that contain a file matching the
+    specified pattern. The pattern my include the wildcard characters '*' and
+    '?', where '?' can be any single character (like with globbing).
+
+    The pattern can contain '/' as well or may start with a '/'.
+
+    :param session: A SQLAlchemy database session
+    :param str pattern: The pattern to search for
+    :param str|int arch: The architecture in which should be searched
+    :returns list(tuple(str, VersionNumber, path)): A list of binary package
+        versions found, along with the matched paths. The list is sorted
+        alphabetically and by increasing version number.
+    """
+    pattern = pattern.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
+    pattern = pattern.replace('*', '%').replace('?', '_')
+
+    arch = Architecture.to_int(arch)
+    bpf = aliased(BinaryPackageFile)
+
+    q = session.query(bpf.binary_package, bpf.version_number, bpf.path)\
+            .filter(bpf.architecture == arch,
+                    bpf.path.like(pattern, escape='\\'))\
+            .order_by(bpf.binary_package, bpf.version_number, bpf.path)\
+            .distinct()
+
+    return list(q.all())
+
+
+def find_source_package_version_for_binary_package(session, bp_name, bp_version, arch):
+    """
+    Given a binary package name, version and architecture find the
+    corresponding source package's name and version.
+
+    :param session: A SQLAlchemy database session
+    :param str bp_name: The binary package's name
+    :param VersionNumber|constructable bp_version: The binary package's version
+    :param arch: The binary package's architecture
+    :returns Tuple(str, VersionNumber)|NoneType: The corresponding source
+        package version's name and version number
+    """
+    bp = aliased(BinaryPackage)
+    return session.query(bp.source_package, bp.source_package_version_number)\
+            .filter(bp.architecture == Architecture.to_int(arch),
+                    bp.name == bp_name,
+                    bp.version_number == VersionNumber(bp_version))\
+            .first()

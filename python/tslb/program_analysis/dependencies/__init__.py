@@ -8,8 +8,10 @@ from .dependency_analyzer import *
 
 from .shebang_analyzer import ShebangAnalyzer
 from .shell_analyzer import ShellAnalyzer
+from .python_analyzer import PythonAnalyzer
 
 ALL_ANALYZERS = [
     ShebangAnalyzer,
-    ShellAnalyzer
+    ShellAnalyzer,
+    PythonAnalyzer
 ]

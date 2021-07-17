@@ -1,7 +1,9 @@
 import multiprocessing
 import os
+import re
 import subprocess
 import traceback
+from tslb import attribute_types as tslb_at
 from tslb.Console import Color
 from tslb.program_transformation import stripping
 
@@ -22,17 +24,26 @@ class StageStrip:
         :returns: successful
         :rtype: bool
         """
+        chroot_install_location = '/tmp/tslb/scratch_space/install_location'
+
+        _skip_paths = spv.get_attribute_or_default('strip_skip_paths', [])
+        tslb_at.ensure_strip_skip_paths(_skip_paths)
+        skip_paths = []
+
+        for p in _skip_paths:
+            p = '^' + re.escape(chroot_install_location) + p.lstrip('^')
+            skip_paths.append(re.compile(p))
+
         # Enter a chroot environment and strip debug information from files.
         success = True
 
         def strip_function():
-            chroot_install_location = '/tmp/tslb/scratch_space/install_location'
-
             try:
                 stripping.strip_and_create_debug_links_in_root(
                         chroot_install_location,
                         out=out,
-                        parallel=6)
+                        parallel=6,
+                        skip_paths=skip_paths)
 
             except BaseException as e:
                 out.write(Color.RED + "Error: " + Color.NORMAL + str(e) + '\n')

@@ -35,15 +35,16 @@ class StageConfigure(object):
 
         else:
             # Guess one.
-            if os.path.exists(os.path.join(spv.build_location,
-                spv.get_attribute('unpacked_source_directory'), 'CMakeLists.txt')):
-
+            src_dir = os.path.join(spv.build_location, spv.get_attribute('unpacked_source_directory'))
+            if os.path.exists(os.path.join(src_dir, 'CMakeLists.txt')):
                 configure_command = "cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib ."
 
-            elif os.path.exists(os.path.join(spv.build_location,
-                spv.get_attribute('unpacked_source_directory'), 'configure')):
-
+            elif os.path.exists(os.path.join(src_dir, 'configure')):
                 configure_command = "./configure --prefix=/usr"
+
+            elif os.path.exists(os.path.join(src_dir, 'setup.py')):
+                # Python packages do not have an extra configure-step
+                configure_command = None
 
             else:
                 out.write("No configure command specified and failed to guess one.\n")
@@ -60,7 +61,8 @@ class StageConfigure(object):
                 configure_command,
                 {
                     'MAX_PARALLEL_THREADS': str(round(multiprocessing.cpu_count() * 1.2 + 0.5)),
-                    'MAX_LOAD': str(round(multiprocessing.cpu_count() * 1.2 + 0.5))
+                    'MAX_LOAD': str(round(multiprocessing.cpu_count() * 1.2 + 0.5)),
+                    'SOURCE_VERSION': str(spv.version_number),
                 },
                 chroot=rootfs_mountpoint)
         

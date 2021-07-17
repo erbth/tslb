@@ -36,7 +36,7 @@ class StageUnpack(object):
             source_archive_path = os.path.join(source_location, source_archive)
 
             if not os.path.exists(source_archive_path):
-                out.write('Source archive `%s\' does not exist.' % source_archive)
+                out.write('Source archive `%s\' does not exist.\n' % source_archive)
                 return False
 
         else:

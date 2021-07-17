@@ -1,12 +1,22 @@
+  * meson
+
+
   * tclm?
 
   * systemd config
 
-  * grub for wrong arch - and maybe disable stripping for modules...
+  * grub for wrong arch - and disable stripping for modules...
+
+  * re-enable kernel
+
+  * grub mkfont
 
   * remove vim dependency on perl
 
-  * grub mkfont
+  * remove systemd dependency on dbus
+
+
+  * evtl. investigate / report readelf .interp truncated bug...
 
 
   * [ ] packages incl. TPM2
@@ -14,6 +24,8 @@
   * [ ] multiple nodes per host and max num threads.
 
   * [ ] licenses
+
+  * [ ] man / info update trigger
 
   * [ ] rtc, ... - see in general what LFS configures.
 
