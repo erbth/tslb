@@ -1,0 +1,73 @@
+#!/usr/bin/python3
+"""
+Copy newest versions from a TPM2 dir-repository to another dir-repository to
+create repositories with fewer packages in them.
+"""
+import argparse
+import os
+import re
+import shutil
+
+_POSSIBLE_ARCHITECTURES = ['amd64', 'i386']
+
+
+def _copy_arch(src, dst, arch):
+    pkg_versions = {}
+    r = re.compile(r'^(.*)-([0-9.]+)_' + re.escape(arch) + '\.tpm2$')
+
+    for archive in os.listdir(src):
+        m = r.match(archive)
+        if not m:
+            print("  Skipping invalid archive with name `%s'" % archive)
+            continue
+
+        if m[1] not in pkg_versions:
+            pkg_versions[m[1]] = []
+
+        pkg_versions[m[1]].append(([int(c) for c in m[2].split('.')], archive))
+
+    # Copy the latest version of each binary package to the destination
+    # repository.
+    for pkg, vs in pkg_versions.items():
+        _, archive = max(vs)
+
+        p = os.path.join(dst, archive)
+        if os.path.exists(p):
+            print("  `%s' already up-to-date" % pkg)
+            continue
+
+        print("  copying `%s'..." % pkg)
+        shutil.copy(os.path.join(src, archive), p)
+
+
+def main():
+    parser = argparse.ArgumentParser("Copy newest binary package versions")
+    parser.add_argument(metavar="<src>", dest="src", help="Source repository root")
+    parser.add_argument(metavar="<dst>", dest="dst", help="Destination repository root")
+    args = parser.parse_args()
+
+    src = args.src
+    dst = args.dst
+
+    # If the destination does not exist already, create it. However the parent
+    # must exist already.
+    if not os.path.isdir(dst):
+        os.mkdir(dst)
+
+    # Process each architecture separately
+    for arch in os.listdir(src):
+        if arch not in _POSSIBLE_ARCHITECTURES:
+            print("Skipping invalid architecture `%s'" % arch)
+            continue
+
+        p = os.path.join(dst, arch)
+        if not os.path.isdir(p):
+            os.mkdir(p)
+
+        print("Processing architecture `%s'..." % arch)
+        _copy_arch(os.path.join(src, arch), p, arch)
+
+
+if __name__ == '__main__':
+    main()
+    exit(0)

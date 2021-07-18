@@ -1,29 +1,8 @@
-  * meson
-
-
   * tclm?
+
 
   * systemd config
 
-  * grub for wrong arch - and disable stripping for modules...
-
-  * re-enable kernel
-
-  * grub mkfont
-
-  * remove vim dependency on perl
-
-  * remove systemd dependency on dbus
-
-
-  * evtl. investigate / report readelf .interp truncated bug...
-
-
-  * [ ] packages incl. TPM2
-
-  * [ ] multiple nodes per host and max num threads.
-
-  * [ ] licenses
 
   * [ ] man / info update trigger
 
@@ -31,15 +10,20 @@
 
   * firmware, microcode, ...
 
+  * [ ] packages incl. TPM2
+
+  * [ ] licenses
+
+  * evtl. investigate / report readelf .interp truncated bug...
+
 
 Packages
 ---
 
-  * grub: had to disable libfreetype as it's not available as package yet.
-
   * systemd: man depends on xsltproc?
 
-  * dbus: libsm / x11
+  * dbus: libsm / x11 -> remember that systemd depends on dbus and should be
+    usable without x11
 
   * maybe run test suites of basic packages.
 

@@ -90,6 +90,8 @@ class PythonAnalyzer(BaseDependencyAnalyzer):
         if not interpreter and not file_in_home:
             return set()
 
+        print("  Analyzing script '%s'..." % re.sub(r'.*/destdir/', '', filename), file=out)
+
         modules = PythonTools.find_required_modules_in_module(filename, ignore_decode_errors=True)
         return cls._dependencies_from_modules(modules, arch, out,
                 interpreter=interpreter, file_in_home=file_in_home)
@@ -167,7 +169,9 @@ class PythonAnalyzer(BaseDependencyAnalyzer):
                             s, *pkg[0], arch)
                     if ret:
                         try:
-                            bp = spkg.SourcePackage(ret[0], arch).get_version(ret[1])
+                            bp = spkg.SourcePackage(ret[0], arch).get_version(ret[1])\
+                                    .get_binary_package(*pkg[0])
+
                             for f,_ in bp.get_files():
                                 m = home_regex.match(f)
                                 if m:
