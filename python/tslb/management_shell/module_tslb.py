@@ -94,7 +94,7 @@ class ActionSyncBuildPipelineStages(Action):
     """
     def __init__(self):
         super().__init__(writes=True)
-        self.name = "sync_build_pipline_stages"
+        self.name = "sync_build_pipeline_stages"
 
 
     def run(self, *args):
