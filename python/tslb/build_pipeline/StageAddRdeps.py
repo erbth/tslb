@@ -375,7 +375,7 @@ class StageAddRdeps:
             out.write("\nRemoving dependencies as specified in attribute:\n")
 
             remove_rdeps = spv.get_attribute('remove_rdeps')
-            attribute_types.ensure_remove_rdeps(spv, remove_rdeps)
+            attribute_types.ensure_remove_rdeps(remove_rdeps)
 
             for bp_name, to_remove in remove_rdeps:
                 if bp_name not in bps:
@@ -389,7 +389,7 @@ class StageAddRdeps:
                 if isinstance(to_remove, str):
                     to_remove = [to_remove]
 
-                to_remove = map(re.compile, to_remove)
+                to_remove = [re.compile(r) for r in to_remove]
 
                 for dep, constraints in rdeps[bp_name].get_object_constraint_list():
                     if any(re.fullmatch(regex, dep) for regex in to_remove):

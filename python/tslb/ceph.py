@@ -36,16 +36,20 @@ def get_cluster():
 @contextmanager
 def cluster():
     c = get_cluster()
-    yield c
-    c.shutdown()
+    try:
+        yield c
+    finally:
+        c.shutdown()
 
 
 @contextmanager
 def ioctx(pool):
     with cluster() as c:
         i = c.open_ioctx(pool)
-        yield i
-        i.close()
+        try:
+            yield i
+        finally:
+            i.close()
 
 
 get_ioctx_rootfs = lambda cluster: cluster.open_ioctx(_rootfs_rbd_pool)
@@ -55,5 +59,7 @@ ioctx_rootfs = lambda: ioctx(_rootfs_rbd_pool)
 @contextmanager
 def rbd_img(ioctx, name):
     img = rbd.Image(ioctx, name)
-    yield img
-    img.close()
+    try:
+        yield img
+    finally:
+        img.close()

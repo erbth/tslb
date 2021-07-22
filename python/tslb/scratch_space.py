@@ -101,8 +101,10 @@ class ScratchSpacePool:
         else:
             with self._rados.open_ioctx(self._rbd_pool) as ioctx:
                 self._ioctx = ioctx
-                yield ioctx
-                self._ioctx = None
+                try:
+                    yield ioctx
+                finally:
+                    self._ioctx = None
 
 
     def get_scratch_space(self, name, rw, size):

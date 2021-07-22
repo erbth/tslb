@@ -1,7 +1,10 @@
   * tclm?
 
 
-  * tzdata
+  * network tools (smb, nfs, tcpdump, nslookup/dig, ...)
+
+  * create tsl-basic
+
 
   * [ ] man / info update trigger
 
@@ -14,6 +17,10 @@
   * [ ] licenses
 
   * evtl. investigate / report readelf .interp truncated bug...
+
+  * systemd ntp servers
+
+  * try sse
 
 
 Packages
