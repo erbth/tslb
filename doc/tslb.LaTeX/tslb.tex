@@ -73,11 +73,32 @@
 		maintainer\_script\_* & str & \\
 		disable\_dependency\_analyzer\_<...>\_for & List(str) & Disable the given dependency analyzer for the given binary packages (list of fullmatch-regexs) \\
 		strip\_skip\_paths & List(str) & List of regexs identifying paths that will not be stripped (matching is done with \texttt{match}, not \texttt{fullmatch}!) \\
+		
+		packaging\_hints & List(Tuple(str, str|List(str))) & [(bpkg, regex | [regex])] \\
 	\end{tabularx}
 
 	\subsection{\texttt{additional\_rdeps}}
 	\label{sec:additional_rdeps}
 	
 	A version of \texttt{current} (will be translated to \texttt{2184801924} by \python{tslb.VersionNumber}) will be substituted with the binary version of the dependency, which is installed in the rootfs image during compilation. In a similar way \texttt{built} will be substituted by the currently built version number (for internal dependencies).
+	
+	\subsection{\texttt{packaging\_hints}}
+	\label{sec:packaging_hints}
+	
+	One can give the build system hints about which files should be placed in which packages, or e.g. in separate packages. E.g. one can specify that a program 'a\_server' is placed in a separate package (maybe call it 'a\_server', too) instead of the generic binary package to separate server- and client implementations. The build system can then move files it associates with the program to the same package or its debug information to a designated \texttt{-dbgsym} package. The \texttt{packaging\_hints} are meant to make packaging such source packages easier compared to having to move every single file with \texttt{additional\_file\_placement}. They are evaluated first, which means the output produced can still be overriden with \texttt{additiona\_file\_placement}.
+	
+	Regarding the parameter value format it is only required to associate file patterns ('fullmatch' python regular expressions) with binary package names, which can be done by a function paths $\mapsto$ binary packages or binary packages $\mapsto$ subsets of paths. I use the latter because the management shell's editor is already capable of editing such properties.
+	
+	The list is processed in order, files that have been assigned to a package already won't be moved to another package referenced later in the list, even if the regular expressions of that package match the file, too.
+	
+	\file{.dbg}-files are not moved when matched by patterns specified as hints, because debug packages will be derived from the elf-file placement in packages.
+	
+	Currently, the following actions are performed based on hints (apart from that they just move files, but before moving any other file which can lead to lower quality packaging if specific files are specified in \texttt{packaging\_hints}. E.g. perl's \file{.packlist}-files are used to identify perl packages, which requires them to be still in place at that point in the splitting-stage):
+	
+	\begin{itemize}
+		\item For packages created based on hints that contain ELF files with GNU debug links, \texttt{-dbgsym}-packages are created automatically and files assigned.
+		
+		\item If any non-development file of a shared library is moved, all non-development files are moved to the new package (e.g. moving libreadline.so.8 will also move libreadline.so.8.1 or (slightly more interesting) moving \file{libnss\_files.so.2} will also move \file{libnss\_file-2.33.so}). And \file{.dbg}-files will be placed in corresponding \texttt{-dbgsym}-packages.
+	\end{itemize}
 	
 \end{document}

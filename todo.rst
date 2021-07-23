@@ -1,7 +1,7 @@
-  * tclm?
+  * nfs-utils
 
 
-  * network tools (smb, nfs, tcpdump, nslookup/dig, ...)
+  * network tools (nfs, tcpdump, nslookup/dig, ...)
 
   * create tsl-basic
 

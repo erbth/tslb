@@ -44,6 +44,8 @@ ensure_remove_rdeps = ensure_list_of_tuples_of_strings_and_strings_or_lists_of_s
 ensure_disable_dependency_analyzer_for = ensure_list_of_strings
 ensure_strip_skip_paths = ensure_list_of_strings
 
+ensure_packaging_hints = ensure_list_of_tuples_of_strings_and_strings_or_lists_of_strings
+
 
 #******************************** Exceptions **********************************
 class InvalidAttributeType(Exception):

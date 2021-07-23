@@ -1,3 +1,4 @@
+import itertools
 import os
 import re
 import stat
@@ -58,69 +59,88 @@ class StageSplitIntoBinaryPackages:
 
 
         # Map each file to a binary package
+        out.write("\nAssigning files to binary packages...\n")
         package_file_map = {}
 
-        # First, create two binary packages for each library: One with the
-        # library itself, and one with its debug symbols.
+        # First, process packaging hints
+        pkg_hints = spv.get_attribute_or_default('packaging_hints', [])
+        attribute_types.ensure_packaging_hints(pkg_hints)
+
+        available_files = installed_files | installed_directories
+        for bp_name, patterns in pkg_hints:
+            if isinstance(patterns, str):
+                patterns = [patterns]
+
+            patterns = [re.compile(p) for p in patterns]
+
+            # Match files and directories
+            assigned_files = set()
+            for f in available_files:
+                # Skip .dbg files
+                if f.endswith('.dbg'):
+                    continue
+
+                for p in patterns:
+                    if p.fullmatch(f):
+                        # Assign file
+                        if bp_name not in package_file_map:
+                            out.write("  Adding binary package `%s' from hints...\n" % bp_name)
+                            package_file_map[bp_name] = set()
+
+                        package_file_map[bp_name].add(f)
+                        copied_files.add(f)
+                        assigned_files.add(f)
+
+            available_files -= assigned_files
+
+
+        # Then create binary packages for each library, or move the library to
+        # the package that holds already some of its files.
         shared_libraries = spv.get_shared_libraries()
 
         for lib in shared_libraries:
-            bp_name = lib.name
-            if lib.abi_version_number:
-                bp_name += str(lib.abi_version_number)
+            files = lib.get_files() - lib.get_dev_symlinks()
 
-            out.write("  Adding binary package `%s' for shared library ...\n" % bp_name)
+            # If any of the non-development files have been moved already, move
+            # the entire library there (that is all files that have not been
+            # moved yet)
+            bp_name = None
+            for file_ in files:
+                if file_ in copied_files:
+                    for p, fs in package_file_map.items():
+                        if file_ in fs:
+                            bp_name = p
+                            break
 
-            if bp_name not in package_file_map:
-                package_file_map[bp_name] = set()
+                if bp_name:
+                    break
+
+            # Create a binary package if required. Note that no empty binary
+            # package will be created because then all files have been moved
+            # and bp_name is not empty.
+            if not bp_name:
+                bp_name = lib.name
+                if lib.abi_version_number:
+                    bp_name += str(lib.abi_version_number)
+
+                out.write("  Adding binary package `%s' for shared library ...\n" % bp_name)
+
+                if bp_name not in package_file_map:
+                    package_file_map[bp_name] = set()
 
             # Assign files
-            for _file in lib.get_files() - lib.get_dev_symlinks():
-                package_file_map[bp_name].add(_file)
-                copied_files.add(_file)
+            for file_ in files:
+                if file_ in copied_files:
+                    continue
+
+                package_file_map[bp_name].add(file_)
+                copied_files.add(file_)
 
 
-            # Eventually create a debug package
-            bp_dbg_name = None
-
-            dbg_link = lib.get_gnu_debug_link(spv.install_location, out)
-            if dbg_link:
-                link, crc32 = dbg_link
-                lib_dir = lib.get_library_dir()
-
-                dbg_link_path = os.path.join(lib_dir, link)
-                dbg_link_full_path = fops.simplify_path_static(
-                        spv.install_location + '/' + dbg_link_path)
-
-                try:
-                    # Check if the debug link's CRC32 checksum matches.
-                    with open(dbg_link_full_path, 'rb') as f:
-                        crc32_dbg_file = zlib.crc32(f.read())
-
-                    if crc32 == crc32_dbg_file:
-                        # Create a debug package
-                        bp_dbg_name = bp_name + '-dbgsym'
-
-                    else:
-                        our.write(Color.YELLOW +
-                                "    Debug link checksum mismatch: 0x%08x (link) != 0x%08x (file)." %
-                                (crc32, crc32_dbg_file) + Color.NORMAL + '\n')
-
-                except FileNotFoundError:
-                    out.write(Color.YELLOW +
-                            "    Debug link `%s' does not refer to a file." % link +
-                            Color.NORMAL + '\n')
-
-            if bp_dbg_name:
-                out.write("    Adding debug package `%s' ...\n" % bp_dbg_name)
-
-                if bp_dbg_name not in package_file_map:
-                    package_file_map[bp_dbg_name] = set()
-
-                # Assign files
-                for _file in (dbg_link_path,):
-                    package_file_map[bp_dbg_name].add(_file)
-                    copied_files.add(_file)
+        # Create debug packages for the packages that have been created so far.
+        if not cls._create_debug_packages(
+                spv, package_file_map, copied_files, out):
+            return False
 
 
         # If shared objects are left after packaging shared libraries, move
@@ -312,6 +332,14 @@ class StageSplitIntoBinaryPackages:
                 s.add(_file)
 
 
+        # Put remaining files under /etc into a common package.
+        remaining_files = installed_files - copied_files
+        files_for_common = []
+        for file_ in remaining_files:
+            if file_.startswith('/etc/'):
+                files_for_common.append(file_)
+                copied_files.add(file_)
+
         # If files remain, put them into a generic package.
         remaining_files = installed_files - copied_files
 
@@ -329,7 +357,7 @@ class StageSplitIntoBinaryPackages:
                 copied_files.add(_file)
 
 
-        # If directories remain, put them into a common package.
+        # If directories remain, put them into the common package, too.
         remaining_directories = set()
         for _dir in installed_directories:
             have = False
@@ -343,7 +371,7 @@ class StageSplitIntoBinaryPackages:
 
             remaining_directories.add(_dir)
 
-        if remaining_directories:
+        if remaining_directories or files_for_common:
             bp_common_name = spv.name + '-common'
             out.write("\n  Adding a common package `%s' ...\n" % bp_common_name)
 
@@ -354,6 +382,9 @@ class StageSplitIntoBinaryPackages:
 
             for _file in remaining_directories:
                 s.add(_file)
+
+            for file_ in files_for_common:
+                s.add(file_)
 
 
         # Now there are many small binary packages. Some of them might form a
@@ -579,6 +610,81 @@ class StageSplitIntoBinaryPackages:
 
                 package_file_map[generic_dbg_pkg] |= package_file_map[dbg_pkg]
                 package_file_map[dbg_pkg].clear()
+
+
+    @classmethod
+    def _create_debug_packages(cls, spv, package_file_map, copied_files, out):
+        """
+        Create debug packages based on elf-file placement.
+        """
+        # Go through all packages and find debug symbol files that belong to
+        # the packages. If files are found, move them to a corresponding
+        # -dbgsym package.
+        # The existing packages will not be changed or only the currently
+        # examined package will be changed (if it is a -dbgsym package).
+        bp_names = list(package_file_map.keys())
+        for bp_name in bp_names:
+            files = package_file_map[bp_name]
+
+            debug_links = set()
+
+            for file_ in files:
+                full_path = fops.simplify_path_static(spv.install_location + "/" + file_)
+
+                # Only considert regular files (and not e.g. shared libraries'
+                # symlinks).
+                st_buf = os.lstat(full_path)
+                if not stat.S_ISREG(st_buf.st_mode):
+                    continue
+
+                # Read GNU debug link
+                dbg_link = so_tools.get_gnu_debug_link(full_path)
+                if not dbg_link:
+                    continue
+
+                link, crc32 = dbg_link
+                link_path = fops.simplify_path_static(os.path.dirname(file_) + "/" + link)
+                link_full_path = fops.simplify_path_static(spv.install_location + "/" + link_path)
+
+                # Test if the external debug file exists and if its crc32 sum
+                # matches.
+                try:
+                    with open(link_full_path, 'rb') as f:
+                        crc32_file = zlib.crc32(f.read())
+
+                    if crc32 == crc32_file:
+                        # Only consider files that have not been assigned to packages
+                        # yet.
+                        if link_path not in copied_files:
+                            debug_links.add(link_path)
+
+                    else:
+                        out.write(Color.YELLOW +
+                                "    Debug link `%s checksum mismatch: 0x%08x (link) != 0x%08x (file)." %
+                                (link, crc32, crc32_file) + Color.NORMAL + '\n')
+
+                except FileNotFoundError:
+                    out.write(Color.YELLOW +
+                            "    Debug link `%s' does not refer to a file." % link +
+                            Color.NORMAL + '\n')
+
+            if debug_links:
+                # Create -dbgsym package (unless this is a -dbgsym package) and
+                # move files
+                if bp_name.endswith('-dbgsym'):
+                    dbg_bp_name = bp_name
+                else:
+                    dbg_bp_name = bp_name + '-dbgsym'
+
+                if dbg_bp_name not in package_file_map:
+                    out.write("  Adding a debug package `%s' ...\n" % dbg_bp_name)
+                    package_file_map[dbg_bp_name] = set()
+
+                for file_ in debug_links:
+                    package_file_map[dbg_bp_name].add(file_)
+                    copied_files.add(file_)
+
+        return True
 
 
     @staticmethod
