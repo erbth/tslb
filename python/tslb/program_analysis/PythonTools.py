@@ -112,7 +112,7 @@ def find_required_modules_in_path(p: str, ignore_domestic=True,
 
             if is_python:
                 printer('Processing file %s ...' % p)
-                ms |= find_required_modules_in_module(p, ignore_decode_errors=ignore_decode_errors)
+                ms |= find_required_modules_in_module(p, ignore_decode_errors=ignore_decode_errors) or set()
 
         elif stat.S_ISDIR(s.st_mode):
             m = re.match(r'([^/\\.])$', p)

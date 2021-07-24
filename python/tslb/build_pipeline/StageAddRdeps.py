@@ -115,12 +115,12 @@ class StageAddRdeps:
 
             return True
 
-        # 'debug' packages depend on the corresponding 'other' packages.
+        # 'debug' packages depend on the corresponding packages.
         for name in cat_debug:
             other_name = re.match(r'^(.*)-dbgsym$', name).group(1)
 
-            if other_name not in cat_other:
-                out.write("No package `%s' in category 'other' for debug package `%s'." %
+            if other_name not in bps:
+                out.write("No package `%s' in for debug package `%s'.\n" %
                         (other_name, name))
                 return False
 

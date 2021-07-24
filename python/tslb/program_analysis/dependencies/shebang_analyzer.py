@@ -63,7 +63,7 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
         :type buf: bytes (interpreted as ascii text) | str
         :param arch: The architecture in which dependencies shall be searched.
         :returns: Set(Dependency)
-        :raises AnalyzeError: If an error has been encountered
+        :raises AnalyzerError: If an error has been encountered
         """
         rdeps = set()
 
@@ -104,7 +104,7 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
                     continue
 
                 if len(deps) != 1:
-                    raise AnalyzeError("Did not find a binary package containing interpreter `%s'." %
+                    raise AnalyzerError("Did not find a binary package containing interpreter `%s'." %
                         interpreter)
 
                 name, version = deps[0]

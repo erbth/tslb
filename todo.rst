@@ -1,9 +1,12 @@
-  * nfs-utils
+  * network tools (tcpdump, nslookup/dig, openssh-server, ...)
 
+  * systemd services (disable for nfs-utils (does that on its own), openssh-server)
 
-  * network tools (nfs, tcpdump, nslookup/dig, ...)
 
   * create tsl-basic
+
+
+  * check if all required packages are enabled
 
 
   * [ ] man / info update trigger
@@ -14,7 +17,7 @@
 
   * [ ] packages incl. TPM2
 
-  * [ ] licenses
+  * [ ] licenses (also files taken from lfs etc. added in adapt)
 
   * evtl. investigate / report readelf .interp truncated bug...
 
@@ -33,6 +36,6 @@ Packages
 
   * maybe run test suites of basic packages.
 
-  * infer cdeps from rdeps
+  * infer cdeps from rdeps; cdeps -> -dev package deps
 
   * maybe use iana-etc from mic92?

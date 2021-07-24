@@ -28,6 +28,7 @@ def check_for_missing_archives(arch):
         name = names[i]
 
         sp = spkg.SourcePackage(name, arch)
+        spv = None
         for v in sp.list_version_numbers():
             spv = sp.get_version(v)
             if is_yes(spv.get_attribute_or_default('enabled', 'false')):
