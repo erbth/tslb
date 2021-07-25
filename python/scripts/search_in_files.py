@@ -1,18 +1,27 @@
+import argparse
 import re
-import sys
 from tslb import database as db
 from tslb.database import BinaryPackage
 from tslb import Architecture
 
-arch = 'amd64'
 
-if len(sys.argv) < 2:
-    print("Usage: %s <pattern>" % sys.argv[0])
-    exit(1)
+def main():
+    arch = 'amd64'
 
-with db.session_scope() as session:
-    pattern = ' '.join(sys.argv[1:])
-    res = BinaryPackage.find_binary_packages_with_file_pattern(session, arch, pattern)
+    parser = argparse.ArgumentParser("Search in files")
+    parser.add_argument(metavar="<pattern>", dest="pattern")
+    parser.add_argument("--only-latest", action="store_true",
+            help="Only consider the latest version of each binary package.")
 
-    for name, version, path in res:
-        print("%s:%s@%s: %s" % (name, version, Architecture.to_str(arch), path))
+    args = parser.parse_args()
+    with db.session_scope() as session:
+        res = BinaryPackage.find_binary_packages_with_file_pattern(
+                session, arch, args.pattern, only_latest=args.only_latest)
+
+        for name, version, path in res:
+            print("%s:%s@%s: %s" % (name, version, Architecture.to_str(arch), path))
+
+
+if __name__ == '__main__':
+    main()
+    exit(0)

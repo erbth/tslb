@@ -52,7 +52,8 @@ def find_versions_at_url(package, url, out=sys.stdout, verbose=False,
             }[f]
             annotated.append((p, urls))
 
-        output.append((v, max(annotated)[1]))
+        if annotated:
+            output.append((v, max(annotated)[1]))
 
     output.sort()
     return output

@@ -40,7 +40,7 @@ class StageConfigure(object):
                 configure_command = "cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib ."
 
             elif os.path.exists(os.path.join(src_dir, 'configure')):
-                configure_command = "./configure --prefix=/usr"
+                configure_command = "./configure --prefix=/usr --sysconfdir=/etc"
 
             elif os.path.exists(os.path.join(src_dir, 'setup.py')):
                 # Python packages do not have an extra configure-step

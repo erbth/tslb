@@ -170,7 +170,7 @@ def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_
     return list(bpq.distinct().all())
 
 
-def find_binary_packages_with_file_pattern(session, arch, pattern):
+def find_binary_packages_with_file_pattern(session, arch, pattern, only_latest=False):
     """
     This function searches in all known files of binary packages for binary
     packages of the specified architecture that contain a file matching the
@@ -182,6 +182,8 @@ def find_binary_packages_with_file_pattern(session, arch, pattern):
     :param session: A SQLAlchemy database session
     :param str pattern: The pattern to search for
     :param str|int arch: The architecture in which should be searched
+    :param bool only_latest: If true, only the files of the latest version of
+        each binary package are searched for the pattern.
     :returns list(tuple(str, VersionNumber, path)): A list of binary package
         versions found, along with the matched paths. The list is sorted
         alphabetically and by increasing version number.
@@ -194,8 +196,19 @@ def find_binary_packages_with_file_pattern(session, arch, pattern):
 
     q = session.query(bpf.binary_package, bpf.version_number, bpf.path)\
             .filter(bpf.architecture == arch,
-                    bpf.path.like(pattern, escape='\\'))\
-            .order_by(bpf.binary_package, bpf.version_number, bpf.path)\
+                    bpf.path.like(pattern, escape='\\'))
+
+    if only_latest:
+        # Filter out matches from binary package versions that are not the
+        # latest version of the binary package.
+        bp = aliased(BinaryPackage)
+        q = q.filter(~session.query(bp)\
+                .filter(bp.name == bpf.binary_package,
+                        bp.architecture == bpf.architecture,
+                        bp.version_number > bpf.version_number)\
+                .exists())
+
+    q = q.order_by(bpf.binary_package, bpf.version_number, bpf.path)\
             .distinct()
 
     return list(q.all())

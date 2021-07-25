@@ -1,29 +1,24 @@
-  * network tools (tcpdump, nslookup/dig, openssh-server, ...)
-
-  * systemd services (disable for nfs-utils (does that on its own), openssh-server)
-
-
   * create tsl-basic
 
+  * try sse
 
   * check if all required packages are enabled
 
+  * firmware, microcode, ...
 
-  * [ ] man / info update trigger
+
+  * [ ] man / info update trigger and mandb
 
   * [ ] rtc, ... - see in general what LFS configures.
 
-  * firmware, microcode, ...
-
   * [ ] packages incl. TPM2
 
-  * [ ] licenses (also files taken from lfs etc. added in adapt)
+  * [ ] licenses (also files taken from lfs etc. added in adapt; e.g. 'computer
+    instructions' in blfs are subject to a MIT license)
 
   * evtl. investigate / report readelf .interp truncated bug...
 
   * systemd ntp servers
-
-  * try sse
 
 
 Packages
@@ -36,6 +31,7 @@ Packages
 
   * maybe run test suites of basic packages.
 
-  * infer cdeps from rdeps; cdeps -> -dev package deps
+  * infer cdeps from rdeps; maybe: cdeps -> -dev package deps (how often will
+    this be needed in practice?)
 
   * maybe use iana-etc from mic92?

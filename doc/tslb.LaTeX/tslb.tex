@@ -75,6 +75,7 @@
 		strip\_skip\_paths & List(str) & List of regexs identifying paths that will not be stripped (matching is done with \texttt{match}, not \texttt{fullmatch}!) \\
 		
 		packaging\_hints & List(Tuple(str, str|List(str))) & [(bpkg, regex | [regex])] \\
+		maint\_gen\_systmd & str & options to the maintainer script generator for systemd units \\
 	\end{tabularx}
 
 	\subsection{\texttt{additional\_rdeps}}
@@ -100,5 +101,10 @@
 		
 		\item If any non-development file of a shared library is moved, all non-development files are moved to the new package (e.g. moving libreadline.so.8 will also move libreadline.so.8.1 or (slightly more interesting) moving \file{libnss\_files.so.2} will also move \file{libnss\_file-2.33.so}). And \file{.dbg}-files will be placed in corresponding \texttt{-dbgsym}-packages.
 	\end{itemize}
+
+	\subsection{\texttt{maint\_gen\_systemd}}
+	\label{sec:maint_gen_systemd}
+	
+	By specifying '\texttt{disable}' one can prevent maintainer scripts for enabling etc. systemd services to be generated.
 	
 \end{document}

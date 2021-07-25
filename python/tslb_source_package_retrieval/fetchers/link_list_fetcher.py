@@ -37,13 +37,13 @@ class LinkListFetcher(BaseFetcher):
         else:
             regexs = [
                 (re.compile(r"^" + re.escape(package_name) +
-                        r'-?([.0-9]+[a-zA-Z]?)\.((tar\.(gz|bz2|xz|lz|zstd))|tgz|zip)(\.(sign|sig|asc))?$',
+                        r'-?([.0-9]+[a-zA-Z]?[0-9]?)\.((tar\.(gz|bz2|xz|lz|zstd))|tgz|zip)(\.(sign|sig|asc))?$',
                         flags=re.I),
                     (1, 2, 6)
                 ),
 
                 (re.compile(r"^" + re.escape(package_name) +
-                        r'-?(([0-9]+\.)*[0-9]+[a-zA-Z]?)\.tar\.(sign|sig|asc)$',
+                        r'-?(([0-9]+\.)*[0-9]+[a-zA-Z]?[0-9]?)\.tar\.(sign|sig|asc)$',
                         flags=re.I),
                     (1, None, 3)
                 )
@@ -58,7 +58,7 @@ class LinkListFetcher(BaseFetcher):
 
             # If a link target filter is given, match the whole target url
             # against it.
-            full_target_url = urljoin(url + '/', a['href'])
+            full_target_url = urljoin(re.sub(r'/[^/]+\.html', '', url) + '/', a['href'])
             if link_target_filter:
                 if not link_target_filter.fullmatch(full_target_url):
                     continue
@@ -78,7 +78,7 @@ class LinkListFetcher(BaseFetcher):
                 if v not in versions:
                     versions[v] = {}
 
-                if pc:
+                if pc and m[pc]:
                     comp = EXT_COMP_MAP[m[pc]]
 
                     if psign and m[psign]:

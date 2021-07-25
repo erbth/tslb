@@ -217,14 +217,19 @@ function unmount_cephfs_host() {
 
 # Different commands
 function print_help() {
-	echo "ping            Ping all hosts in the cluster to determine if they are up."
-	echo "deploy          Copy the python modules of tslb to the specified host, or all if none is specified."
-	echo "start           Start the build node on the specified host, or on all if none is specified."
-	echo "stop            Stop the build node on the specified host, or on all if none is specified."
-	echo "status          Show the status of the build node on the specified host, or on all if none is specified."
-	echo "mount_cephfs    Mount cephfs on the specified host, or on all if none is specified."
-	echo "unmount_cephfs  Unmount cephfs on the specified host, or on all if none is specified."
-	echo "help            Show this help text."
+	echo "ping                Ping all hosts in the cluster to determine if they are up."
+	echo "deploy              Copy the python modules of tslb to the specified host, or all if none is specified."
+	echo "start               Start the build node on the specified host, or on all if none is specified."
+	echo "stop                Stop the build node on the specified host, or on all if none is specified."
+	echo "status              Show the status of the build node on the specified host, or on all if none is specified."
+	echo "mount_cephfs        Mount cephfs on the specified host, or on all if none is specified."
+	echo "unmount_cephfs      Unmount cephfs on the specified host, or on all if none is specified."
+	echo
+	echo "system_startup      deploy && mount_cephfs && start"
+	echo "system_shutdown     stop && unmount_cephs"
+	echo "update_build_hosts  on build hosts: stop && deploy && start"
+	echo
+	echo "help                Show this help text."
 }
 
 
@@ -409,6 +414,23 @@ case "$1" in
 
 	unmount_cephfs)
 		unmount_cephfs "$2"
+		;;
+
+	system_startup)
+		deploy "$2"
+		mount_cephfs "$2"
+		start_node "$2"
+		;;
+
+	system_shutdown)
+		stop_node "$2"
+		unmount_cephfs "$2"
+		;;
+
+	update_build_hosts)
+		stop_node "$2"
+		deploy "$2"
+		start_node "$2"
 		;;
 
 	help)

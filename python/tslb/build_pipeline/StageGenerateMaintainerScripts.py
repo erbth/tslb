@@ -22,6 +22,13 @@ class StageGenerateMaintainerScripts:
         :returns: successful
         :rtype: bool
         """
+        # Run through analyzers (raise GeneralError in case of failure)
+        try:
+            SystemdGenerator.run(spv, rootfs_mountpoint, out)
+
+        except GeneralError:
+            return False
+
         # A map bp-name -> [(type, maintainer script)]
         bp_names = spv.list_current_binary_packages()
         bps = {n: spv.get_binary_package(n, max(spv.list_binary_package_version_numbers(n)))
@@ -266,6 +273,74 @@ class StageGenerateMaintainerScripts:
                 type_,
                 bp_regex
         )
+
+
+class SystemdGenerator:
+    @classmethod
+    def run(cls, spv, rootfs_mountpoint, out):
+        # For each binary package
+        for bp_name in spv.list_current_binary_packages():
+            cls._run_for_bp(
+                spv,
+                spv.get_binary_package(bp_name, max(spv.list_binary_package_version_numbers(bp_name))),
+                rootfs_mountpoint,
+                out)
+
+
+    @classmethod
+    def _run_for_bp(cls, spv, bp, rootfs_mountpoint, out):
+        # Find systemd services
+        p = re.compile(r'(?:/lib|/usr/lib|/etc)/systemd/system/([^/]+\.service)')
+        for f, _ in bp.get_files():
+            m = p.fullmatch(f)
+            if not m:
+                continue
+
+            service = m[1]
+            script_prefix = "maintainer_script_mgs_" + service
+
+            print("  `%s': Adding maintainer scripts for systemd service `%s'." %
+                    (bp.name, service), file=out)
+
+            # Add maintainer configure script
+            bp.set_attribute(script_prefix + "_c",
+"""#!/bin/bash -e
+type: configure
+
+if type systemctl >/dev/null 2>&1
+then
+    if [ -z "$1" ]
+    then
+        systemctl enable %(service)s
+        systemctl start %(service)s
+
+    elif [ "$1" == "change" ]
+    then
+        systemctl is-active %(service)s && systemctl restart %(service)s
+    fi
+fi
+
+exit 0
+""" %
+                {'service': service})
+
+            # Add unconfigure script
+            bp.set_attribute(script_prefix + "_u",
+"""#!/bin/bash -e
+type: unconfigure
+
+if type systemctl >/dev/null 2>&1
+then
+    if [ -z "$1" ]
+    then
+        systemctl disable %(service)s
+        systemctl stop %(service)s
+    fi
+fi
+
+exit 0
+""" %
+                {'service': service})
 
 
 #**************************** local Exceptions ********************************
