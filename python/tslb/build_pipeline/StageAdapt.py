@@ -1,5 +1,6 @@
 from tslb import parse_utils
 from tslb import program_transformation as progtrans
+from tslb import timezone
 from tslb.Console import Color
 from tslb.build_pipeline.utils import PreparedBuildCommand
 import math
@@ -45,7 +46,8 @@ class StageAdapt:
                     'MAX_LOAD': str(max_parallel_threads),
                     'SOURCE_DIR': str(chroot_source_dir),
                     'SOURCE_VERSION': str(spv.version_number),
-                    'INSTALL_LOCATION': chroot_install_location
+                    'INSTALL_LOCATION': chroot_install_location,
+                    'ISO_DATETIME': timezone.localtime(timezone.now()).isoformat()
                 },
                 chroot=rootfs_mountpoint)
 

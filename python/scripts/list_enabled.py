@@ -4,8 +4,9 @@ from tslb import Architecture
 
 import argparse
 
-parser = argparse.ArgumentParser("List enabled source packages")
-parser.add_argument("-v", "--versions", action="store_true", help="Include versions in output")
+parser = argparse.ArgumentParser("List enabled source packages (were the latest version is enabled)")
+parser.add_argument("-v", "--versions", action="store_true", help="Include enabled versions in output")
+parser.add_argument("-d", "--disabled", action="store_true", help="List disabled instead of enabled packages")
 args = parser.parse_args()
 
 
@@ -16,15 +17,23 @@ for arch in Architecture.architectures:
         sp = SourcePackage(pkg, arch)
 
         enabled_vs = []
+        enabled = False
 
-        for v in sp.list_version_numbers():
+        vs = sp.list_version_numbers()
+        latest = max(vs)
+
+        for v in vs:
             spv = sp.get_version(v)
             if spv.has_attribute('enabled') and is_yes(spv.get_attribute('enabled')):
                 enabled_vs.append(v)
 
-        if enabled_vs:
+                if v == latest:
+                    enabled = True
+
+
+        if (enabled and not args.disabled) or (not enabled and args.disabled):
             print("  %s" % pkg)
 
             if args.versions:
                 for v in enabled_vs:
-                    print("    %s" % v)
+                    print("    %s%s" % ('but: ' if args.disabled else '', v))

@@ -1,8 +1,15 @@
-  * create tsl-basic
+  * create ssh host key *somewhere*
+
+  * change sshd service type from notify to simple (or check why notify does not
+    work)
+
+  * adduser
+
+  * lspci -> non-sbin
+
+  * test tsl-basic
 
   * try sse
-
-  * check if all required packages are enabled
 
   * firmware, microcode, ...
 

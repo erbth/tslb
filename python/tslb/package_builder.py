@@ -18,6 +18,7 @@ from tslb.filesystem import FileOperations as fops
 from tslb.tpm import Tpm2
 import multiprocessing
 import os
+import queue
 import shutil
 import signal
 import stat
@@ -337,16 +338,41 @@ class PackageBuilder(object):
                             print(e)
                             return 1
 
-                    if execute_in_chroot(mountpoint, _f) != 0:
-                        raise Exception("The Package Manager failed.")
-
-                    # Get the installed packages from the queue.
+                    # Run _f and retrieve its data
+                    p,q = start_in_chroot(mountpoint, _f)
+                    l_cnt = None
                     new_pkg_list = []
+                    exited = False
+                    while True:
+                        try:
+                            while True:
+                                val = new_pkg_queue.get(True, 0.1)
+                                if l_cnt is None:
+                                    l_cnt = val
 
-                    l_cnt = new_pkg_queue.get()
-                    for i in range(l_cnt):
-                        new_pkg_list.append(new_pkg_queue.get())
+                                else:
+                                    new_pkg_list.append(val)
 
+                        except queue.Empty:
+                            pass
+
+                        if not exited:
+                            # Did the child exit already?
+                            p.join(0)
+                            if p.exitcode is None:
+                                continue
+
+                            # Process exited.
+                            exited = True
+                            ret_val = q.get() if p.exitcode == 0 else p.exitcode
+                            if ret_val != 0:
+                                raise Exception("The Package Manager failed.")
+
+                        # Read remaining data
+                        if l_cnt == len(new_pkg_list):
+                            break
+
+                    # Update the installed packages
                     image.set_package_list(new_pkg_list)
 
                     Console.print_finished_status_box(Color.CYAN +

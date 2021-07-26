@@ -1,6 +1,9 @@
 from tslb import maintainer_script_generator as msg
 from tslb.Console import Color
+from tslb.filesystem.FileOperations import simplify_path_static
+import os
 import re
+import stat
 
 
 class StageGenerateMaintainerScripts:
@@ -278,6 +281,22 @@ class StageGenerateMaintainerScripts:
 class SystemdGenerator:
     @classmethod
     def run(cls, spv, rootfs_mountpoint, out):
+        cfg = spv.get_attribute_or_default('maint_gen_systemd', None)
+        if cfg is not None:
+            if cfg == 'disable':
+                print(Color.YELLOW +
+                        "  Systemd maintainer script generator disabled for entire source package." +
+                        Color.NORMAL, file=out)
+                return
+
+            else:
+                print("  SystemdGenerator: " + Color.READ + "ERROR:" + Color.NORMAL +
+                        "invalid configuration value `%s'." % cfg, file=out)
+                raise GeneralError
+
+        # Make sure the scratch space is mounted s.t. paths are accesible
+        spv.ensure_install_location()
+
         # For each binary package
         for bp_name in spv.list_current_binary_packages():
             cls._run_for_bp(
@@ -291,10 +310,11 @@ class SystemdGenerator:
     def _run_for_bp(cls, spv, bp, rootfs_mountpoint, out):
         # Find systemd services
         p = re.compile(r'(?:/lib|/usr/lib|/etc)/systemd/system/([^/]+\.service)')
-        for f, _ in bp.get_files():
+
+        def handle_file(f):
             m = p.fullmatch(f)
             if not m:
-                continue
+                return
 
             service = m[1]
             script_prefix = "maintainer_script_mgs_" + service
@@ -341,6 +361,20 @@ fi
 exit 0
 """ %
                 {'service': service})
+
+
+        # Examine all files
+        def _work(f, rel_path):
+            st_buf = os.lstat(f)
+
+            if stat.S_ISDIR(st_buf.st_mode):
+                for c in os.listdir(f):
+                    _work(os.path.join(f, c), simplify_path_static(rel_path + '/' + c))
+
+            elif stat.S_ISREG(st_buf.st_mode):
+                handle_file(simplify_path_static(rel_path))
+
+        _work(os.path.join(bp.scratch_space_base, 'destdir'), '/')
 
 
 #**************************** local Exceptions ********************************
