@@ -502,6 +502,11 @@ class StageSplitIntoBinaryPackages:
             os.chown(dst_base, 0, 0)
 
             try:
+                # NOTE: Do not modify the files in the destination before the
+                # last file was copied, because some might be hard links which
+                # have not been copied yet and therefore the effect caused by
+                # the changed other links is less obvious if the other links
+                # are not there yet.
                 for _file in bp_files:
                     fops.copy_from_base(spv.install_location, _file, dst_base)
 

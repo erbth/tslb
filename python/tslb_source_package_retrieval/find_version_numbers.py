@@ -6,6 +6,7 @@ import requests_cache
 import sys
 from . import fetchers
 from .fetchers import FindException
+from .fetchers.base_fetcher import parse_querystring, UnknownWebpageFormat
 
 
 CACHE_PATH = '/tmp/tslb_source_package_retrieval/cache'
@@ -30,10 +31,20 @@ def find_versions_at_url(package, url, out=sys.stdout, verbose=False,
     session = requests_cache.CachedSession(cache_path)
 
     # Try different fetchers, which implement the heuristics
+    _, url_params = parse_querystring(url)
+    requested_fetcher = url_params.get('fetcher')
+
+    fetcher_found = False
+
     for fetcher in fetchers.ALL_FETCHERS:
-        if fetcher.handles_url(session, package, url, out):
-            versions = fetcher.fetch_versions(session, package, url, out, verbose=verbose)
-            break
+        if not requested_fetcher or requested_fetcher == fetcher.name:
+            fetcher_found = True
+            if fetcher.handles_url(session, package, url, out):
+                versions = fetcher.fetch_versions(session, package, url, out, verbose=verbose)
+                break
+
+    if not fetcher_found:
+        raise UnknownWebpageFormat(url, 'Specified fetcher not found or no fetcher defined')
 
 
     # Choose compression format

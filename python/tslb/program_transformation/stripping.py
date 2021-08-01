@@ -208,12 +208,18 @@ def strip_and_create_debug_links_for_elf_file(path, strip_type, out=sys.stdout):
 
     out.write("Processing `%s' (%s) ...\n" % (path, action))
 
-    save_cmd = ['objcopy', '--only-keep-debug', path, path + '.dbg']
-    add_debug_link_cmd = ['objcopy', '--add-gnu-debuglink=%s.dbg' % path, path]
+    dbg_path = path + '.dbg'
+
+    save_cmd = ['objcopy', '--only-keep-debug', path, dbg_path]
+    add_debug_link_cmd = ['objcopy', '--add-gnu-debuglink=%s' % dbg_path, path]
     strip_cmd = ['strip', action, path]
 
     if subprocess.run(save_cmd, stdout=out, stderr=out).returncode != 0:
         raise RuntimeError("Failed to save debug symbols.")
+
+    # Remove exec mode bit from the .dbg file
+    st_buf = os.lstat(dbg_path)
+    os.chmod(dbg_path, mode=st_buf.st_mode & ~(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
 
     if subprocess.run(add_debug_link_cmd, stdout=out, stderr=out).returncode != 0:
         raise RuntimeError("Failed to add GNU debug link.")

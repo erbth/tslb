@@ -5,9 +5,61 @@ from tslb import CommonExceptions as es
 from . import fs
 
 
+def find_all_hard_links(base_dir, st_buf):
+    """
+    :params str base_dir: Base directory to search in
+    :params st_buf: stat result describing the inode for which links are searched
+    :returns List(str): [<paths of linkts, relative to base_dir without leading ./>]
+    :raises RuntimeError: If not all hard links where found in the subtree
+    """
+    links = []
+
+    dev = st_buf.st_dev
+    inode = st_buf.st_ino
+
+    def _work(f):
+        fp = os.path.join(base_dir, f)
+        s = os.lstat(fp)
+
+        # Don't cross fs boundaries
+        if s.st_dev != dev:
+            return
+
+        if s.st_ino == inode:
+            links.append(f)
+
+        # Recurse on directories
+        if stat.S_ISDIR(s.st_mode):
+            for c in os.listdir(fp):
+                _work(os.path.join(f, c))
+
+    _work('')
+
+
+    if len(links) != st_buf.st_nlink:
+        raise RuntimeError(
+                "Not all links of inode found in subtree '%s': %d != nlink (%d)" %
+                (base_dir, len(links), st_buf.st_nlink))
+
+    return links
+
+
 def copy_from_base(base_dir, src_path, dst_dir):
     """
     Copies base_dir/src_path to dst_dir/src_path
+
+    If src_path has link count > 1 and one of the hard links is present in the
+    destination already, a link is created instead of the file being copied.
+    Note that the function does not check if the file content actually matches,
+    because it is designed for splitting a directory tree into multiple ones
+    (and therefore assumes that the destination trees are only modified after
+    the last call to `copy_from_base`).
+
+    If not all hard links of a file are found in the source directory tree, a
+    RuntimeError is thrown.
+
+    NOTE: Copying hardlinks would actually need tests... but there's no time
+    for it.
 
     :param base_dir:
     :param src_path:
@@ -43,30 +95,53 @@ def copy_from_base(base_dir, src_path, dst_dir):
             os.chmod(dst, mode=s.st_mode & 0o7777)
 
         else:
-            if stat.S_ISLNK(s.st_mode):
-                os.symlink (os.readlink(src), dst)
-            elif stat.S_ISREG(s.st_mode):
-                shutil.copyfile(src, dst)
-            elif stat.S_ISBLK(s.st_mode):
-                os.mknod(dst, mode=stat.S_IFBLK, device=s.st_rdev)
-            elif stat.S_ISCHR(s.st_mode):
-                os.mknod(dst, mode=stat.S_IFCHR, device=s.st_rdev)
-            elif stat.S_ISFIFO(s.st_mode):
-                os.mkfifo(dst)
-            elif stat.S_ISSOCK(s.st_mode):
-                raise es.NotImplemented("Cannot copy socket '%s' (not implemented)" % src)
-            elif stat.S_ISDOOR(s.st_mode):
-                raise es.NotImplemented("Cannot copy door '%s' (not implemented)" % src)
+            # Check for hard links where the file might have been copied
+            # already.
+            file_present = False
+            target_lnk = None
+
+            if s.st_nlink > 1:
+                hard_links = find_all_hard_links(base_dir, s)
+
+                # If the file is already present, create a link to it.
+                for h in hard_links:
+                    if h == gradual_path:
+                        continue
+
+                    target_lnk = os.path.join(dst_dir, h)
+                    if os.path.lexists(target_lnk):
+                        file_present = True
+                        break
+
+            if file_present:
+                # Create another link
+                os.link(target_lnk, dst, follow_symlinks=False)
+
             else:
-                raise es.NotImplemented("Unknown filetype of '%s'." % src)
+                if stat.S_ISLNK(s.st_mode):
+                    os.symlink (os.readlink(src), dst)
+                elif stat.S_ISREG(s.st_mode):
+                    shutil.copyfile(src, dst)
+                elif stat.S_ISBLK(s.st_mode):
+                    os.mknod(dst, mode=stat.S_IFBLK, device=s.st_rdev)
+                elif stat.S_ISCHR(s.st_mode):
+                    os.mknod(dst, mode=stat.S_IFCHR, device=s.st_rdev)
+                elif stat.S_ISFIFO(s.st_mode):
+                    os.mkfifo(dst)
+                elif stat.S_ISSOCK(s.st_mode):
+                    raise es.NotImplemented("Cannot copy socket '%s' (not implemented)" % src)
+                elif stat.S_ISDOOR(s.st_mode):
+                    raise es.NotImplemented("Cannot copy door '%s' (not implemented)" % src)
+                else:
+                    raise es.NotImplemented("Unknown filetype of '%s'." % src)
 
-            shutil.copystat(src, dst, follow_symlinks=False)
+                shutil.copystat(src, dst, follow_symlinks=False)
 
-            # copystat does not copy owner, group and suid/guid bits
-            os.chown(dst, uid=s.st_uid, gid=s.st_gid, follow_symlinks=False)
+                # copystat does not copy owner, group and suid/guid bits
+                os.chown(dst, uid=s.st_uid, gid=s.st_gid, follow_symlinks=False)
 
-            if not stat.S_ISLNK(s.st_mode):
-                os.chmod(dst, mode=s.st_mode & 0o7777)
+                if not stat.S_ISLNK(s.st_mode):
+                    os.chmod(dst, mode=s.st_mode & 0o7777)
 
 
 def traverse_directory_tree(base, action, skip_hidden=False, element = ''):

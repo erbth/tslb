@@ -1,21 +1,9 @@
-  * firmware, microcode, ...
+  * rebuild after implementing correct hard link handling in split files
 
+  * test flops on vm and host, and maybe on yeesha
 
-  * [ ] man / info update trigger and mandb
-
-  * [ ] rtc, ... - see in general what LFS configures.
-
-  * [ ] packages incl. TPM2
-
-  * [ ] licenses (also files taken from lfs etc. added in adapt; e.g. 'computer
-    instructions' in blfs are subject to a MIT license)
 
   * evtl. investigate / report readelf .interp truncated bug...
-
-  * systemd ntp servers
-
-  * somehow remove dependencies on grub in tsl-basic and basic_tools / make
-    efibootmgr update automatically / copy kernel stubs
 
 
 Packages
@@ -32,3 +20,21 @@ Packages
     this be needed in practice?)
 
   * maybe use iana-etc from mic92?
+
+
+Low priority
+---
+
+  * [ ] set some systemd default ntp servers
+
+  * [ ] man / info update trigger and mandb
+
+  * [ ] rtc, ... - see in general what LFS configures.
+
+  * somehow remove dependencies on grub in tsl-basic and basic_tools / make
+    efibootmgr update automatically / copy kernel stubs
+
+  * [ ] licenses (also files taken from lfs etc. added in adapt; e.g. 'computer
+    instructions' in blfs are subject to a MIT license)
+
+  * microcode

@@ -329,6 +329,8 @@ type: configure
 
 if type systemctl >/dev/null 2>&1
 then
+    systemctl daemon-reload
+
     if [ -z "$1" ]
     then
         systemctl enable %(service)s
