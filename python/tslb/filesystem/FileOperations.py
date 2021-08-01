@@ -40,6 +40,7 @@ def copy_from_base(base_dir, src_path, dst_dir):
 
             shutil.copystat(src, dst)
             os.chown(dst, uid=s.st_uid, gid=s.st_gid)
+            os.chmod(dst, mode=s.st_mode & 0o7777)
 
         else:
             if stat.S_ISLNK(s.st_mode):
@@ -60,7 +61,13 @@ def copy_from_base(base_dir, src_path, dst_dir):
                 raise es.NotImplemented("Unknown filetype of '%s'." % src)
 
             shutil.copystat(src, dst, follow_symlinks=False)
+
+            # copystat does not copy owner, group and suid/guid bits
             os.chown(dst, uid=s.st_uid, gid=s.st_gid, follow_symlinks=False)
+
+            if not stat.S_ISLNK(s.st_mode):
+                os.chmod(dst, mode=s.st_mode & 0o7777)
+
 
 def traverse_directory_tree(base, action, skip_hidden=False, element = ''):
     """

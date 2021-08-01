@@ -1,16 +1,3 @@
-  * create ssh host key *somewhere*
-
-  * change sshd service type from notify to simple (or check why notify does not
-    work)
-
-  * adduser
-
-  * lspci -> non-sbin
-
-  * test tsl-basic
-
-  * try sse
-
   * firmware, microcode, ...
 
 
@@ -26,6 +13,9 @@
   * evtl. investigate / report readelf .interp truncated bug...
 
   * systemd ntp servers
+
+  * somehow remove dependencies on grub in tsl-basic and basic_tools / make
+    efibootmgr update automatically / copy kernel stubs
 
 
 Packages

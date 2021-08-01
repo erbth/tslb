@@ -124,7 +124,7 @@ def check_for_missing_archives(arch):
 
     for url, sig_url in archive_urls:
         # Download URLs must use https.
-        if not url.startswith('https') and not sig_url.startswith('http'):
+        if not url.startswith('https') and (not sig_url or not sig_url.startswith('http')):
             print(Color.RED + "ERROR: URL '%s' does not use scheme https and no signature "
                     "URL given. Skipping." % url + Color.NORMAL)
             continue

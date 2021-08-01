@@ -1009,7 +1009,7 @@ def bootstrap_rootfs_image(mountpoint, arch, out):
 '''<?xml version="1.0"?>
 <tpm file_version="2.0">
     <default_arch>%(arch)s</default_arch>
-    <repo type="dir">/tmp/tslb/collecting_repo</repo>
+    <repo type="dir_allow_unsigned">/tmp/tslb/collecting_repo</repo>
 </tpm>
 '''
         % {'arch': Architecture.to_str(arch)})

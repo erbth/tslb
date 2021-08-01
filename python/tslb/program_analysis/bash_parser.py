@@ -434,7 +434,8 @@ def _find_simple_commands_tokens(tokens):
             if i < len(cmd):
                 r = cmd[i:]
 
-        output.append(SimpleCommand(v, fw, r))
+        if v or fw:
+            output.append(SimpleCommand(v, fw, r))
 
     return output
 
