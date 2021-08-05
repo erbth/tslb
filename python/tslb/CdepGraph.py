@@ -33,7 +33,10 @@ class CdepGraph(object):
             # Clear the current graph
             self.nodes = {}
 
-            pkgs = utils.list_enabled_source_packages(spl)
+            if only_enabled:
+                pkgs = utils.list_enabled_source_packages(spl)
+            else:
+                pkgs = spl.list_source_packages()
 
             # Add each package to the graph.
             for pkg in pkgs:

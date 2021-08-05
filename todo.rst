@@ -1,5 +1,3 @@
-  * rebuild after implementing correct hard link handling in split files
-
   * test flops on vm and host, and maybe on yeesha
 
 
