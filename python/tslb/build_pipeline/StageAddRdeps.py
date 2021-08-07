@@ -4,6 +4,7 @@ from tslb import parse_utils
 from tslb import rootfs
 from tslb.Console import Color
 from tslb.Constraint import DependencyList, VersionConstraint, CONSTRAINT_TYPE_NONE
+from tslb.SourcePackage import SourcePackage
 from tslb.VersionNumber import VersionNumber
 from tslb.build_pipeline.common_functions import update_binary_package_files
 from tslb.filesystem.FileOperations import simplify_path_static
@@ -370,6 +371,11 @@ class StageAddRdeps:
 
 
 
+        # Optionally generate dependencies between -dev packages
+        if not cls._generate_dev_dependencies(spv, bps, rdeps, rootfs_mountpoint, out):
+            return False
+
+
         # Remove dependencies specified in attribute
         if spv.has_attribute('remove_rdeps'):
             out.write("\nRemoving dependencies as specified in attribute:\n")
@@ -430,7 +436,7 @@ class StageAddRdeps:
                             "ignoring its additional dependencies" % bp_name +
                             Color.NORMAL + '\n')
 
-                    continue
+                    return False
 
                 # Substitute the currently installed- and currently built
                 # version numbers of binary packages
@@ -588,5 +594,105 @@ class StageAddRdeps:
 
                 out.write("  Adding `%s' -> `%s' >= `%s'\n" % (bp.name, perl[0], perl[1]))
                 rdeps[bp.name].add_constraint(VersionConstraint('>=', perl[1]), perl[0])
+
+        return True
+
+
+    def _generate_dev_dependencies(spv, bps, rdeps, rootfs_mountpoint, out):
+        """
+        Optionally generate dependencies between -dev packages if enabled.
+
+        :returns bool: True on success, False on error
+        """
+        mode = spv.get_attribute_or_default('dev_dependencies', None)
+        if not mode:
+            return True
+
+        if mode != 'cdeps_headers':
+            print(Color.RED + "Invalid value for 'dev_dependencies': `%s'." % mode +
+                    Color.NORMAL, file=out)
+            return False
+
+        print(Color.YELLOW + "\nAdding dependencies between -dev packages using mode '%s'..." % mode +
+                Color.NORMAL, file=out)
+
+        # Find the -dev package(s)
+        dev_pkgs = []
+        for n in bps:
+            if n.startswith('-dev'):
+                dev_pkgs.append(n)
+
+        if not dev_pkgs:
+            return True
+
+        # To find installed packages
+        img = rootfs.Image(rootfs.get_image_id_from_mountpoint(rootfs_mountpoint))
+
+        # Examine cdeps
+        cdeps = spv.get_attribute('cdeps')
+        deps_to_add = []
+
+        patterns = [re.compile(p) for p in [
+            '/usr/(local/)?include/.*\.h'
+        ]]
+
+        for cdep in cdeps.get_required():
+            # Find the binary packages of the cdep
+            cdep_sp = SourcePackage(cdep, spv.architecture)
+            cdep_spv = None
+            img = None
+
+            for v in reversed(sorted(cdep_sp.list_version_numbers())):
+                if (cdep, v) in cdeps:
+                    cdep_spv = cdep_sp.get_version(v)
+                    break
+
+            if not cdep_spv:
+                print(Color.RED + "Could not find a suitable source package version for cdep on `%s'." %
+                        cdep + Color.NORMAL, file=out)
+                return False
+
+            cdep_bp_names = cdep_spv.list_current_binary_packages()
+
+            # Add a dependency on -dev packages of the cdep if they contain
+            # header files in well known locations.
+            for n in cdep_bp_names:
+                if not n.endswith('-dev'):
+                    continue
+
+                # Find installed version
+                res = img.query_packages(name=n, arch=spv.architecture)
+                if len(res) != 1:
+                    print(Color.RED + ("Binary package `%s' not installed exactly one time "
+                            "in the image (%d times).") % (n, len(res)) + Color.NORMAL, file=out)
+                    return False
+
+                # Check if it is the latest version
+                _,_,v = res[0]
+                if v != max(cdep_spv.list_binary_package_versions(n)):
+                    print(Color.RED + ("The installed binary package version `%s:%s' is "
+                            "not the latest built version of the corresponding source "
+                            "package.") % (n, v) + Color.NORMAL, file=out)
+
+                # Examine files of the binary package
+                cdep_bp = cdep_spv.get_binary_package(n, v)
+
+                for p,_ in cdep_bp.get_files():
+                    for pattern in patterns:
+                        if pattern.fullmatch(p):
+                            deps_to_add.append((n, v))
+                            break
+
+                del cdep_bp
+
+            del cdep_spv
+            del cdep_sp
+
+
+        # Finally add dependencies
+        for bpn in dev_pkgs:
+            for n, v in deps_to_add:
+                print("  `%s' -> `%s' >= %s" % (bpn, n, v))
+                rdeps[bpn].add_constraint(VersionConstraint('>=', v), n)
 
         return True

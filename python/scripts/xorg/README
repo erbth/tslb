@@ -1,0 +1,3 @@
+The scripts herein are for building Xorg and are therefore not directly
+connected with the tslb. However having them in a separate repo seems overkill
+for now.

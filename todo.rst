@@ -1,3 +1,13 @@
+  * dev dependencies
+
+  * libpciaccess[0-9] -> pci.ids
+
+  * maybe enable -dev dependencies and perform full rebuild; having digests on
+    packages and being able to compare them in advance would be cool.
+
+  * grub: freetype
+
+
   * test flops on vm and host, and maybe on yeesha
 
 
@@ -33,6 +43,7 @@ Low priority
     efibootmgr update automatically / copy kernel stubs
 
   * [ ] licenses (also files taken from lfs etc. added in adapt; e.g. 'computer
-    instructions' in blfs are subject to a MIT license)
+    instructions' in blfs are subject to a MIT license); also: xorg dependencies
+    come from blfs, make sure to acknowledge that somewhere.
 
   * microcode

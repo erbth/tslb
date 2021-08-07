@@ -76,6 +76,8 @@
 		
 		packaging\_hints & List(Tuple(str, str|List(str))) & [(bpkg, regex | [regex])] \\
 		maint\_gen\_systmd & str & options to the maintainer script generator for systemd units \\
+		
+		dev\_dependencies & str & Generate dependencies between \texttt{-dev}-packages. Can only by \texttt{cdeps\_headers} for now. \\
 	\end{tabularx}
 
 	\subsection{\texttt{additional\_rdeps}}
