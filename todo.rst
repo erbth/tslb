@@ -1,21 +1,25 @@
-  * dev dependencies
+  * fontconfig: localstatedir
 
-  * libpciaccess[0-9] -> pci.ids
+  * rebuild libva after mesa / wayland protocols
 
-  * maybe enable -dev dependencies and perform full rebuild; having digests on
-    packages and being able to compare them in advance would be cool.
+  * vainfo
 
-  * grub: freetype
-
+  * maybe build separate llvm libs for size
 
   * test flops on vm and host, and maybe on yeesha
 
 
   * evtl. investigate / report readelf .interp truncated bug...
 
+  * upstream fetching: github tags vs. real releases (see e.g. intel
+    media-driver)
+
 
 Packages
 ---
+
+  * maybe enable -dev dependencies and perform full rebuild; having digests on
+    packages and being able to compare them in advance would be cool.
 
   * systemd: man depends on xsltproc?
 
@@ -28,6 +32,8 @@ Packages
     this be needed in practice?)
 
   * maybe use iana-etc from mic92?
+
+  * maybe: grub: freetype and DejaVu font for starfield theme
 
 
 Low priority

@@ -48,7 +48,7 @@ class GitHubFetcher(BaseFetcher):
         annotated_tags = []
         for tag in tags:
             # Skip release candidates
-            if 'rc' in tag.lower():
+            if 'rc' in tag.lower() or 'pre' in tag.lower():
                 continue
 
             v_str = None
@@ -58,9 +58,16 @@ class GitHubFetcher(BaseFetcher):
                 v_str = m[1]
 
             # Used by expat
-            m = re.match(r'^R_([0-9]+(_[0-9]+)*)$', tag)
-            if m:
-                v_str = m[1].replace('_', '.')
+            if not v_str:
+                m = re.match(r'^R_([0-9]+(_[0-9]+)*)$', tag)
+                if m:
+                    v_str = m[1].replace('_', '.')
+
+            # Used by intel
+            if not v_str:
+                m = re.match(r'^.*-([0-9]+(\.[0-9]+)*)$', tag)
+                if m:
+                    v_str = m[1]
 
             # Try to exclude timestamps
             if v_str and re.match(r'.*[0-9]{5,}.*', v_str):

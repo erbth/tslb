@@ -3,6 +3,7 @@
 Create or update xorg libraries
 """
 import argparse
+import itertools
 from tslb import Architecture
 from tslb.SourcePackage import SourcePackageList, SourcePackage
 from tslb.VersionNumber import VersionNumber
@@ -15,6 +16,9 @@ from tslb_source_package_retrieval import fetch_upstream_versions
 
 ARCH = Architecture.amd64
 URL = "https://x.org/archive/individual/lib/"
+
+META_PKG_NAME = "xorg-libraries"
+META_PKG_VERSION = VersionNumber("1.0.0")
 
 PKGS = [
     ("xtrans", "1.4.0"),
@@ -51,14 +55,31 @@ PKGS = [
     ("libxshmfence", "1.3"),
 ]
 
+# These additional pkgs will be added as dependencies to the meta package
+ADDITIONAL_PKGS = [
+    'libXau',
+    'libXdmcp',
+    'libxcb',
+    'xcb-util',
+    'xcb-util-image',
+    'xcb-util-keysyms',
+    'xcb-util-renderutil',
+    'xcb-util-wm',
+    'xcb-util-cursor'
+]
+
 
 def read_args():
     parser = argparse.ArgumentParser("Create or update Xorg libraries")
+    parser.add_argument("--set-pkgs", action='store_true', help="Create- or update package versions")
+    parser.add_argument("--set-meta", action='store_true', help="Create- or update meta package")
     parser.add_argument("--fetch", action='store_true', help="Fetch upstream versions")
 
     args = parser.parse_args()
 
     d = {
+        'set_pkgs': args.set_pkgs,
+        'set_meta': args.set_meta,
         'fetch': args.fetch,
     }
     return d
@@ -173,12 +194,79 @@ def create_pkg(name, version):
     spv.set_attribute('dev_dependencies', 'cdeps_headers')
 
 
+def create_meta_package():
+    print("Updating meta-package '%s:%s'" % (META_PKG_NAME, META_PKG_VERSION))
+
+    # If the source package does not exist, create it
+    spl = SourcePackageList(ARCH)
+    if META_PKG_NAME in spl.list_source_packages():
+        sp = SourcePackage(META_PKG_NAME, ARCH, write_intent=True)
+    else:
+        print("  Creating source package `%s'." % META_PKG_NAME)
+        sp = spl.create_source_package(META_PKG_NAME)
+
+    # If the source package version does not exist, create it
+    vs = sp.list_version_numbers()
+    if META_PKG_VERSION in vs:
+        spv = sp.get_version(META_PKG_VERSION)
+
+    else:
+        # If there is another version, shallow-clone it
+        if vs:
+            v_to_clone = max(vs)
+            print("  Shallow-copying version `%s'." % v_to_clone)
+            spv = hot.source_package.shallow_version_copy(
+                sp.get_version(v_to_clone), META_PKG_VERSION)
+
+        else:
+            print("  Creating version `%s'." % META_PKG_VERSION)
+            spv = sp.add_version(META_PKG_VERSION)
+
+
+    # Set build parameters
+    spv.set_attribute('enabled', 'true')
+    spv.set_attribute('source_archive', None)
+    spv.set_attribute('unpack_command', None)
+    spv.set_attribute('configure_command', None)
+    spv.set_attribute('build_command', None)
+    spv.set_attribute('install_to_destdir_command', None)
+
+    # Tools
+    tools = Constraint.DependencyList()
+    tools.add_constraint(
+            Constraint.VersionConstraint(Constraint.CONSTRAINT_TYPE_NONE, VersionNumber(0)),
+            'basic_build_tools')
+
+    spv.set_attribute('tools', tools)
+
+    # cdeps and rdeps
+    cdeps = Constraint.DependencyList()
+    additional_rdeps = []
+
+    for pkg in itertools.chain((t[0] for t in PKGS), ADDITIONAL_PKGS):
+        cdeps.add_constraint(
+                Constraint.VersionConstraint(Constraint.CONSTRAINT_TYPE_NONE, VersionNumber(0)),
+                pkg)
+
+        dl = Constraint.DependencyList()
+        dl.add_constraint(Constraint.VersionConstraint(">=", "current"), pkg + '-all')
+        additional_rdeps.append((META_PKG_NAME + '-all', dl))
+
+    spv.set_attribute('cdeps', cdeps)
+    spv.set_attribute('additional_rdeps', additional_rdeps)
+
+
 def main():
     # Read command line arguments
     args = read_args()
 
-    for pkg_name, pkg_version in PKGS:
-        create_pkg(pkg_name, pkg_version)
+    if args['set_pkgs']:
+        for pkg_name, pkg_version in PKGS:
+            create_pkg(pkg_name, pkg_version)
+
+    # Create or update meta package
+    if args['set_meta']:
+        create_meta_package()
 
     # Fetch upstream versions
     if args['fetch']:
@@ -186,8 +274,9 @@ def main():
             fetch_upstream_versions.fetch_versions_for_package(SourcePackage(pkg_name, ARCH))
 
 
-    print("\n" + Color.BRIGHT_YELLOW +
-            "Remember to adapt cdeps!" + Color.NORMAL)
+    if args['set_pkgs']:
+        print("\n" + Color.BRIGHT_YELLOW +
+                "Remember to adapt cdeps!" + Color.NORMAL)
 
 
 if __name__ == '__main__':

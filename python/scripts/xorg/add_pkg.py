@@ -97,7 +97,7 @@ def main():
     # Add cdeps if missing
     if not spv.has_attribute('cdeps'):
         print("Adding empty cdeps.")
-        spv.set_attribute(Constraint.DependencyList())
+        spv.set_attribute('cdeps', Constraint.DependencyList())
 
     # Source archive name
     if not spv.has_attribute('source_archive'):
@@ -108,6 +108,9 @@ def main():
     # Configure command
     configure_command = "./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var"
     cond_update(spv, 'configure_command', configure_command)
+
+    # cdep dependencies
+    spv.set_attribute('dev_dependencies', 'cdeps_headers')
 
 
     # Fetch upstream versions

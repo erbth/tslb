@@ -619,7 +619,7 @@ class StageAddRdeps:
         # Find the -dev package(s)
         dev_pkgs = []
         for n in bps:
-            if n.startswith('-dev'):
+            if n.endswith('-dev'):
                 dev_pkgs.append(n)
 
         if not dev_pkgs:
@@ -630,7 +630,7 @@ class StageAddRdeps:
 
         # Examine cdeps
         cdeps = spv.get_attribute('cdeps')
-        deps_to_add = []
+        deps_to_add = set()
 
         patterns = [re.compile(p) for p in [
             '/usr/(local/)?include/.*\.h'
@@ -640,7 +640,6 @@ class StageAddRdeps:
             # Find the binary packages of the cdep
             cdep_sp = SourcePackage(cdep, spv.architecture)
             cdep_spv = None
-            img = None
 
             for v in reversed(sorted(cdep_sp.list_version_numbers())):
                 if (cdep, v) in cdeps:
@@ -669,7 +668,7 @@ class StageAddRdeps:
 
                 # Check if it is the latest version
                 _,_,v = res[0]
-                if v != max(cdep_spv.list_binary_package_versions(n)):
+                if v != max(cdep_spv.list_binary_package_version_numbers(n)):
                     print(Color.RED + ("The installed binary package version `%s:%s' is "
                             "not the latest built version of the corresponding source "
                             "package.") % (n, v) + Color.NORMAL, file=out)
@@ -680,7 +679,7 @@ class StageAddRdeps:
                 for p,_ in cdep_bp.get_files():
                     for pattern in patterns:
                         if pattern.fullmatch(p):
-                            deps_to_add.append((n, v))
+                            deps_to_add.add((n, v))
                             break
 
                 del cdep_bp

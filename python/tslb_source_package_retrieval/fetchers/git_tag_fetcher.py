@@ -48,6 +48,7 @@ class GitTagFetcher(BaseFetcher):
 
             v_str = None
 
+            print(tag)
             m = re.match(r'^v?([0-9]+(\.[0-9a-zA-Z.]+)?)$', tag)
             if m:
                 v_str = m[1]
