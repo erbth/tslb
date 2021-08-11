@@ -1,10 +1,3 @@
-  * xorg-server: xkeyboard-config at runtime
-
-  * Downgrade all .99/.94... versions as they are release candiates (shame on
-    me)
-
-  * rebuild libva after mesa / wayland protocols
-
   * vainfo
 
   * maybe build separate llvm libs for size
