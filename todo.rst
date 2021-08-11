@@ -1,4 +1,11 @@
-  * vainfo
+  * xkbcomp errors
+
+  * urxvt terminfo (top) + backspace
+
+  * missing applications to xorg-basic
+
+  * minimize (mesa!)?
+
 
   * maybe build separate llvm libs for size
 

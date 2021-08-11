@@ -53,21 +53,23 @@ class GitHubFetcher(BaseFetcher):
 
             v_str = None
 
+            # classical v...
             m = re.match(r'^v?([0-9]+(\.[0-9a-zA-Z.]+)?)$', tag)
             if m:
                 v_str = m[1]
+
+            # Used by intel and others
+            if not v_str:
+                m = re.match(r'^.*[a-zA-Z]-([0-9]+(\.[0-9]+)*)$', tag)
+                if m:
+                    v_str = m[1]
+
 
             # Used by expat
             if not v_str:
                 m = re.match(r'^R_([0-9]+(_[0-9]+)*)$', tag)
                 if m:
                     v_str = m[1].replace('_', '.')
-
-            # Used by intel
-            if not v_str:
-                m = re.match(r'^.*-([0-9]+(\.[0-9]+)*)$', tag)
-                if m:
-                    v_str = m[1]
 
             # Try to exclude timestamps
             if v_str and re.match(r'.*[0-9]{5,}.*', v_str):
