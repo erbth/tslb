@@ -1,16 +1,10 @@
-  * xkbcomp errors
+  * mesa-demos
 
-  * urxvt terminfo (top) + backspace
-
-  * missing applications to xorg-basic
-
-  * minimize (mesa!)?
-
-
-  * maybe build separate llvm libs for size
 
   * test flops on vm and host, and maybe on yeesha
 
+
+  * tpm2 upgrade
 
   * evtl. investigate / report readelf .interp truncated bug...
 
@@ -56,3 +50,5 @@ Low priority
     come from blfs, make sure to acknowledge that somewhere.
 
   * microcode
+
+  * locales
