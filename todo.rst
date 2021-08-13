@@ -1,10 +1,9 @@
-  * mesa-demos
+  * xsession
 
+  * locales
 
   * test flops on vm and host, and maybe on yeesha
 
-
-  * tpm2 upgrade
 
   * evtl. investigate / report readelf .interp truncated bug...
 
@@ -50,5 +49,3 @@ Low priority
     come from blfs, make sure to acknowledge that somewhere.
 
   * microcode
-
-  * locales
