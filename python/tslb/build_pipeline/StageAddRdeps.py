@@ -431,9 +431,8 @@ class StageAddRdeps:
             # Add additional rdeps
             for bp_name, dl in additional_rdeps:
                 if bp_name not in bps:
-                    out.write(Color.MAGENTA +
-                            "  Binary package `%s' is not built out of this source package, "
-                            "ignoring its additional dependencies" % bp_name +
+                    out.write(Color.RED +
+                            "  Binary package `%s' is not built out of this source package." % bp_name +
                             Color.NORMAL + '\n')
 
                     return False

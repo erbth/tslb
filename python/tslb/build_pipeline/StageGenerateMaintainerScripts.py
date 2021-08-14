@@ -309,18 +309,23 @@ class SystemdGenerator:
     @classmethod
     def _run_for_bp(cls, spv, bp, rootfs_mountpoint, out):
         # Find systemd services
-        p = re.compile(r'(?:/lib|/usr/lib|/etc)/systemd/system/([^/]+\.service)')
+        p = re.compile(r'(?:/lib|/usr/lib|/etc)/systemd/system/([^/]+\.(?:service|timer))')
 
-        def handle_file(f):
+        def handle_file(f, full_path):
             m = p.fullmatch(f)
             if not m:
                 return
 
-            service = m[1]
-            script_prefix = "maintainer_script_mgs_" + service
+            # Check if the unit has an [Install] section
+            with open(full_path, 'r', encoding='utf8') as unit_file:
+                if '[install]' not in [l.strip().lower() for l in unit_file.readlines()]:
+                    return
 
-            print("  `%s': Adding maintainer scripts for systemd service `%s'." %
-                    (bp.name, service), file=out)
+            unit = m[1]
+            script_prefix = "maintainer_script_mgs_" + unit
+
+            print("  `%s': Adding maintainer scripts for systemd unit `%s'." %
+                    (bp.name, unit), file=out)
 
             # Add maintainer configure script
             bp.set_attribute(script_prefix + "_c",
@@ -333,18 +338,18 @@ then
 
     if [ -z "$1" ]
     then
-        systemctl enable %(service)s
-        systemctl start %(service)s
+        systemctl enable %(unit)s
+        systemctl start %(unit)s
 
     elif [ "$1" == "change" ]
     then
-        systemctl is-active %(service)s && systemctl restart %(service)s
+        systemctl is-active %(unit)s && systemctl restart %(unit)s
     fi
 fi
 
 exit 0
 """ %
-                {'service': service})
+                {'unit': unit})
 
             # Add unconfigure script
             bp.set_attribute(script_prefix + "_u",
@@ -355,14 +360,14 @@ if type systemctl >/dev/null 2>&1
 then
     if [ -z "$1" ]
     then
-        systemctl disable %(service)s
-        systemctl stop %(service)s
+        systemctl disable %(unit)s
+        systemctl stop %(unit)s
     fi
 fi
 
 exit 0
 """ %
-                {'service': service})
+                {'unit': unit})
 
 
         # Examine all files
@@ -374,7 +379,7 @@ exit 0
                     _work(os.path.join(f, c), simplify_path_static(rel_path + '/' + c))
 
             elif stat.S_ISREG(st_buf.st_mode):
-                handle_file(simplify_path_static(rel_path))
+                handle_file(simplify_path_static(rel_path), f)
 
         _work(os.path.join(bp.scratch_space_base, 'destdir'), '/')
 

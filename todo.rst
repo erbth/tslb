@@ -1,4 +1,8 @@
-  * xsession
+  * /etc/mtab
+
+  * /var/lib/nfs/state
+
+  * /etc/udev/hwdb.bin (from where does it come?)
 
   * locales
 
@@ -37,7 +41,7 @@ Low priority
 
   * [ ] set some systemd default ntp servers
 
-  * [ ] man / info update trigger and mandb
+  * [ ] mandb / texinfo index update trigger
 
   * [ ] rtc, ... - see in general what LFS configures.
 
