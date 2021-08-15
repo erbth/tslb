@@ -1,5 +1,6 @@
 from .SourcePackage import SourcePackageVersion
-from tslb.VersionNumber import VersionNumber, VersionNumberColumn
+from tslb.VersionNumber import VersionNumber
+from tslb.VersionNumberColumn import VersionNumberColumn
 from sqlalchemy import types, Column, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import aliased

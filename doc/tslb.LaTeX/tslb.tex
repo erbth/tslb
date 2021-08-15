@@ -5,7 +5,9 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
+\usepackage{float}
 \usepackage{tabularx}
+\usepackage{ltablex}
 \usepackage[dvipsnames]{xcolor}
 \usepackage{dirtree}
 \usepackage[hidelinks]{hyperref}
@@ -14,6 +16,8 @@
 \usepackage{algorithmicx}
 \usepackage{tikz}
 \usetikzlibrary{automata, positioning, arrows, shapes.geometric}
+\usepackage{listings}
+\usepackage{lstautogobble}
 
 \newcommand{\file}[1]{\texttt{#1}}
 \newcommand{\program}[1]{\textbf{#1}}
@@ -24,6 +28,14 @@
 \newcommand{\python}[1]{\texttt{`#1'}}
 
 \newcommand{\green}[1]{\textcolor{green}{#1}}
+
+\lstset{
+	basicstyle=\ttfamily,
+	tabsize=4,
+	numbers=left,
+	columns=fullflexible,
+	autogobble
+}
 
 \title{The TSClient LEGACY Build System}
 \subtitle{Developer's documentation}
@@ -57,8 +69,11 @@
 		disable\_python\_compileall & str & \\
 		adapt\_command & str & \\
 		additional\_file\_placement & List(Tuple(str, str|List(str))) & [(dst pkg name, regex | [regex])]\\
+
 		additional\_rdeps & List(Tuple(str,DependencyList)) & \\
 		remove\_rdeps & List(Tuple(str, str|List(str))) & bpkg -> fullmatch-regex; evaluated before \texttt{additional\_rdeps} \\
+		file\_splitter & str|bytes & Custom executable to split files into packages, see section \ref{sec:file_splitter} \\
+		
 		cdeps & DependencyList & \\
 		tools & DependencyList&  Like cdeps, but only used for rootfs creation \\
 		enabled & str & parsed into bool \\
@@ -75,7 +90,7 @@
 		strip\_skip\_paths & List(str) & List of regexs identifying paths that will not be stripped (matching is done with \texttt{match}, not \texttt{fullmatch}!) \\
 		
 		packaging\_hints & List(Tuple(str, str|List(str))) & [(bpkg, regex | [regex])] \\
-		maint\_gen\_systmd & str & options to the maintainer script generator for systemd units \\
+		maint\_gen\_systemd & str & options to the maintainer script generator for systemd units \\
 		
 		dev\_dependencies & str & Generate dependencies between \texttt{-dev}-packages. Can only by \texttt{cdeps\_headers} for now. \\
 	\end{tabularx}
@@ -108,5 +123,61 @@
 	\label{sec:maint_gen_systemd}
 	
 	By specifying '\texttt{disable}' one can prevent maintainer scripts for enabling etc. systemd services to be generated for \textit{all} binary packages created out of the source package.
+	
+	
+	\subsection{\texttt{file\_splitter}}
+	\label{sec:file_splitter}
+	
+	The \texttt{file\_splitter} attribute allows to split the source package's installed files into arbitrary binary packages. It specifies an executable (usually some sort of script e.g. written in python). The executable receives a map of file associations that have been found so far encoded using json at stdin and is expected to write an updated map, along with other data do set on binary packages, to stdout. It is run after the regular file splitting facilities such that it can override the map and is provided with the file splitting logic's findings. The attribute can also contain a commandline to execute, because it uses the same running logic as build commands.
+	
+	If it is a script, it must carry a 'shebang' interpreter request. It is executed in the rootfs of the package currently being built using chroot s.t. it cannot destroy the build hosts filesystem accidentally, however that is the only protective measure and hence the executables are considered trusted. Moreover all software installed in the rootfs (e.g. using the \texttt{tools} attribute) is available to the executable.
+	
+	The format of the json-encoded data sent to stdin is sketched in figure \ref{fig:file_splitter_stdin_schema}. It is sent through a pipe, which is closed after all data has been sent hence the executable can determine that it received all data if it reads an EOF condition. The output to write to stdout follows the schema described by figure \ref{fig:file_splitter_stdout_schema}. Output to stderr is redirected to the build system's output and hence also included in the build state log. If the executable exits with a non-zero status, it is considered failed and the build system aborts the build of the package. The executable is run in the directory where the package has been installed (''destdir''), and additionally this directory is provided in the input data as well.
+	
+	Note that the file splitter can place a file into multiple (then conflicting) binary packages or assign no files to a binary package (and thus can create empty packages). Moreover it is not required to read stdin.
+	
+	\begin{figure}[htp]
+		\centering
+		
+		\begin{minipage}{0.8\textwidth}
+			\begin{lstlisting}
+			{
+				"source_package_name": <:str>,
+				"install_root": <'destdir':str>,
+				"package_file_map": {
+					"<binary package:str>": [<package-relative paths:str>],
+				}
+			}
+			\end{lstlisting}
+		\end{minipage}
+		
+		\caption{\texttt{file\_splitter} stdin json-schema}
+		\label{fig:file_splitter_stdin_schema}
+	\end{figure}
+
+	\begin{figure}[htp]
+		\centering
+		
+		\begin{minipage}{0.8\textwidth}
+			\begin{lstlisting}
+			{
+				"package_file_map": {
+					"<binary package:str>": [<package-relative paths:str>],
+				},
+				"set_attributes": {						// optional
+					"<binary package:str>": [
+						[<key:str>, <value:str>],
+						[<key:str>, 'p', <base64 encoded pickled data>]
+					]
+				}
+			}
+			\end{lstlisting}
+		\end{minipage}
+		
+		\caption{\texttt{file\_splitter} stdout json-schema}
+		\label{fig:file_splitter_stdout_schema}
+	\end{figure}
+
+	The file splitter is completely free in which binary packages it generates. However a \texttt{'-all'} package should be generated (in fact the build system enforces this) s.t. the source package can later be installed as compiletime dependency. Moreover all packages for which attributes are added must exist in the \texttt{package\_file\_map}, even if no files are assigned to them.
 	
 \end{document}

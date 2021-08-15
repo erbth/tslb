@@ -475,6 +475,26 @@ def execute_in_chroot(root, f, *args, **kwargs):
     return q.get() if p.exitcode == 0 else p.exitcode
 
 
+def perform_chroot(root):
+    """
+    Chroot to the given target, setup the new environmnt and chdir to '/' (to
+    not leave an fd to a directory outside the chroot environemnt).
+    """
+    # Clear environment (but preserve TERM)
+    TERM = os.getenv('TERM')
+    os.environ.clear()
+
+    os.environ['TERM'] = TERM
+    os.environ['HOME'] = '/root'
+    os.environ['PS1'] = r'(chroot) \u:\w\$ '
+    os.environ['PATH'] = '/bin:/usr/bin:/sbin:/usr/sbin'
+
+    # Special python path for dynamically copied code
+    # os.environ['PYTHONPATH'] = '/tmp/tslb/lib/python3/dist-packages'
+
+    os.chroot(root)
+    os.chdir('/')
+
 def start_in_chroot(root, f, *args, **kwargs):
     """
     Start the function f in a chroot environment using the multiprocessing
@@ -497,20 +517,7 @@ def start_in_chroot(root, f, *args, **kwargs):
         # forking when used in a multi-threaded environment.
         replace_output_streams()
 
-        # Clear environment (but preserve TERM)
-        TERM = os.getenv('TERM')
-        os.environ.clear()
-
-        os.environ['TERM'] = TERM
-        os.environ['HOME'] = '/root'
-        os.environ['PS1'] = r'(chroot) \u:\w\$ '
-        os.environ['PATH'] = '/bin:/usr/bin:/sbin:/usr/sbin'
-
-        # Special python path for dynamically copied code
-        # os.environ['PYTHONPATH'] = '/tmp/tslb/lib/python3/dist-packages'
-
-        os.chroot(root)
-        os.chdir('/')
+        perform_chroot(root)
         r = f(*args, **kwargs)
 
         if isinstance(r, subprocess.CompletedProcess):

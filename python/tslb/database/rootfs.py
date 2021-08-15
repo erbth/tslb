@@ -1,6 +1,6 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, types, ForeignKey
-from tslb.VersionNumber import VersionNumberColumn
+from tslb.VersionNumberColumn import VersionNumberColumn
 
 
 Base = declarative_base()

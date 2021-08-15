@@ -2,7 +2,7 @@ from sqlalchemy import Column, types, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.schema import FetchedValue
 from tslb import timezone
-from tslb.VersionNumber import VersionNumberColumn
+from tslb.VersionNumberColumn import VersionNumberColumn
 from . import Attribute
 
 Base = declarative_base()

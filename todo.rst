@@ -1,10 +1,12 @@
+  * e2fsprogs, install test3, locales, /usr/bin/locales
+
   * /etc/mtab
 
   * /var/lib/nfs/state
 
-  * /etc/udev/hwdb.bin (from where does it come?)
+  * /var/log/journal owner in package
 
-  * locales
+  * /etc/udev/hwdb.bin (from where does it come?)
 
   * test flops on vm and host, and maybe on yeesha
 

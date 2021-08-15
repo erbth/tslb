@@ -17,7 +17,6 @@ components, 1,000,000,000 is added to them. Case does not matter.
 Therefore, each int component must not be greater than 999,999,999
 """
 
-from sqlalchemy import types
 from tslb.parse_utils import split_on_number_edge
 import re
 
@@ -188,23 +187,3 @@ class VersionNumber(object):
 
     def __hash__(self):
         return hash(tuple(self.components))
-
-class VersionNumberColumn(types.TypeDecorator):
-    """
-    Represents VersionNumbers in object relational databases
-    """
-    impl = types.ARRAY(types.Integer)
-
-    def process_bind_param(self, value, dialect):
-        if value is None:
-            return None
-
-        return value.components
-
-    def process_result_value(self, value, dialect):
-        if value is None:
-            return None
-
-        v = VersionNumber(0)
-        v.components = value
-        return v

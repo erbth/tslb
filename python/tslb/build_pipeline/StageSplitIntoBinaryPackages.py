@@ -1,16 +1,24 @@
+import base64
 import itertools
+import json
 import os
+import pickle
 import re
+import shutil
 import stat
 import subprocess
+import tempfile
 import zlib
 from tslb import BinaryPackage as bpkg
 from tslb import attribute_types
 from tslb.Console import Color
+from tslb.build_pipeline.utils import PreparedBuildCommand
 from tslb.filesystem import FileOperations as fops
 from tslb.program_analysis import shared_library_tools as so_tools
 
 LDCONFIG_TRIGGER_ATTR = "activated_triggers_auto_ldconfig"
+
+TSLB_BASE = os.path.join(os.path.dirname(__file__), '..')
 
 class StageSplitIntoBinaryPackages:
     name = 'split_into_binary_packages'
@@ -29,6 +37,8 @@ class StageSplitIntoBinaryPackages:
         :returns: successful
         :rtype: bool
         """
+        chroot_install_location = '/tmp/tslb/scratch_space/install_location'
+
         bp_version_number = bpkg.generate_version_number()
         out.write(Color.MAGENTA +
                 "Binary packages' version: %s" % bp_version_number +
@@ -483,6 +493,92 @@ class StageSplitIntoBinaryPackages:
         package_file_map[bp_all_name] = set()
 
 
+        # If a custom file splitter has been configured, run it.
+        attributes_to_add = {}
+
+        if spv.has_attribute('file_splitter'):
+            print("\nRunning custom file splitter...", file=out)
+            splitter = PreparedBuildCommand(spv.get_attribute('file_splitter'),
+                    chroot=rootfs_mountpoint)
+
+            input_ = json.dumps({
+                    'source_package_name': spv.name,
+                    'install_root': chroot_install_location,
+                    'package_file_map': {
+                        pkg: list(files) for pkg, files in package_file_map.items()
+                    }
+                },
+                indent=4
+            ).encode('utf8')
+
+            try:
+                with tempfile.TemporaryDirectory(dir=os.path.join(rootfs_mountpoint, 'tmp')) as tmpdir:
+                    # Copy parts of the tslb s.t. they are available in the
+                    # chroot environment
+                    dst = os.path.join(tmpdir, 'tslb')
+                    os.mkdir(dst, mode=0o755)
+                    for file_ in ['CommonExceptions.py', 'parse_utils.py', 'VersionNumber.py', 'Constraint.py']:
+                        shutil.copy(os.path.join(TSLB_BASE, file_), dst)
+
+                    tmpdir_chroot = os.path.join('/tmp', os.path.basename(tmpdir))
+
+                    from tslb.package_builder import perform_chroot
+                    def _chroot():
+                        perform_chroot(rootfs_mountpoint)
+                        os.chdir(chroot_install_location)
+                        os.environ['PYTHONPATH'] = tmpdir_chroot
+
+                    with splitter as cmd:
+                        proc = subprocess.Popen(cmd,
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=out.fileno(),
+                                preexec_fn=_chroot)
+
+                        output,_ = proc.communicate(input_)
+
+                        if proc.returncode != 0:
+                            print(Color.RED + "File splitter failed with code %s." %
+                                    proc.returncode + Color.NORMAL, file=out)
+
+                            return False
+
+            except BaseException as e:
+                print(Color.RED + "Failed to run file splitter: " + Color.NORMAL + str(e), file=out)
+                return False
+
+            # Verify and accept result
+            try:
+                output = json.loads(output.decode('utf8'))
+            except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
+                print(Color.RED + "Failed to parse output as JSON: " +
+                        Color.NORMAL + str(e), file=out)
+                return False
+
+            if not cls._verify_file_splitter_output_json(output, out):
+                return False
+
+            package_file_map = {k: set(v) for k,v in output['package_file_map'].items()}
+
+            for pkg, attrs in output['set_attributes'].items():
+                if pkg not in package_file_map:
+                    print(Color.RED + "Cannot set attributes for non-existent package `%s'." % 
+                            pkg + Color.NORMAL, file=out)
+                    return False
+
+                for t in attrs:
+                    k = t[0]
+                    if pkg not in attributes_to_add:
+                        attributes_to_add[pkg] = []
+
+                    if len(t) == 3 and t[1] == 'p':
+                        v = pickle.loads(base64.b64decode(t[2].encode('ascii')))
+                    else:
+                        v = t[1]
+
+                    attributes_to_add[pkg].append((k, v))
+                    print("  Adding attribute %s::%s" % (pkg, k), file=out)
+
+
         # Create binary packages and copy files
         bps = []
 
@@ -492,6 +588,10 @@ class StageSplitIntoBinaryPackages:
 
             bp = spv.add_binary_package(bp_name, bp_version_number)
             bps.append(bp)
+
+            # Set attributes
+            for k,v in attributes_to_add.get(bp_name, []):
+                bp.set_attribute(k, v)
 
             # Copy files
             bp.ensure_scratch_space_base()
@@ -770,5 +870,71 @@ class StageSplitIntoBinaryPackages:
             else:
                 if bp.has_attribute(LDCONFIG_TRIGGER_ATTR):
                     bp.unset(LDCONFIG_TRIGGER_ATTR)
+
+        return True
+
+
+    @staticmethod
+    def _verify_file_splitter_output_json(output, out):
+        """
+        Verify the file splitter's output json schema
+        """
+        def _error(msg):
+            print(Color.RED + "Invalid output: " + Color.NORMAL + msg, file=out)
+
+        if not isinstance(output, dict):
+            _error("Must be of type 'object'.")
+            return False
+
+        for k, v in output.items():
+            if k == 'package_file_map':
+                if not isinstance(v, dict):
+                    _error("'package_file_map' must be a dict.")
+                    return False
+
+                for k2, v2 in v.items():
+                    if not isinstance(k2, str):
+                        _error("'package_file_map' must have string keys.")
+                        return False
+
+                    if not isinstance(v2, list):
+                        _error("'package_file_map' must have lists as values.")
+                        return False
+
+                    for v3 in v2:
+                        if not isinstance(v3, str):
+                            _error("'package_file_map' lists must contain strings.")
+                            return False
+
+                        if not v3.startswith('/'):
+                            _error("'package_file_map' lists must contain 'absolute' paths "
+                                    "(absolute in an installed system).")
+                            return False
+
+            elif k == 'set_attributes':
+                if not isinstance(v, dict):
+                    _error("'set_attributes' must be a dict.")
+                    return False
+
+                for k2, v2 in v.items():
+                    if not isinstance(k2, str):
+                        _error("'set_attributes' must have string keys.")
+                        return False
+
+                    if not isinstance(v2, list):
+                        _error("'set_attributes must have lists as values.")
+                        return False
+
+                    for v3 in v2:
+                        if not isinstance(v3, list) or not (
+                                    (len(v3) == 2 and isinstance(v3[0], str)) or
+                                    (len(v3) == 3 and isinstance(v3[0], str) and v3[1] == 'p')
+                                ):
+                            _error("'set_attributes' must have key-value pairs with string keys per package.")
+                            return False
+
+            else:
+                _error("Invalid key `%s' on top level." % k)
+                return False
 
         return True

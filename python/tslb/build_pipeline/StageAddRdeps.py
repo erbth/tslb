@@ -404,9 +404,11 @@ class StageAddRdeps:
 
 
         # Add additional dependencies which are specified in attributes.
-        if spv.has_attribute('additional_rdeps'):
-            out.write("\nAdding additional constraints specified by attributes ...\n")
+        # Collate additional rdeps
+        additional_rdeps = []
 
+        # Specified at source package
+        if spv.has_attribute('additional_rdeps'):
             additional_rdeps = spv.get_attribute('additional_rdeps')
 
             # Test the list's type
@@ -427,6 +429,28 @@ class StageAddRdeps:
                             "not of type (str, DependencyList with str objects).\n")
 
                     return False
+
+        # Specified at binary packages
+        for bp in bps.values():
+            attrs = bp.list_attributes("additional_rdeps_*")
+            if bp.has_attribute("additional_rdeps"):
+                attrs.append("additional_rdeps")
+
+            for attr in attrs:
+                val = bp.get_attribute(attr)
+                if not isinstance(val, DependencyList) or \
+                        any(not isinstance(o, str) for o in val.get_required()):
+
+                    out.write("%s::%s is not a DependencyList with str objects.\n" %
+                            bp.name, attr)
+                    return False
+
+                additional_rdeps.append((bp.name, val))
+
+
+        # Add them
+        if additional_rdeps:
+            out.write("\nAdding additional constraints specified by attributes ...\n")
 
             # Add additional rdeps
             for bp_name, dl in additional_rdeps:
