@@ -1,12 +1,4 @@
-  * e2fsprogs, install test3, locales, /usr/bin/locales
-
-  * /etc/mtab
-
-  * /var/lib/nfs/state
-
-  * /var/log/journal owner in package
-
-  * /etc/udev/hwdb.bin (from where does it come?)
+  * util-linux: fstrim.timer, uuidd installation
 
   * test flops on vm and host, and maybe on yeesha
 
@@ -25,13 +17,9 @@ Packages
 
   * systemd: man depends on xsltproc?
 
-  * dbus: libsm / x11 -> remember that systemd depends on dbus and should be
-    usable without x11
-
   * maybe run test suites of basic packages.
 
-  * infer cdeps from rdeps; maybe: cdeps -> -dev package deps (how often will
-    this be needed in practice?)
+  * infer cdeps from rdeps
 
   * maybe use iana-etc from mic92?
 
@@ -42,6 +30,9 @@ Low priority
 ---
 
   * [ ] set some systemd default ntp servers
+
+  * better systemd unit handling; initially enable new units on upgrade (get
+    some inspiration from deb-systemd-helper); socket activation and install
 
   * [ ] mandb / texinfo index update trigger
 
