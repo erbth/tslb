@@ -1,6 +1,7 @@
 from tslb import maintainer_script_generator as msg
 from tslb.Console import Color
 from tslb.filesystem.FileOperations import simplify_path_static
+import configparser
 import os
 import re
 import stat
@@ -279,6 +280,11 @@ class StageGenerateMaintainerScripts:
 
 
 class SystemdGenerator:
+    UNIT_TYPES = ['service', 'socket', 'mount', 'timer', 'device', 'automount',
+            'swap', 'target', 'path', 'scope', 'slice']
+
+    STATE_BASE = '/var/lib/tsl_state/systemd'
+
     @classmethod
     def run(cls, spv, rootfs_mountpoint, out):
         cfg = spv.get_attribute_or_default('maint_gen_systemd', None)
@@ -299,29 +305,57 @@ class SystemdGenerator:
 
         # For each binary package
         for bp_name in spv.list_current_binary_packages():
-            cls._run_for_bp(
+            ret = cls._run_for_bp(
                 spv,
                 spv.get_binary_package(bp_name, max(spv.list_binary_package_version_numbers(bp_name))),
                 rootfs_mountpoint,
                 out)
 
+            if not ret:
+                return False
+
+
+    @staticmethod
+    def _should_unit_be_installed(unit, full_path, out):
+        # Parse unit file
+        content = configparser.ConfigParser()
+        try:
+            content.read(full_path)
+        except (UnicodeDecodeError, configparser.ParsingError) as e:
+            print(Color.RED + "Failed to read systemd unit `%s': " % full_path + Color.NORMAL +
+                    str(e))
+            raise GeneralError
+
+        # Check if the unit has an [Install] section
+        if 'Install' not in content:
+            return False
+
+        # Check if the unit is a template
+        if re.fullmatch(r'.*@\.[^.]+', unit):
+            # Does it have a default instance?
+            if 'DefaultInstance' not in content['Install']:
+                return False
+
+        return True
+
 
     @classmethod
     def _run_for_bp(cls, spv, bp, rootfs_mountpoint, out):
         # Find systemd services
-        p = re.compile(r'(?:/lib|/usr/lib|/etc)/systemd/system/([^/]+\.(?:service|timer))')
+        p = re.compile(r'(?:/lib|/usr/lib|/etc)/systemd/system/([^/]+\.(?:%(types)s))' %
+                {'types': '|'.join(cls.UNIT_TYPES)})
 
         def handle_file(f, full_path):
             m = p.fullmatch(f)
             if not m:
                 return
 
-            # Check if the unit has an [Install] section
-            with open(full_path, 'r', encoding='utf8') as unit_file:
-                if '[install]' not in [l.strip().lower() for l in unit_file.readlines()]:
-                    return
-
             unit = m[1]
+
+            # Test if the unit should be installed
+            if not cls._should_unit_be_installed(unit, full_path, out):
+                return
+
             script_prefix = "maintainer_script_mgs_" + unit
 
             print("  `%s': Adding maintainer scripts for systemd unit `%s'." %
@@ -332,37 +366,84 @@ class SystemdGenerator:
 """#!/bin/bash -e
 type: configure
 
+# Automatically created by the tslb
 if type systemctl >/dev/null 2>&1
 then
     systemctl daemon-reload
 
     if [ -z "$1" ]
     then
-        systemctl enable %(unit)s
-        systemctl start %(unit)s
+        systemctl preset --preset-mode=enable-only %(unit)s
+        if [ "$(systemctl is-enabled %(unit)s)" == "enabled" ]; then
+            systemctl start %(unit)s
+        fi
 
     elif [ "$1" == "change" ]
     then
-        systemctl is-active %(unit)s && systemctl restart %(unit)s
+        STATEFILE="%(state_base)s/%(unit)s_disabled"
+        if [ -e "$STATEFILE" ]
+        then
+            echo "Leaving systemd unit '%(unit)s' disabled (up to 'Also=' in other units)..."
+            rm "$STATEFILE"
+        else
+            # Ignore units that only specify 'Also=' in [Install], bad, masked,
+            # and linked units.
+            if [ "$(systemctl is-enabled %(unit)s)" == "disabled" ]; then
+                systemctl preset --preset-mode=enable-only %(unit)s
+            fi
+        fi
+        systemctl is-active %(unit)s > /dev/null && systemctl restart %(unit)s
     fi
 fi
 
 exit 0
 """ %
-                {'unit': unit})
+                {
+                    'state_base': cls.STATE_BASE,
+                    'unit': unit
+                })
 
             # Add unconfigure script
             bp.set_attribute(script_prefix + "_u",
 """#!/bin/bash -e
 type: unconfigure
 
+# Automatically created by the tslb
 if type systemctl >/dev/null 2>&1
 then
     if [ -z "$1" ]
     then
         systemctl disable %(unit)s
         systemctl stop %(unit)s
+
+    elif [ "$1" == "change" ]
+    then
+        STATEFILE="%(state_base)s/%(unit)s_disabled"
+        if systemctl is-enabled %(unit)s > /dev/null
+        then
+            systemctl disable %(unit)s
+        else
+            mkdir -p "%(state_base)s"
+            :> "$STATEFILE"
+        fi
     fi
+fi
+
+exit 0
+""" %
+                {
+                    'state_base': cls.STATE_BASE,
+                    'unit': unit
+                })
+
+            # Add postrm script
+            bp.set_attribute(script_prefix + "_r",
+"""#!/bin/bash -e
+type: postrm
+
+if [ "$TPM_TARGET" == "/" ] && [ -x /bin/systemctl ] && [ -d /run/systemd/system ]
+then
+    /bin/systemctl daemon-reload
 fi
 
 exit 0
@@ -381,7 +462,12 @@ exit 0
             elif stat.S_ISREG(st_buf.st_mode):
                 handle_file(simplify_path_static(rel_path), f)
 
-        _work(os.path.join(bp.scratch_space_base, 'destdir'), '/')
+        try:
+            _work(os.path.join(bp.scratch_space_base, 'destdir'), '/')
+        except GeneralError:
+            return False
+
+        return True
 
 
 #**************************** local Exceptions ********************************

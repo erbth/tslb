@@ -1,6 +1,20 @@
-  * util-linux: fstrim.timer, uuidd installation
+  * better systemd unit handling; initially enable new units on upgrade (get
+    some inspiration from deb-systemd-helper); socket activation and install
+
+  * util-linux: fstrim.timer
+
+  * uuidd
+
+  * recompile e2fsprogs and see if systemd units are handled correctly
+
+  * [ ] mandb / texinfo index update trigger
 
   * test flops on vm and host, and maybe on yeesha
+
+
+  * delete old snapshots
+
+  * delete old rootfs images
 
 
   * evtl. investigate / report readelf .interp truncated bug...
@@ -31,11 +45,6 @@ Low priority
 
   * [ ] set some systemd default ntp servers
 
-  * better systemd unit handling; initially enable new units on upgrade (get
-    some inspiration from deb-systemd-helper); socket activation and install
-
-  * [ ] mandb / texinfo index update trigger
-
   * [ ] rtc, ... - see in general what LFS configures.
 
   * somehow remove dependencies on grub in tsl-basic and basic_tools / make
@@ -46,3 +55,16 @@ Low priority
     come from blfs, make sure to acknowledge that somewhere.
 
   * microcode
+
+Ideas
+---
+
+  * maybe even better systemd unit handling (don't disable units during upgrade,
+    stopping on change when it will not be in a new package (stopping/disabling
+    in a trigger, but execstop won't be available there so implement kill
+    fallback or similar), cleaning notes of disabled services after each tpm2
+    run, start unit during upgrade when disabled-preset was removed); maybe move
+    to a script like deb-systemd-helper
+
+  * maybe add a trigger to require system reboot by writing that information to
+    a file
