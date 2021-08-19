@@ -124,6 +124,26 @@
 	
 	By specifying '\texttt{disable}' one can prevent maintainer scripts for enabling etc. systemd services to be generated for \textit{all} binary packages created out of the source package.
 	
+	This attribute can also be a string-encoded JSON object as described in figure \ref{fig:maint_gen_systemd_json}, where all keys are optional.
+	
+	\begin{figure}[H]
+		\centering
+		\begin{minipage}{0.8\textwidth}
+			\begin{lstlisting}
+			{
+				"units": {
+					"<unit>": {
+						"enable_on_install": false // defaults to true
+					}
+				}
+			}
+			\end{lstlisting}
+		\end{minipage}
+		
+		\caption{\texttt{file\_splitter} stdin json-schema}
+		\label{fig:maint_gen_systemd_json}
+	\end{figure}
+	
 	
 	\subsection{\texttt{file\_splitter}}
 	\label{sec:file_splitter}

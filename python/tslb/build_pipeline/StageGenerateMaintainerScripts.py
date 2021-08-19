@@ -2,6 +2,7 @@ from tslb import maintainer_script_generator as msg
 from tslb.Console import Color
 from tslb.filesystem.FileOperations import simplify_path_static
 import configparser
+import json
 import os
 import re
 import stat
@@ -296,9 +297,12 @@ class SystemdGenerator:
                 return
 
             else:
-                print("  SystemdGenerator: " + Color.READ + "ERROR:" + Color.NORMAL +
-                        "invalid configuration value `%s'." % cfg, file=out)
-                raise GeneralError
+                try:
+                    cfg = json.loads(cfg)
+                except Exception as e:
+                    print("  SystemdGenerator: " + Color.RED + "ERROR:" + Color.NORMAL +
+                            "invalid configuration value `%s' (%s)." % (cfg, e), file=out)
+                    raise GeneralError
 
         # Make sure the scratch space is mounted s.t. paths are accesible
         spv.ensure_install_location()
@@ -309,6 +313,7 @@ class SystemdGenerator:
                 spv,
                 spv.get_binary_package(bp_name, max(spv.list_binary_package_version_numbers(bp_name))),
                 rootfs_mountpoint,
+                cfg,
                 out)
 
             if not ret:
@@ -318,7 +323,11 @@ class SystemdGenerator:
     @staticmethod
     def _should_unit_be_installed(unit, full_path, out):
         # Parse unit file
-        content = configparser.ConfigParser()
+        content = configparser.ConfigParser(
+            strict=False,
+            allow_no_value=False
+        )
+
         try:
             content.read(full_path)
         except (UnicodeDecodeError, configparser.ParsingError) as e:
@@ -340,7 +349,7 @@ class SystemdGenerator:
 
 
     @classmethod
-    def _run_for_bp(cls, spv, bp, rootfs_mountpoint, out):
+    def _run_for_bp(cls, spv, bp, rootfs_mountpoint, cfg, out):
         # Find systemd services
         p = re.compile(r'(?:/lib|/usr/lib|/etc)/systemd/system/([^/]+\.(?:%(types)s))' %
                 {'types': '|'.join(cls.UNIT_TYPES)})
@@ -361,6 +370,16 @@ class SystemdGenerator:
             print("  `%s': Adding maintainer scripts for systemd unit `%s'." %
                     (bp.name, unit), file=out)
 
+            # Should the unit be enabled automatically?
+            enable_on_install = True
+            if cfg and 'units' in cfg:
+                if unit in cfg['units']:
+                    enable_on_install = cfg['units'][unit].get(
+                            'enable_on_install', enable_on_install)
+
+            if not enable_on_install:
+                print("    Not enabling unit on install.", file=out)
+
             # Add maintainer configure script
             bp.set_attribute(script_prefix + "_c",
 """#!/bin/bash -e
@@ -373,22 +392,34 @@ then
 
     if [ -z "$1" ]
     then
-        systemctl preset --preset-mode=enable-only %(unit)s
-        if [ "$(systemctl is-enabled %(unit)s)" == "enabled" ]; then
-            systemctl start %(unit)s
+        if [ %(enable_on_install)s -eq 1 ]
+        then
+            systemctl preset --preset-mode=enable-only %(unit)s
+            if [ "$(systemctl is-enabled %(unit)s)" == "enabled" ]; then
+                systemctl start %(unit)s
+            fi
         fi
-
     elif [ "$1" == "change" ]
     then
-        STATEFILE="%(state_base)s/%(unit)s_disabled"
-        if [ -e "$STATEFILE" ]
+        if [ -e "%(state_base)s/%(unit)s_disabled" ]
         then
             echo "Leaving systemd unit '%(unit)s' disabled (up to 'Also=' in other units)..."
-            rm "$STATEFILE"
+            rm "%(state_base)s/%(unit)s_disabled"
         else
+            ENABLE=0
+            if [ -e "%(state_base)s/%(unit)s_enabled" ]
+            then
+                ENABLE=1
+                rm "%(state_base)s/%(unit)s_enabled"
+            elif [ %(enable_on_install)s -eq 1 ]
+            then
+                ENABLE=1
+            fi
+
             # Ignore units that only specify 'Also=' in [Install], bad, masked,
             # and linked units.
-            if [ "$(systemctl is-enabled %(unit)s)" == "disabled" ]; then
+            if [ "$(systemctl is-enabled %(unit)s)" == "disabled" ] && [ $ENABLE -eq 1 ]
+            then
                 systemctl preset --preset-mode=enable-only %(unit)s
             fi
         fi
@@ -400,7 +431,8 @@ exit 0
 """ %
                 {
                     'state_base': cls.STATE_BASE,
-                    'unit': unit
+                    'unit': unit,
+                    'enable_on_install': '1' if enable_on_install else '0'
                 })
 
             # Add unconfigure script
@@ -418,13 +450,17 @@ then
 
     elif [ "$1" == "change" ]
     then
-        STATEFILE="%(state_base)s/%(unit)s_disabled"
-        if systemctl is-enabled %(unit)s > /dev/null
+        is_enabled="$(systemctl is-enabled %(unit)s)" || true
+        if [ "$is_enabled" == "enabled" ]
         then
             systemctl disable %(unit)s
-        else
+
             mkdir -p "%(state_base)s"
-            :> "$STATEFILE"
+            :> "%(state_base)s/%(unit)s_enabled"
+        elif [ "$is_enabled" == "disabled" ]
+        then
+            mkdir -p "%(state_base)s"
+            :> "%(state_base)s/%(unit)s_disabled"
         fi
     fi
 fi

@@ -1,11 +1,8 @@
-  * better systemd unit handling; initially enable new units on upgrade (get
-    some inspiration from deb-systemd-helper); socket activation and install
+  * make strongly selective upgrade more selective
 
-  * util-linux: fstrim.timer
+  * remove old versions from collecting repo
 
   * uuidd
-
-  * recompile e2fsprogs and see if systemd units are handled correctly
 
   * [ ] mandb / texinfo index update trigger
 
@@ -62,9 +59,13 @@ Ideas
   * maybe even better systemd unit handling (don't disable units during upgrade,
     stopping on change when it will not be in a new package (stopping/disabling
     in a trigger, but execstop won't be available there so implement kill
-    fallback or similar), cleaning notes of disabled services after each tpm2
-    run, start unit during upgrade when disabled-preset was removed); maybe move
-    to a script like deb-systemd-helper
+    fallback or similar), maybe cleaning notes of enabled/disabled services
+    after each tpm2 run (also a design question), start unit during upgrade when
+    disabled-preset was removed); maybe move to a script like deb-systemd-helper
 
   * maybe add a trigger to require system reboot by writing that information to
     a file
+
+  * maybe add a facility to set systemd units to defined states after an
+    upgrade/installation to the tsl-... packages. maybe this could be done
+    through a trigger.
