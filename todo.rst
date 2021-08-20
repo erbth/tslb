@@ -1,10 +1,8 @@
-  * openbox
+  * gtk+/gtkmm/glibmm
 
-  * gtk+/gtkmm
+  * ffmpeg
 
-  * ffmpeg/libav
-
-  * feh
+  * feh or imagemagick (or both)
 
   * (network manager)
 
