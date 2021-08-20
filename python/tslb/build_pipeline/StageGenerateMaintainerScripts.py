@@ -386,44 +386,47 @@ class SystemdGenerator:
 type: configure
 
 # Automatically created by the tslb
-if type systemctl >/dev/null 2>&1
+if [ "$1" != "triggered" ]
 then
-    systemctl daemon-reload
-
-    if [ -z "$1" ]
+    if type systemctl >/dev/null 2>&1
     then
-        if [ %(enable_on_install)s -eq 1 ]
-        then
-            systemctl preset --preset-mode=enable-only %(unit)s
-            if [ "$(systemctl is-enabled %(unit)s)" == "enabled" ]; then
-                systemctl start %(unit)s
-            fi
-        fi
-    elif [ "$1" == "change" ]
-    then
-        if [ -e "%(state_base)s/%(unit)s_disabled" ]
-        then
-            echo "Leaving systemd unit '%(unit)s' disabled (up to 'Also=' in other units)..."
-            rm "%(state_base)s/%(unit)s_disabled"
-        else
-            ENABLE=0
-            if [ -e "%(state_base)s/%(unit)s_enabled" ]
-            then
-                ENABLE=1
-                rm "%(state_base)s/%(unit)s_enabled"
-            elif [ %(enable_on_install)s -eq 1 ]
-            then
-                ENABLE=1
-            fi
+        systemctl daemon-reload
 
-            # Ignore units that only specify 'Also=' in [Install], bad, masked,
-            # and linked units.
-            if [ "$(systemctl is-enabled %(unit)s)" == "disabled" ] && [ $ENABLE -eq 1 ]
+        if [ -z "$1" ]
+        then
+            if [ %(enable_on_install)s -eq 1 ]
             then
                 systemctl preset --preset-mode=enable-only %(unit)s
+                if [ "$(systemctl is-enabled %(unit)s)" == "enabled" ]; then
+                    systemctl start %(unit)s
+                fi
             fi
+        elif [ "$1" == "change" ]
+        then
+            if [ -e "%(state_base)s/%(unit)s_disabled" ]
+            then
+                echo "Leaving systemd unit '%(unit)s' disabled (up to 'Also=' in other units)..."
+                rm "%(state_base)s/%(unit)s_disabled"
+            else
+                ENABLE=0
+                if [ -e "%(state_base)s/%(unit)s_enabled" ]
+                then
+                    ENABLE=1
+                    rm "%(state_base)s/%(unit)s_enabled"
+                elif [ %(enable_on_install)s -eq 1 ]
+                then
+                    ENABLE=1
+                fi
+
+                # Ignore units that only specify 'Also=' in [Install], bad, masked,
+                # and linked units.
+                if [ "$(systemctl is-enabled %(unit)s)" == "disabled" ] && [ $ENABLE -eq 1 ]
+                then
+                    systemctl preset --preset-mode=enable-only %(unit)s
+                fi
+            fi
+            systemctl is-active %(unit)s > /dev/null && systemctl restart %(unit)s
         fi
-        systemctl is-active %(unit)s > /dev/null && systemctl restart %(unit)s
     fi
 fi
 
@@ -477,7 +480,7 @@ exit 0
 """#!/bin/bash -e
 type: postrm
 
-if [ "$TPM_TARGET" == "/" ] && [ -x /bin/systemctl ] && [ -d /run/systemd/system ]
+if [ -z "$1" ] && [ "$TPM_TARGET" == "/" ] && [ -x /bin/systemctl ] && [ -d /run/systemd/system ]
 then
     /bin/systemctl daemon-reload
 fi

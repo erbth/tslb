@@ -1,17 +1,23 @@
-  * make strongly selective upgrade more selective
+  * openbox
 
-  * remove old versions from collecting repo
+  * gtk+/gtkmm
 
-  * uuidd
+  * ffmpeg/libav
 
-  * [ ] mandb / texinfo index update trigger
+  * feh
+
+  * (network manager)
 
   * test flops on vm and host, and maybe on yeesha
 
 
+  * remove old versions from collecting repo
+
   * delete old snapshots
 
   * delete old rootfs images
+
+  * complete rebuild
 
 
   * evtl. investigate / report readelf .interp truncated bug...
@@ -25,8 +31,6 @@ Packages
 
   * maybe enable -dev dependencies and perform full rebuild; having digests on
     packages and being able to compare them in advance would be cool.
-
-  * systemd: man depends on xsltproc?
 
   * maybe run test suites of basic packages.
 
