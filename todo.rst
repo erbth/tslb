@@ -1,12 +1,10 @@
-  * gtk+/gtkmm/glibmm
+  * gtk+/gtkmm
 
   * ffmpeg
 
   * feh or imagemagick (or both)
 
   * (network manager)
-
-  * test flops on vm and host, and maybe on yeesha
 
 
   * remove old versions from collecting repo
@@ -16,6 +14,9 @@
   * delete old rootfs images
 
   * complete rebuild
+
+
+  * test flops on vm and host, and maybe on yeesha
 
 
   * evtl. investigate / report readelf .interp truncated bug...

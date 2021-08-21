@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tslb.database as db
 import tslb.database.upstream_versions as dbuv
+import urllib.parse
 from sqlalchemy.orm import aliased
 from tslb import Architecture
 from tslb import CommonExceptions as ces
@@ -55,7 +56,7 @@ def check_for_missing_archives(arch):
                             if uv:
                                 if '.git' in uv.download_url or \
                                         archive.endswith('.tar') or \
-                                        uv.download_url.split('/')[-1] == archive:
+                                        urllib.parse.unquote(uv.download_url.split('/')[-1]) == archive:
                                     print("  Archive available from '%s'." % uv.download_url)
                                     if query_user_input("  select to download?", "yN") == 'y':
                                         archive_urls.append(

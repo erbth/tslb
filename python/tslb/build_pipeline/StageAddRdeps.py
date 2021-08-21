@@ -656,7 +656,8 @@ class StageAddRdeps:
         deps_to_add = set()
 
         patterns = [re.compile(p) for p in [
-            '/usr/(local/)?include/.*\.h'
+            '/usr/(local/)?include/.*\.h',
+            '/usr/(local/)?(lib|share)/pkgconfig/.*\.pc',
         ]]
 
         for cdep in cdeps.get_required():
