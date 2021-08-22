@@ -242,6 +242,7 @@ class StageSplitIntoBinaryPackages:
         # Add development symlinks
         for lib in shared_libraries:
             dev_symlinks = lib.get_dev_symlinks()
+            dev_symlinks -= copied_files
             dev_files |= dev_symlinks
             copied_files |= dev_symlinks
 
@@ -272,6 +273,7 @@ class StageSplitIntoBinaryPackages:
                     _file.startswith('/usr/share/aclocal') or \
                     _file.startswith('/usr/share/automake') or \
                     _file.startswith('/usr/lib/cmake/') or \
+                    re.fullmatch(r'/usr/lib/(.+/)?include/.+\.h', _file) or \
                     _file.startswith('/usr/share/cmake/'):
 
                 dev_files.add(_file)

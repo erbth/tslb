@@ -38,11 +38,14 @@ class StageInstallToDestdir(object):
             source_dir = os.path.join(spv.build_location, spv.get_attribute('unpacked_source_directory'))
             # Does the package use ninja?
             if not cmd:
-                if os.path.exists(os.path.join(source_dir, "build", "build.ninja")):
-                    cmd = "#!/bin/bash\nset -e\ncd build\nDESTDIR=$(DESTDIR) ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) install\n"
+                for d in ['builddir', 'build']:
+                    if not cmd and os.path.exists(os.path.join(source_dir, d, "build.ninja")):
+                        cmd = "#!/bin/bash\nset -e\ncd %s\n" % d + \
+                                "DESTDIR=$(DESTDIR) ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) install\n"
 
-                elif os.path.exists(os.path.join(source_dir, "build.ninja")):
-                    cmd = "#!/bin/bash\nset -e\nDESTDIR=$(DESTDIR) ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) install\n"
+            if not cmd and  os.path.exists(os.path.join(source_dir, "build.ninja")):
+                cmd = "#!/bin/bash\nset -e\n" \
+                        "DESTDIR=$(DESTDIR) ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) install\n"
 
             # Is there a Makefile in the build location that looks like it
             # would respect the variable `DESTDIR'? Or was the Makefile
@@ -70,7 +73,7 @@ class StageInstallToDestdir(object):
                 if makefile_supports_destdir:
                     cmd = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) DESTDIR=$(DESTDIR) install"
 
-            # Python packgages that use setuptools
+            # Python packages that use setuptools
             if not cmd:
                 if os.path.exists(os.path.join(source_dir, 'setup.py')):
                     cmd = "python3 setup.py install --prefix=/usr --root $(DESTDIR)"

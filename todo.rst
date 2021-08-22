@@ -1,17 +1,23 @@
-  * gtk+/gtkmm
-
   * ffmpeg
 
   * feh or imagemagick (or both)
 
   * (network manager)
 
+  * gtk+/gtkmm
+
+    - librsvg
+
+  * tsl-graphical
+
 
   * remove old versions from collecting repo
 
+  * create index
+
   * delete old snapshots
 
-  * delete old rootfs images
+  * delete old rootfs images and save current ones
 
   * complete rebuild
 

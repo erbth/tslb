@@ -32,20 +32,27 @@ class StageBuild(object):
         else:
             # Guess one.
             source_dir = os.path.join(spv.build_location, spv.get_attribute('unpacked_source_directory'))
+            found = False
 
-            if os.path.exists(os.path.join(source_dir, 'build', 'build.ninja')):
-                build_command = "#!/bin/bash\nset -e\ncd build\nninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)\n"
+            for d in ['builddir', 'build']:
+                if not found and os.path.exists(os.path.join(source_dir, d, 'build.ninja')):
+                    build_command = "#!/bin/bash\nset -e\ncd %s\n" % d + \
+                            "ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)\n"
+                    found = True
 
-            elif os.path.exists(os.path.join(source_dir, 'build.ninja')):
+            if not found and os.path.exists(os.path.join(source_dir, 'build.ninja')):
                 build_command = "ninja -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)"
+                found = True
 
-            elif os.path.exists(os.path.join(source_dir, 'Makefile')):
+            if not found and os.path.exists(os.path.join(source_dir, 'Makefile')):
                 build_command = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)"
+                found = True
 
-            elif os.path.exists(os.path.join(source_dir, 'setup.py')):
+            if not found and os.path.exists(os.path.join(source_dir, 'setup.py')):
                 build_command = "python3 setup.py build -j $(MAX_PARALLEL_THREADS_REDUCED)"
+                found = True
 
-            else:
+            if not found:
                 out.write("No build command specified and failed to guess one.\n")
                 return False
 
