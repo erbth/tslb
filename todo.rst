@@ -1,12 +1,33 @@
-  * ffmpeg
+  * network manager applet
 
-  * feh or imagemagick (or both)
+    - maybe libgudev
 
-  * (network manager)
+    - iso codes
+
+    - libnma
+
+    - libnotify (optional?)
+
+    - libsecret
+
+    - plugin itself
+
+  * unstable glib etc. (second or third component uneven)
+
+  * if iso-codes: gtk3 rebuild
+
+  * dunst (include if < 5mib or something)
+
+  * alsa / pulse configuration
+
 
   * gtk+/gtkmm
 
+    - rustc and cargo
+
     - librsvg
+
+  * look where size comes from
 
   * tsl-graphical
 
@@ -57,8 +78,10 @@ Low priority
     efibootmgr update automatically / copy kernel stubs
 
   * [ ] licenses (also files taken from lfs etc. added in adapt; e.g. 'computer
-    instructions' in blfs are subject to a MIT license); also: xorg dependencies
-    come from blfs, make sure to acknowledge that somewhere.
+    instructions' in blfs are subject to a MIT license); also: xorg and many
+    other  dependencies come from blfs, make sure to acknowledge/appreciate that
+    somewhere.; and patent issues with ffmpeg (hevc, [m]jpeg2000?) before
+    distributing anything with any broader reach [as of now rather unlikely]
 
   * microcode
 
