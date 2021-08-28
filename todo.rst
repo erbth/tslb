@@ -1,17 +1,10 @@
-  * unstable glib etc. (second or third component uneven)
-
-  * dunst (include if < 5mib or something)
-
-  * alsa / pulse configuration
-
-
   * gtk+/gtkmm
 
     - rustc and cargo
 
     - librsvg
 
-  * intel_gpu_top
+  * alsa / pulse configuration
 
   * look where size comes from
 
@@ -20,7 +13,9 @@
 
   * find packages that have no successful build
 
-  * remove old versions from collecting repo
+
+  * remove old versions from collecting repo; incl. those of packages that do
+    not exist anymore
 
   * create index
 
@@ -37,9 +32,6 @@
 
 
   * evtl. investigate / report readelf .interp truncated bug...
-
-  * upstream fetching: github tags vs. real releases (see e.g. intel
-    media-driver)
 
 
 Packages
@@ -59,6 +51,9 @@ Packages
 
 Low priority
 ---
+
+  * upstream fetching: github tags vs. real releases (see e.g. intel
+    media-driver)
 
   * [ ] set some systemd default ntp servers
 

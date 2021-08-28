@@ -771,7 +771,8 @@ def _mount_tslb_aux(root, spv):
         raise ce.CommandFailed(cmd, r)
 
     cmd = ['mount', '--bind',
-        settings.get_source_location(), mountpoint_source_location]
+        settings.get_source_location(), mountpoint_source_location,
+        '-oro']
 
     r = subprocess.call(cmd)
     if r != 0:
