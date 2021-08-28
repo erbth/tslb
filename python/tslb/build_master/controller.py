@@ -539,7 +539,7 @@ class Controller(BMInterface):
         # progress happened
         if len(self._SCC[self._pkg_to_scc[pkg]]) > 1:
             self._log(Color.CYAN + "Info:" + Color.NORMAL +
-                    "Package `%s' in SCC %d succeeded, reseting all fail counters.\n" %
+                    "Package `%s' in SCC %d succeeded, resetting all fail counters.\n" %
                     (pkg, self._pkg_to_scc[pkg]))
 
             self._log_scc_info(self._pkg_to_scc[pkg])

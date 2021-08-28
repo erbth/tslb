@@ -100,7 +100,8 @@ def build_cdep_graph(args):
     GT = {k: set() for k in G}
     for v, us in G.items():
         for u in us:
-            GT[u].add(v)
+            if u in GT:
+                GT[u].add(v)
 
     return G, GT
 

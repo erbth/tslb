@@ -1,20 +1,4 @@
-  * network manager applet
-
-    - maybe libgudev
-
-    - iso codes
-
-    - libnma
-
-    - libnotify (optional?)
-
-    - libsecret
-
-    - plugin itself
-
   * unstable glib etc. (second or third component uneven)
-
-  * if iso-codes: gtk3 rebuild
 
   * dunst (include if < 5mib or something)
 
@@ -27,10 +11,14 @@
 
     - librsvg
 
+  * intel_gpu_top
+
   * look where size comes from
 
   * tsl-graphical
 
+
+  * find packages that have no successful build
 
   * remove old versions from collecting repo
 
@@ -42,6 +30,8 @@
 
   * complete rebuild
 
+
+  * maybe try wayland
 
   * test flops on vm and host, and maybe on yeesha
 

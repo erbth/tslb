@@ -124,7 +124,7 @@ class SharedLibrary(object):
         abi_files = []
 
         for f in self.files:
-            if re.match(r'^.*\.%s(\..*)?$' % self.abi_version_number, f):
+            if re.match(r'^.*\.so\.%s(\..*)?$' % self.abi_version_number, f):
                 abi_files.append(f)
 
         return abi_files

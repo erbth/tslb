@@ -21,7 +21,7 @@ class PythonAnalyzer(BaseDependencyAnalyzer):
 
 
     @classmethod
-    def analyze_root(cls, dirname, arch, out):
+    def analyze_root(cls, dirname, arch, out, spv=None):
         deps = set()
 
         # Process python packages
@@ -74,7 +74,7 @@ class PythonAnalyzer(BaseDependencyAnalyzer):
 
 
     @classmethod
-    def analyze_file(cls, filename, arch, out):
+    def analyze_file(cls, filename, arch, out, spv=None):
         interpreter = None
         file_in_home = None
 
@@ -98,7 +98,7 @@ class PythonAnalyzer(BaseDependencyAnalyzer):
 
 
     @classmethod
-    def analyze_buffer(cls, buf, arch, out):
+    def analyze_buffer(cls, buf, arch, out, spv=None):
         if not buf:
             return set()
 

@@ -87,6 +87,7 @@
 		interested\_triggers\_* & List(Tuple(str, str|List(str))) & \\
 		maintainer\_script\_* & str & \\
 		disable\_dependency\_analyzer\_<...>\_for & List(str) & Disable the given dependency analyzer for the given binary packages (list of fullmatch-regexs) \\
+		enable\_dependency\_analyzer\_<...>\_for & List(str) & Enable the given dependency analyzer for the given binary packages (if it is disabled by default) (list of fullmatch-regexs) \\
 		strip\_skip\_paths & List(str) & List of regexs identifying paths that will not be stripped (matching is done with \texttt{match}, not \texttt{fullmatch}!) \\
 		
 		packaging\_hints & List(Tuple(str, str|List(str))) & [(bpkg, regex | [regex])] \\

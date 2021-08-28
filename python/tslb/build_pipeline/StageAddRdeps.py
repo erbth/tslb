@@ -297,18 +297,33 @@ class StageAddRdeps:
                 for analyzer in dependencies.ALL_ANALYZERS:
                     disabled = spv.get_attribute_or_default(
                             'disable_dependency_analyzer_%s_for' % analyzer.name, [])
+                    enabled = spv.get_attribute_or_default(
+                            'enable_dependency_analyzer_%s_for' % analyzer.name, [])
                     attribute_types.ensure_disable_dependency_analyzer_for(disabled)
-                    disabled = [re.compile(e) for e in disabled]
+                    attribute_types.ensure_enable_dependency_analyzer_for(enabled)
 
-                    out.write("\nRunning dependency analyzer `%s'...\n" % analyzer.name)
+                    disabled = [re.compile(e) for e in disabled]
+                    enabled = [re.compile(e) for e in enabled]
+
+                    out.write("\nRunning dependency analyzer `%s'%s...\n" % (analyzer.name,
+                        '(disabled for all pkgs by default)' if not analyzer.enabled_by_default else ''))
+
                     for bp in bps.values():
                         # Skip dependency analyzers disabled for this binary package
-                        skip = False
+                        skip = not analyzer.enabled_by_default
+
                         for r in disabled:
                             if r.fullmatch(bp.name):
                                 out.write(Color.YELLOW + "  skipping disabled package `%s'..." %
                                         bp.name + Color.NORMAL + "\n")
                                 skip = True
+                                break
+
+                        for r in enabled:
+                            if r.fullmatch(bp.name):
+                                out.write(Color.YELLOW + "  enabled for package `%s'..." %
+                                        bp.name + Color.NORMAL + "\n")
+                                skip = False
                                 break
 
                         if skip:
@@ -324,7 +339,8 @@ class StageAddRdeps:
                         deps = analyzer.analyze_root(
                                 os.path.join(bp.scratch_space_base, 'destdir'),
                                 bp.architecture,
-                                out)
+                                out,
+                                spv=spv)
 
                         for dep in deps:
                             _add_dep(dep, bp.name, rdeps)
@@ -352,11 +368,15 @@ class StageAddRdeps:
                                     Color.NORMAL, file=out)
 
                             for analyzer in dependencies.ALL_ANALYZERS:
+                                if not analyzer.enabled_by_default:
+                                    continue
+
                                 out.write("\nRunning dependency analyzer `%s'...\n" % analyzer.name)
                                 deps = analyzer.analyze_buffer(
                                         val,
                                         bp.architecture,
-                                        out)
+                                        out,
+                                        spv=spv)
 
                                 for dep in deps:
                                     _add_dep(dep, bp.name, rpredeps if pre_deps else rdeps)

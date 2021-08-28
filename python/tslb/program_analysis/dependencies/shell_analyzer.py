@@ -16,7 +16,7 @@ class ShellAnalyzer(BaseDependencyAnalyzer):
     name = "shell"
 
     @classmethod
-    def analyze_root(cls, dirname, arch, out):
+    def analyze_root(cls, dirname, arch, out, spv=None):
         deps = set()
         def analyze(d):
             nonlocal deps
@@ -34,7 +34,7 @@ class ShellAnalyzer(BaseDependencyAnalyzer):
         return deps
 
     @classmethod
-    def analyze_file(cls, filename, arch, out):
+    def analyze_file(cls, filename, arch, out, spv=None):
         st_buf = os.lstat(filename)
         if not stat.S_ISREG(st_buf.st_mode):
             return set()
@@ -42,7 +42,7 @@ class ShellAnalyzer(BaseDependencyAnalyzer):
         return cls._analyze_file(None, full_path, arch, out)
 
     @classmethod
-    def analyze_buffer(cls, buf, arch, out):
+    def analyze_buffer(cls, buf, arch, out, spv=None):
         return cls._analyze_buffer(None, buf, arch, out)
 
 

@@ -3,33 +3,40 @@ class BaseDependencyAnalyzer:
     A base class to define the interface of all dependency analyzers.
     """
     name = ""
+    enabled_by_default = True
 
-    def analyze_root(dirname, arch, out):
+    @staticmethod
+    def analyze_root(dirname, arch, out, spv=None):
         """
         Analyze the root directory tree rooted at :param str dirname:.
 
         :param arch: The architecture in which dependencies shall be searched.
+        :param spv:  Optionally given `SourcePackageVersion`
         :returns: Set(Dependency)
         :raises AnalyzeError: If an error has been encountered
         """
         raise NotImplementedError
 
-    def analyze_file(filename, arch, out):
+    @staticmethod
+    def analyze_file(filename, arch, out, spv=None):
         """
         Analyze a single file.
 
         :param arch: The architecture in which dependencies shall be searched.
+        :param spv:  Optionally given `SourcePackageVersion`
         :returns: Set(Dependency)
         :raises AnalyzeError: If an error has been encountered
         """
         raise NotImplementedError
 
-    def analyze_buffer(buf, arch, out):
+    @staticmethod
+    def analyze_buffer(buf, arch, out, spv=None):
         """
         Analyze an in-memory buffer that is a read file.
 
-        :type buf: bytes (interpreted as ascii text) | str
+        :type buf: bytes | str
         :param arch: The architecture in which dependencies shall be searched.
+        :param spv:  Optionally given `SourcePackageVersion`
         :returns: Set(Dependency)
         :raises AnalyzeError: If an error has been encountered
         """

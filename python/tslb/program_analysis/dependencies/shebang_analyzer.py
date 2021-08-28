@@ -16,7 +16,7 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
     name = "shebang"
 
     @classmethod
-    def analyze_root(cls, dirname, arch, out):
+    def analyze_root(cls, dirname, arch, out, spv=None):
         deps = set()
         def analyze(d):
             nonlocal deps
@@ -35,7 +35,7 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
 
 
     @classmethod
-    def analyze_file(cls, filename, arch, out):
+    def analyze_file(cls, filename, arch, out, spv=None):
         # Only consider executable files
         st_buf = os.lstat(filename)
         if not stat.S_ISREG(st_buf.st_mode) or not \
@@ -55,7 +55,7 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
         return cls.analyze_buffer('#!' + line, arch, out)
 
 
-    def analyze_buffer(buf, arch, out):
+    def analyze_buffer(buf, arch, out, spv=None):
         """
         Add dependencies based on shebang given at least the first line of the
         file to test in the buffer.
