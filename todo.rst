@@ -1,18 +1,14 @@
-  * gtk+/gtkmm
+  * tsl-graphical
 
-    - rustc and cargo
-
-    - librsvg
-
-  * alsa / pulse configuration
+    - background image
 
   * look where size comes from
-
-  * tsl-graphical
 
 
   * find packages that have no successful build
 
+
+  * backup
 
   * remove old versions from collecting repo; incl. those of packages that do
     not exist anymore
@@ -25,8 +21,8 @@
 
   * complete rebuild
 
+  * backup
 
-  * maybe try wayland
 
   * test flops on vm and host, and maybe on yeesha
 
@@ -86,3 +82,16 @@ Ideas
   * maybe add a facility to set systemd units to defined states after an
     upgrade/installation to the tsl-... packages. maybe this could be done
     through a trigger.
+
+  * Libraries and other 'cdeps' can come indirectly from 'basic_build_tools'.
+    These indirect cdeps will not be updated for a package's build, as the tslb
+    does only look at the directly specified packages (basic_build_tools). This
+    can be solved by recompiling the entire system multiple times or by
+    employing a stricter order (+maybe recompiling the system less times); for
+    now I stick with recompiling...
+
+  * Rootfs images with additional packages may be chosen, therefore not
+    revealing additional cdeps (because they are simply installed in the image).
+    This would make imposing a stricter cdep-order among packages harder.
+    However it has almost never been an issue so far (maybe because stick to a
+    looser order for now...)
