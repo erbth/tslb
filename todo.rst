@@ -1,8 +1,7 @@
-  * tsl-graphical
+  * systemd-timesyncd and networkmanager dhcp ntp servers (nm rebuild
+    pending...)
 
-    - background image
-
-  * look where size comes from
+  * squashfs / initrams tools
 
 
   * find packages that have no successful build
@@ -30,7 +29,7 @@
   * evtl. investigate / report readelf .interp truncated bug...
 
 
-Packages
+Packages (low priority)
 ---
 
   * maybe enable -dev dependencies and perform full rebuild; having digests on
@@ -44,6 +43,11 @@ Packages
 
   * maybe: grub: freetype and DejaVu font for starfield theme
 
+  * maybe run grub-install on upgrade (if required...)
+
+  * maybe don't create a systemd journal by default or only create the directory
+    once, maybe treat it like a configuration file
+
 
 Low priority
 ---
@@ -55,9 +59,6 @@ Low priority
 
   * [ ] rtc, ... - see in general what LFS configures.
 
-  * somehow remove dependencies on grub in tsl-basic and basic_tools / make
-    efibootmgr update automatically / copy kernel stubs
-
   * [ ] licenses (also files taken from lfs etc. added in adapt; e.g. 'computer
     instructions' in blfs are subject to a MIT license); also: xorg and many
     other  dependencies come from blfs, make sure to acknowledge/appreciate that
@@ -65,6 +66,8 @@ Low priority
     distributing anything with any broader reach [as of now rather unlikely]
 
   * microcode
+
+  * iwlwifi firmware very large (159MiB)
 
 Ideas
 ---

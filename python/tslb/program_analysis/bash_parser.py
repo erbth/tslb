@@ -467,7 +467,7 @@ def _token_splitting(script):
             if c == '\n':
                 stack.pop()
 
-        elif c == '#':
+        elif c == '#' and (stack.empty or stack.top not in ('"', "'")):
             stack.push('#')
 
         # Quoting single characters: backslash takes the next character literal
@@ -481,6 +481,11 @@ def _token_splitting(script):
             else:
                 current += '\\' + c
 
+        # NOTE: The quot handling somehow belongs above the comment-part, but
+        # trailing backslashes have a meaning within comments, too. Handling
+        # such situations correctly would probably require more work. But this
+        # is a heuristic so I'll leave it here for now (and have the workaround
+        # above).
         elif not stack.empty and stack.top in ('"', "'"):
             current += c
             if c == stack.top:

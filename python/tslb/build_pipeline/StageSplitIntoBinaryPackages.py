@@ -9,8 +9,10 @@ import stat
 import subprocess
 import tempfile
 import zlib
+from tslb import Architecture
 from tslb import BinaryPackage as bpkg
 from tslb import attribute_types
+from tslb import rootfs
 from tslb.Console import Color
 from tslb.build_pipeline.utils import PreparedBuildCommand
 from tslb.filesystem import FileOperations as fops
@@ -503,9 +505,18 @@ class StageSplitIntoBinaryPackages:
             splitter = PreparedBuildCommand(spv.get_attribute('file_splitter'),
                     chroot=rootfs_mountpoint)
 
+            # Find package versions installed in rootfs image
+            img = rootfs.Image(rootfs.get_image_id_from_mountpoint(rootfs_mountpoint))
+            installed_pkgs = [(name, Architecture.to_str(arch), str(version))
+                    for name, arch, version in img.query_packages()]
+
+            del img
+
             input_ = json.dumps({
                     'source_package_name': spv.name,
                     'install_root': chroot_install_location,
+                    'architecture': Architecture.to_str(spv.architecture),
+                    'rootfs_installed_packages': installed_pkgs,
                     'package_file_map': {
                         pkg: list(files) for pkg, files in package_file_map.items()
                     }

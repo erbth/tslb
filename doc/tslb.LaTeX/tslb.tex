@@ -75,7 +75,8 @@
 		file\_splitter & str|bytes & Custom executable to split files into packages, see section \ref{sec:file_splitter} \\
 		
 		cdeps & DependencyList & \\
-		tools & DependencyList&  Like cdeps, but only used for rootfs creation \\
+		cdeps\_order\_only & List(str) & list of cdeps out of \texttt{cdeps} that shall not be installed \\
+		tools & DependencyList &  Like cdeps, but only used for rootfs creation \\
 		enabled & str & parsed into bool \\
 		source\_archive & str|NoneType & \\
 		unpack\_command & str & \\
@@ -165,6 +166,10 @@
 			{
 				"source_package_name": <:str>,
 				"install_root": <'destdir':str>,
+				"architecture": <:str, e.g. 'amd64'>,
+				"rootfs_installed_packages": [
+					[<name:str>, <architecture:str, e.g. 'amd64'>, <version:str>]
+				],
 				"package_file_map": {
 					"<binary package:str>": [<package-relative paths:str>],
 				}

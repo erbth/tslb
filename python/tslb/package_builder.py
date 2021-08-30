@@ -3,6 +3,7 @@ from tslb import Architecture
 from tslb import CommonExceptions as ce
 from tslb import Console
 from tslb import SourcePackage
+from tslb import attribute_types
 from tslb import build_pipeline
 from tslb import build_state
 from tslb import parse_utils
@@ -85,6 +86,19 @@ class PackageBuilder(object):
         cdeps = spkgv.get_cdeps()
         tools = spkgv.get_tools() or DependencyList()
 
+        # Ignore order-only cdeps.
+        order_only_cdeps = spkgv.get_attribute_or_default('cdeps_order_only', [])
+        attribute_types.ensure_cdeps_order_only(order_only_cdeps)
+        order_only_cdeps = [e.strip().strip("'").strip('"') for e in order_only_cdeps]
+
+        required_cdeps = cdeps.get_required()
+        for order_only_cdep in order_only_cdeps:
+            if order_only_cdep not in required_cdeps:
+                self.out.write(Color.ORANGE + "WARNING: " + Color.NORMAL +
+                        "order-only-cdep `%s' not in cdeps.\n" % order_only_cdep)
+
+        required_cdeps = [c for c in required_cdeps if c not in order_only_cdeps]
+
 
         # NOTE: The package manager is essential and should be always
         # installed.
@@ -98,7 +112,7 @@ class PackageBuilder(object):
         available_source_packages = set(spl.list_source_packages())
         del spl
 
-        for dep_name in set(cdeps.get_required() + tools.get_required()):
+        for dep_name in set(required_cdeps + tools.get_required()):
             if dep_name not in available_source_packages:
                 raise CannotFulfillDependencies(
                     'Required source package "%s" does not exist.' % dep_name)

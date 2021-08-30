@@ -37,6 +37,8 @@ def ensure_list_of_tuples_of_strings_and_strings_or_lists_of_strings(val):
 
 
 # Aliases for different attributes
+ensure_cdeps_order_only = ensure_list_of_strings
+
 ensure_package_manager_trigger_list = ensure_list_of_strings
 ensure_package_manager_trigger_list_sp = ensure_list_of_tuples_of_strings_and_strings_or_lists_of_strings
 
