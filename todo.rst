@@ -1,5 +1,3 @@
-  * check all git repos for changes
-
   * backup
 
   * remove old versions from collecting repo; incl. those of packages that do
