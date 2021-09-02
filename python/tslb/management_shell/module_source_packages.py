@@ -1323,7 +1323,7 @@ class SourcePackageVersionBuildStateListAction(Action):
                 .order_by(se.time)
 
 
-        for event in events[-60:]:
+        for event in events[-120:]:
             print("[%s] %-10s %-30s (%s)" % (
                 event.time.strftime(locale.nl_langinfo(locale.D_T_FMT)),
                 db.BuildPipeline.BuildPipelineStageEvent.status_values.str_map[event.status],

@@ -48,7 +48,6 @@ class GitTagFetcher(BaseFetcher):
 
             v_str = None
 
-            print(tag)
             m = re.match(r'^v?([0-9]+(\.[0-9a-zA-Z.]+)?)$', tag)
             if m:
                 v_str = m[1]
@@ -69,7 +68,10 @@ class GitTagFetcher(BaseFetcher):
         annotated_tags.reverse()
 
         # Add urls
+        added_versions = set()
         for v, tag in annotated_tags:
-            versions.append((v, {'git': (url + "?tag=" + tag, None)}))
+            if v not in added_versions:
+                versions.append((v, {'git': (url + "?tag=" + tag, None)}))
+                added_versions.add(v)
 
         return versions

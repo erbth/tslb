@@ -1,11 +1,4 @@
-  * systemd-timesyncd and networkmanager dhcp ntp servers (nm rebuild
-    pending...)
-
-  * squashfs / initrams tools
-
-
-  * find packages that have no successful build
-
+  * check all git repos for changes
 
   * backup
 
@@ -21,6 +14,8 @@
   * complete rebuild
 
   * backup
+
+  * copy collecting repo somewhere
 
 
   * test flops on vm and host, and maybe on yeesha
@@ -55,6 +50,9 @@ Low priority
   * upstream fetching: github tags vs. real releases (see e.g. intel
     media-driver)
 
+  * source package version constraints in binary packages, e.g.
+    tsl-graphical -> tsl_graphical_wallpaper = s:built
+
   * [ ] set some systemd default ntp servers
 
   * [ ] rtc, ... - see in general what LFS configures.
@@ -66,8 +64,6 @@ Low priority
     distributing anything with any broader reach [as of now rather unlikely]
 
   * microcode
-
-  * iwlwifi firmware very large (159MiB)
 
 Ideas
 ---
