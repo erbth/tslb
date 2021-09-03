@@ -1,22 +1,12 @@
-  * backup
+  * final rebuild
 
-  * remove old versions from collecting repo; incl. those of packages that do
-    not exist anymore
+  * create index in collecting repo
 
-  * create index
+  * create latest repo (with index)
 
-  * delete old snapshots
+  * copy latest repo somewhere outside the cluster
 
-  * delete old rootfs images and save current ones
-
-  * complete rebuild
-
-  * backup
-
-  * copy collecting repo somewhere
-
-
-  * test flops on vm and host, and maybe on yeesha
+  * backup (also vm_desc)
 
 
   * evtl. investigate / report readelf .interp truncated bug...

@@ -89,7 +89,7 @@ class StageCreatePMPackages:
                                 tpm2_pack.pack(scratch_space_base, stdout=out, stderr=out)
                                 return 0
 
-                            except ces.CommandFailed as e:
+                            except Exception as e:
                                 tr_out.write(str(e))
                                 return 1
 
@@ -100,6 +100,8 @@ class StageCreatePMPackages:
                                                 chroot_scratch_space_base, tr_out)
 
                         if ret != 0:
+                            tr_out.write(Color.RED + "ERROR: " + Color.NORMAL +
+                                    "failed to perform tpm2_pack in chroot, code: %s" % ret)
                             return False
 
 
