@@ -109,10 +109,10 @@ class StageCreatePMPackages:
                         transport_form = '%s-%s_%s.tpm2' % (b.name, b.version_number,
                                 Architecture.to_str(b.architecture))
 
-                        tr_out.write("Copying transport form `%s' to the collecting repo ...\n" % \
+                        tr_out.write("Copying transport form `%s.new' to the collecting repo ...\n" % \
                                 transport_form)
 
-                        transport_form = os.path.join(b.scratch_space_base, transport_form)
+                        transport_form_full = os.path.join(b.scratch_space_base, transport_form)
 
                         arch_dir = os.path.join(
                                 settings.get_collecting_repo_location(),
@@ -123,8 +123,8 @@ class StageCreatePMPackages:
                             os.chown(archdir, 0, 0)
                             os.chmod(archdir, 0o755)
 
-                        shutil.copy(transport_form,
-                            os.path.join(arch_dir, ''))
+                        shutil.copy(transport_form_full,
+                            os.path.join(arch_dir, transport_form + ".new"))
 
                         tr_out.write("\n")
 
@@ -137,5 +137,34 @@ class StageCreatePMPackages:
             res = exe.map(package, enumerate(spv.list_current_binary_packages()))
             if not all(res):
                 success = False
+
+        # Rename new transport forms atomically while renaming the '-all'
+        # package last (if there is one). Note that order should not matter as
+        # TPM2 should use an older version if dependencies cannot be fulfilled.
+        def move_into_place(arch, transport_form):
+            print("Moving transport form `%s' into place." % transport_form, file=out)
+            arch_dir = os.path.join(
+                    settings.get_collecting_repo_location(),
+                    Architecture.to_str(arch))
+
+            os.rename(
+                    os.path.join(arch_dir, transport_form + ".new"),
+                    os.path.join(arch_dir, transport_form))
+
+        all_pkgs = None
+        for bpn in spv.list_current_binary_packages():
+            bpv = max(spv.list_binary_package_version_numbers(bpn))
+            bp = spv.get_binary_package(bpn, bpv)
+
+            transport_form = '%s-%s_%s.tpm2' % (bp.name, bp.version_number,
+                    Architecture.to_str(bp.architecture))
+
+            if bpn == spv.name + '-all':
+                all_pkg = (bp.architecture, transport_form)
+            else:
+                move_into_place(bp.architecture, transport_form)
+
+        if all_pkg:
+            move_into_place(*all_pkg)
 
         return success

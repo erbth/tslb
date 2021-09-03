@@ -485,7 +485,17 @@ def execute_in_chroot(root, f, *args, **kwargs):
     :rtype: int
     """
     p,q = start_in_chroot(root, f, *args, **kwargs)
-    p.join()
+
+    # NOTE: There is a race condition in multiprocessing.popen_fork._cleanup in
+    # the presence of multiple threads that causes p.join to update p.exitcode
+    # from the calling thread. However due to the GIL p.exitcode is atomic and
+    # repeatedly reading it / calling join can be used to work around this
+    # issue.
+    # Anyway the docs say "A process can be joined many times." so this should
+    # not break.
+    while p.exitcode is None:
+        p.join()
+
     return q.get() if p.exitcode == 0 else p.exitcode
 
 

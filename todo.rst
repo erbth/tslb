@@ -1,4 +1,14 @@
+  * basic_build_utils
+
+  * current rebuild
+
   * final rebuild
+
+  * tsl-graphical-....tpm2 there?
+
+  * clean leftover .new transport forms
+
+  * delete unused rootfs images
 
   * create index in collecting repo
 
@@ -7,6 +17,18 @@
   * copy latest repo somewhere outside the cluster
 
   * backup (also vm_desc)
+
+    - vm_desc
+
+    - vms
+
+    - tsl_vms
+
+    - tslb
+
+    - hosts
+
+    - latest_repo
 
 
   * evtl. investigate / report readelf .interp truncated bug...

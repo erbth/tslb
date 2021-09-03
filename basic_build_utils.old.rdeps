@@ -1,0 +1,88 @@
+# You are editing an object of type list(pair(str, DependencyList(str))).
+# 
+# This is a comment. A backslash ('\') in it has not special meaning.
+# A literal can be enclosed in quotes to allow for spaces in it.
+# 
+# This file's syntax follows these examples:
+# bash -> glibc >= 2.24 <= 3.0
+# bash -> "libreadline 1"
+# 
+# Order does not matter, multiple lines with the same dependency will be collated.
+# Allowed version predicates are < > >= <= != == and = (the latter two are identical).
+"basic_build_tools-all" -> "acl-all" >=current
+"basic_build_tools-all" -> "attr-all" >=current
+"basic_build_tools-all" -> "autoconf-all" >=current
+"basic_build_tools-all" -> "automake-all" >=current
+"basic_build_tools-all" -> "bash-all" >=current
+"basic_build_tools-all" -> "basic_fhs-all" >=current
+"basic_build_tools-all" -> "basic_users-all" >=current
+"basic_build_tools-all" -> "bc-all" >=current
+"basic_build_tools-all" -> "binutils-all" >=current
+"basic_build_tools-all" -> "bison-all" >=current
+"basic_build_tools-all" -> "bzip2-all" >=current
+"basic_build_tools-all" -> "check-all" >=current
+"basic_build_tools-all" -> "coreutils-all" >=current
+"basic_build_tools-all" -> "dbus-all" >=current
+"basic_build_tools-all" -> "dejagnu-all" >=current
+"basic_build_tools-all" -> "diffutils-all" >=current
+"basic_build_tools-all" -> "e2fsprogs-all" >=current
+"basic_build_tools-all" -> "elfutils-all" >=current
+"basic_build_tools-all" -> "expat-all" >=current
+"basic_build_tools-all" -> "expect-all" >=current
+"basic_build_tools-all" -> "file-all" >=current
+"basic_build_tools-all" -> "findutils-all" >=current
+"basic_build_tools-all" -> "flex-all" >=current
+"basic_build_tools-all" -> "gawk-all" >=current
+"basic_build_tools-all" -> "gcc-all" >=current
+"basic_build_tools-all" -> "gdbm-all" >=current
+"basic_build_tools-all" -> "gettext-all" >=current
+"basic_build_tools-all" -> "glibc-all" >=current
+"basic_build_tools-all" -> "gmp-all" >=current
+"basic_build_tools-all" -> "gperf-all" >=current
+"basic_build_tools-all" -> "grep-all" >=current
+"basic_build_tools-all" -> "grub-all" >=current
+"basic_build_tools-all" -> "gzip-all" >=current
+"basic_build_tools-all" -> "iana-etc-all" >=current
+"basic_build_tools-all" -> "inetutils-all" >=current
+"basic_build_tools-all" -> "intltool-all" >=current
+"basic_build_tools-all" -> "iproute2-all" >=current
+"basic_build_tools-all" -> "kbd-all" >=current
+"basic_build_tools-all" -> "kmod-all" >=current
+"basic_build_tools-all" -> "less-all" >=current
+"basic_build_tools-all" -> "libcap-all" >=current
+"basic_build_tools-all" -> "libffi-all" >=current
+"basic_build_tools-all" -> "libtool-all" >=current
+"basic_build_tools-all" -> "licenses-all" >=current
+"basic_build_tools-all" -> "linux-headers-all" >=current
+"basic_build_tools-all" -> "m4-all" >=current
+"basic_build_tools-all" -> "make-all" >=current
+"basic_build_tools-all" -> "man-pages-all" >=current
+"basic_build_tools-all" -> "meson-all" >=current
+"basic_build_tools-all" -> "mpc-all" >=current
+"basic_build_tools-all" -> "mpfr-all" >=current
+"basic_build_tools-all" -> "ncurses-all" >=current
+"basic_build_tools-all" -> "ninja-all" >=current
+"basic_build_tools-all" -> "openssl-all" >=current
+"basic_build_tools-all" -> "patch-all" >=current
+"basic_build_tools-all" -> "perl-all" >=current
+"basic_build_tools-all" -> "pkg-config-all" >=current
+"basic_build_tools-all" -> "procps-ng-all" >=current
+"basic_build_tools-all" -> "psmisc-all" >=current
+"basic_build_tools-all" -> "python3-all" >=current
+"basic_build_tools-all" -> "readline-all" >=current
+"basic_build_tools-all" -> "sed-all" >=current
+"basic_build_tools-all" -> "shadow-all" >=current
+"basic_build_tools-all" -> "systemd-all" >=current
+"basic_build_tools-all" -> "tar-all" >=current
+"basic_build_tools-all" -> "tcl-core-all" >=current
+"basic_build_tools-all" -> "texinfo-all" >=current
+"basic_build_tools-all" -> "util-linux-all" >=current
+"basic_build_tools-all" -> "vim-all" >=current
+"basic_build_tools-all" -> "xml-parser-all" >=current
+"basic_build_tools-all" -> "xz-all" >=current
+"basic_build_tools-all" -> "zlib-all" >=current
+"basic_build_tools-all" -> "cmake-all" >=current
+"basic_build_tools-all" -> "libuv-all" >=current
+"basic_build_tools-all" -> "zstd-all" >=current
+"basic_build_tools-all" -> "nasm-all" >=current
+"basic_build_tools-all" -> "tpm2-all" >=current

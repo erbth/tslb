@@ -32,7 +32,7 @@ def process_arch(args, arch):
         for v in sp.list_version_numbers():
             spv = sp.get_version(v)
 
-            if only_enabled and not is_yes(spv.get_attribute_or_default('enabled', 'true')):
+            if only_enabled and not is_yes(spv.get_attribute_or_default('enabled', 'false')):
                 if verbose:
                     print("  Skipping `%s'..." % spv)
                 continue
