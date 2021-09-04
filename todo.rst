@@ -1,19 +1,3 @@
-  * encrypt key, copy to misc
-
-  * backup (also vm_desc)
-
-    - vms
-
-    - tsl_vms
-
-    - vm_desc
-
-    - tslb
-
-    - hosts
-
-  * maybe copy latest repo, key and livecd iso to riven
-
 
   * evtl. investigate / report readelf .interp truncated bug...
 
