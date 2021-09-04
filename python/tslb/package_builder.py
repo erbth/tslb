@@ -1046,6 +1046,11 @@ def bootstrap_rootfs_image(mountpoint, arch, out):
 '''
         % {'arch': Architecture.to_str(arch)})
 
+    # Create empty locale configuration to use the POSIX-locale
+    locale_conffile = fops.simplify_path_static(mountpoint + '/etc/locale.conf')
+    with open(locale_conffile, 'w', encoding='utf8') as f:
+        f.write('\n')
+
 
     # Install the package manager using the tools-system's version of TPM2
     print(Color.YELLOW + "Installing the package manager ..." + Color.NORMAL, file=out)

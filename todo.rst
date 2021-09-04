@@ -1,34 +1,18 @@
-  * basic_build_utils
-
-  * current rebuild
-
-  * final rebuild
-
-  * tsl-graphical-....tpm2 there?
-
-  * clean leftover .new transport forms
-
-  * delete unused rootfs images
-
-  * create index in collecting repo
-
-  * create latest repo (with index)
-
-  * copy latest repo somewhere outside the cluster
+  * encrypt key, copy to misc
 
   * backup (also vm_desc)
-
-    - vm_desc
 
     - vms
 
     - tsl_vms
 
+    - vm_desc
+
     - tslb
 
     - hosts
 
-    - latest_repo
+  * maybe copy latest repo, key and livecd iso to riven
 
 
   * evtl. investigate / report readelf .interp truncated bug...
@@ -71,7 +55,10 @@ Low priority
     instructions' in blfs are subject to a MIT license); also: xorg and many
     other  dependencies come from blfs, make sure to acknowledge/appreciate that
     somewhere.; and patent issues with ffmpeg (hevc, [m]jpeg2000?) before
-    distributing anything with any broader reach [as of now rather unlikely]
+    distributing anything with any broader reach [as of now rather unlikely];
+    and maybe ensure that all scripts added during adapt etc. that come from
+    e.g.  Debian contain a notice (however the sources have to be distributed,
+    anyway, and they will carry notices).
 
   * microcode
 

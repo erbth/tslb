@@ -9,7 +9,7 @@ import shutil
 import sys
 from tslb import Architecture
 from tslb import settings
-from tslb.SourcePackage import SoucePackage, SourcePackageList
+from tslb.SourcePackage import SourcePackage, SourcePackageList
 from tslb.parse_utils import is_yes
 
 
@@ -18,7 +18,7 @@ def process_arch(args, arch):
     verbose = args['verbose']
     only_enabled = args['only_enabled']
 
-    src = os.path.join(settings.get_collectin_repo_location(), arch_str)
+    src = os.path.join(settings.get_collecting_repo_location(), arch_str)
     dst = os.path.join(args['dst'], arch_str)
 
     print("Processing architecture '%s'." % arch_str)
@@ -37,12 +37,12 @@ def process_arch(args, arch):
                     print("  Skipping `%s'..." % spv)
                 continue
 
-            for bpn in spv.list_current_binary_packages:
+            for bpn in spv.list_current_binary_packages():
                 bpv = max(spv.list_binary_package_version_numbers(bpn))
 
                 transport_form = '%s-%s_%s.tpm2' % (bpn, bpv, arch_str)
                 print("  Copying '%s'..." % transport_form)
-                shutil.copy(src, dst)
+                shutil.copy(os.path.join(src, transport_form), dst)
 
     print()
 
