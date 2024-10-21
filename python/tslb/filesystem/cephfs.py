@@ -6,23 +6,29 @@ import stat
 import subprocess
 
 class cephfs(Fsbase):
-    def __init__(self, monitor, subtree, root, name=None, secret=None):
+    def __init__(self, monitor, fs_name, subtree, root, name,
+                 secret=None, fsid=None):
+
         self.monitor = monitor
+        self.fs_name = fs_name
         self.subtree = subtree
         self.root = root
         self.name = name
         self.secret = secret
+        self.fsid = fsid
+        self._dev_desc = '%s@%s.%s=%s' % (self.name, self.fsid, self.fs_name, self.subtree)
 
     def mount(self):
         if not self.is_mounted():
-            cmd = [ 'mount', '-t', 'ceph', self.monitor + ':' + self.subtree,
-                self.root ]
-
-            if self.name is not None:
-                cmd.append('-oname=%s' % self.name)
+            cmd = [ 'mount', '-t', 'ceph',
+                   self._dev_desc, self.root,
+                   '-omon_addr=%s' % self.monitor.replace(',', '/') ]
 
             if self.secret is not None:
                 cmd.append('-osecret=%s' % self.secret)
+
+            if self.fsid is not None:
+                cmd.append('-ofsid=%s' % self.fsid)
 
             ret = subprocess.call(cmd)
             if ret != 0:
@@ -38,7 +44,7 @@ class cephfs(Fsbase):
 
     def is_mounted(self):
         # Check if it is mounted
-        cmd = [ 'findmnt', self.monitor + ':' + self.subtree, self.root ]
+        cmd = [ 'findmnt', self._dev_desc, self.root ]
 
         ret = subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if ret == 0:

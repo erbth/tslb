@@ -64,15 +64,23 @@ if fstype == 'cephfs':
     if monitor is None:
         raise Exception('No ceph monitor specified in the TSLB config file.')
 
+    fs_name = settings['Filesystem'].get('fs_name')
+    if fs_name is None:
+        raise Exception('No cephfs name specified in the TSLB config file.')
+
     subtree = settings['Filesystem'].get('subtree')
     if subtree is None:
         raise Exception('No cephfs subtree specified in the TSLB config file.')
+
+    fsid = settings['Filesystem'].get('fsid')
+    if fsid is None:
+        raise Exception('No cephfs fsid specified in the TSLB config file.')
 
     name = settings['Filesystem'].get('name')
     secret = settings['Filesystem'].get('secret')
 
     from .cephfs import cephfs
-    fs = cephfs(monitor, subtree, root, name, secret)
+    fs = cephfs(monitor, fs_name, subtree, root, name, secret, fsid)
 
 else:
     raise Exception('Invalid filesystem type `%s\' specified in TSLB config file.' % fstype)
