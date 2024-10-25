@@ -10,6 +10,7 @@ from tslb import parse_utils
 from tslb import rootfs
 from tslb import settings
 from tslb import tclm
+from tslb import tsl_unshare
 from tslb.Console import Color
 from tslb.Constraint import DependencyList, VersionConstraint
 from tslb.VersionNumber import VersionNumber
@@ -519,6 +520,29 @@ def perform_chroot(root):
     os.chroot(root)
     os.chdir('/')
 
+def enter_namespaces():
+    """
+    Create and enter namespaces, and setup the new 'devices' in the namespaces
+    like the lo network interface.
+    """
+    tsl_unshare.unshare(
+        tsl_unshare.CLONE_NEWNET |
+        tsl_unshare.CLONE_NEWUTS |
+        tsl_unshare.CLONE_NEWCGROUP |
+        tsl_unshare.CLONE_NEWIPC)
+
+    # We are still in the host root fs, hence we can use regular tools
+    cmds = [
+        ['ip', 'a', 'a', '127.0.0.1/8', 'dev', 'lo'],
+        ['ip', 'a', 'a', '::1/128', 'dev', 'lo'],
+        ['ip', 'l', 'set', 'lo', 'up'],
+    ]
+
+    for cmd in cmds:
+        r = subprocess.call(cmd)
+        if r != 0:
+            raise ce.CommandFailed(cmd, r)
+
 def start_in_chroot(root, f, *args, **kwargs):
     """
     Start the function f in a chroot environment using the multiprocessing
@@ -540,6 +564,9 @@ def start_in_chroot(root, f, *args, **kwargs):
         # Replace stdout and stderr as they may have acquired locks from
         # forking when used in a multi-threaded environment.
         replace_output_streams()
+
+        # Enter namespaces
+        enter_namespaces()
 
         perform_chroot(root)
         r = f(*args, **kwargs)
