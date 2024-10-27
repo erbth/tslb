@@ -530,7 +530,7 @@ def enter_namespaces(root):
         namespace_utils.CLONE_NEWUTS |
         namespace_utils.CLONE_NEWNS |
         namespace_utils.CLONE_NEWPID |
-        namespace_utils.CLONE_NEWTIME |
+        # namespace_utils.CLONE_NEWTIME |
         namespace_utils.CLONE_NEWCGROUP |
         namespace_utils.CLONE_NEWIPC)
 
@@ -585,7 +585,8 @@ def enter_namespaces(root):
 
     # Mount /proc from inside pid namespace
     procfs_path = os.path.join(root, 'proc')
-    namespace_utils.make_private_mount(procfs_path)
+    namespace_utils.make_private_mount(root)
+    namespace_utils.umount(procfs_path.encode('utf8'))
     namespace_utils.mount(b'proc', procfs_path.encode('utf8'),
                           b'proc', 0, None)
 

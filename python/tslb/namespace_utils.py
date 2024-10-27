@@ -62,6 +62,13 @@ def mount(source, target, filesystemtype, mountflags, data):
         raise OSError(errno, os.strerror(errno))
 
 
+def umount(target):
+    ret = _libc.umount(target)
+    if ret != 0:
+        errno = ctypes.get_errno()
+        raise OSError(errno, os.strerror(errno))
+
+
 MOUNT_ATTR_RDONLY        = 0x00000001
 MOUNT_ATTR_NOSUID        = 0x00000002
 MOUNT_ATTR_NODEV         = 0x00000004
@@ -144,14 +151,7 @@ def mount_setattr(dirfd, pathname, flags, attr):
 
 # Common tools that use the syscalls wrapped above
 def make_private_mount(path):
-    attr = MountAttr()
-
-    attr.attr_set = 0
-    attr.attr_clr = 0
-    attr.propagation = MS_PRIVATE
-    attr.userns_fd = 0
-
-    mount_setattr(-1, path.encode('utf8'), 0, attr)
+    mount(None, path.encode('utf8'), None, MS_PRIVATE, None)
 
 def bind_mount(src, dst, recursive=False):
     mount(src.encode('utf8'), dst.encode('utf8'), None,
