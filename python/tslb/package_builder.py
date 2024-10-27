@@ -10,7 +10,7 @@ from tslb import parse_utils
 from tslb import rootfs
 from tslb import settings
 from tslb import tclm
-from tslb import tsl_unshare
+from tslb import namespace_utils
 from tslb.Console import Color
 from tslb.Constraint import DependencyList, VersionConstraint
 from tslb.VersionNumber import VersionNumber
@@ -520,18 +520,18 @@ def perform_chroot(root):
     os.chroot(root)
     os.chdir('/')
 
-def enter_namespaces():
+def enter_namespaces(root):
     """
     Create and enter namespaces, and setup the new 'devices' in the namespaces
     like the lo network interface.
     """
-    tsl_unshare.unshare(
-        tsl_unshare.CLONE_NEWNET |
-        tsl_unshare.CLONE_NEWUTS |
-        tsl_unshare.CLONE_NEWCGROUP |
-        tsl_unshare.CLONE_NEWIPC)
+    namespace_utils.unshare(
+        namespace_utils.CLONE_NEWNET |
+        namespace_utils.CLONE_NEWUTS |
+        namespace_utils.CLONE_NEWNS)
 
-    # We are still in the host root fs, hence we can use regular tools
+    # We are still in the host root fs and host user namespace, hence we can
+    # use regular tools
     cmds = [
         ['ip', 'a', 'a', '127.0.0.1/8', 'dev', 'lo'],
         ['ip', 'a', 'a', '::1/128', 'dev', 'lo'],
@@ -542,6 +542,173 @@ def enter_namespaces():
         r = subprocess.call(cmd)
         if r != 0:
             raise ce.CommandFailed(cmd, r)
+
+    # Create pty as controlling terminal of new process group
+    pty_master = namespace_utils.posix_openpt(os.O_RDWR)
+    namespace_utils.grantpt(pty_master)
+    namespace_utils.unlockpt(pty_master)
+    pty_name = namespace_utils.ptsname(pty_master)
+
+    os.chown(pty_name, 10000000, -1)
+
+    # Give new init some capabilities in the *parent* namespace
+    #namespace_utils.prctl(
+    #        namespace_utils.PR_CAP_AMBIENT,
+    #        namespace_utils.PR_CAP_AMBIENT_RAISE,
+    #        namespace_utils.CAP_MKNOD)
+
+    # No processes, no resources used - hence fork() should be safe
+    signal_r, signal_w = os.pipe2(os.O_CLOEXEC)
+    signal_ns_r, signal_ns_w = os.pipe2(os.O_CLOEXEC)
+
+    pid = os.fork()
+
+    if pid != 0:
+        os.close(signal_r)
+        os.close(signal_ns_w)
+
+        try:
+            # Wait for namspaces to be created in the child
+            while True:
+                if os.read(signal_ns_r, 1) == b'':
+                    break
+
+            os.close(signal_ns_r)
+
+            # Configure user namespace
+            # Map ids
+            uid_map = b'0 10000000 1000000\n'
+            gid_map = b'0 10000000 1000000\n'
+
+            fd = os.open('/proc/%d/uid_map' % pid, os.O_WRONLY | os.O_CLOEXEC)
+            try:
+                if os.write(fd, uid_map) != len(uid_map):
+                    raise RuntimeError("Failed to configure a user namespace's uid_map")
+            finally:
+                os.close(fd)
+
+            fd = os.open('/proc/%d/gid_map' % pid, os.O_WRONLY | os.O_CLOEXEC)
+            try:
+                if os.write(fd, gid_map) != len(gid_map):
+                    raise RuntimeError("Failed to configure a user namespace's gid_map")
+            finally:
+                os.close(fd)
+
+            # Remount root in mount namespace utilizing id mapping
+            namespace_utils.make_private_mount(root)
+
+            # Copy tslb aux filesystems as long as they are accessible
+            tslb_tree = os.path.join(root, 'tmp', 'tslb')
+
+            fd_tslb_tree = namespace_utils.open_tree(
+                    -1, tslb_tree.encode('utf8'),
+                    namespace_utils.OPEN_TREE_CLONE | namespace_utils.OPEN_TREE_CLOEXEC |
+                    namespace_utils.AT_RECURSIVE)
+
+            namespace_utils.make_id_mapped_mount(root, root, pid)
+
+            # Mount pseudo filesystems for container
+            try:
+                _mount_sysfs(root)
+                _mount_devtmpfs(root)
+                _mount_run(root)
+                _mount_tmp(root)
+
+                if os.path.islink(os.path.join(root, 'dev', 'shm')):
+                    if os.path.readlink(os.path.join(root, 'dev', 'shm')) == '/run/shm':
+                        os.mkdir(os.path.join(root, 'run', 'shm'))
+
+                # Attach tslb base
+                os.mkdir(tslb_tree)
+                os.chmod(tslb_tree, 0o755)
+                os.chown(tslb_tree, 0, 0)
+
+                namespace_utils.move_mount(
+                        fd_tslb_tree, b"", -1, tslb_tree.encode('utf8'),
+                        namespace_utils.MOVE_MOUNT_F_EMPTY_PATH)
+
+            finally:
+                os.close(fd_tslb_tree)
+
+            # Signal init process
+            os.close(signal_w)
+
+        except:
+            os.kill(pid, signal.SIGKILL)
+            raise
+
+        # Forward terminal IO
+        namespace_utils.proxy_pty(0, pty_master)
+        os.close(pty_master)
+
+        # Wait for child to exit
+        ret = os.waitid(os.P_PID, pid, os.WEXITED)
+        if ret.si_code != os.CLD_EXITED or ret.si_status != 0:
+            raise RuntimeError("'init'-process of namespaces failed")
+
+        sys.exit(0)
+
+    # In the child (new 'init' / pid-1 process)
+    os.close(signal_w)
+    os.close(signal_ns_r)
+
+    # Change to unprivileged user namespace
+    namespace_utils.unshare(namespace_utils.CLONE_NEWUSER |
+                            namespace_utils.CLONE_NEWCGROUP |
+                            namespace_utils.CLONE_NEWIPC |
+                            namespace_utils.CLONE_NEWPID)
+
+    # Signal controller
+    os.close(signal_ns_w)
+
+    # Wait for configuration to finish (indicated by EOF)
+    while True:
+        if os.read(signal_r, 1) == b'':
+            break
+
+    os.close(signal_r)
+
+    # Set user
+    os.setgid(0)
+    os.setgroups([0])
+    os.setuid(0)
+
+    # Create mount namespace for /proc
+    namespace_utils.unshare(namespace_utils.CLONE_NEWNS)
+
+    # Fork off init process
+    pid2 = os.fork()
+    if pid2 != 0:
+        # Wait for child
+        ret = os.waitid(os.P_PID, pid2, os.WEXITED)
+        if ret.si_code != os.CLD_EXITED or ret.si_status != 0:
+            raise RuntimeError("child process in namespaces failed")
+
+        sys.exit(0)
+
+    # Create session
+    os.setsid()
+
+    # Open pty
+    fd = os.open(pty_name, os.O_RDONLY)
+    os.dup2(fd, 0)
+    os.close(fd)
+
+    fd = os.open(pty_name, os.O_WRONLY)
+    os.dup2(fd, 1)
+    os.dup2(fd, 2)
+    os.close(fd)
+
+    # Mount /proc
+    namespace_utils.mount(b'proc', os.path.join(root, 'proc').encode('utf8'),
+                          b'proc', 0, None)
+
+    # Here would be the place to setup signal handlers for the new 'init'
+    # process. However I have yet to come up with a real usecase.
+
+    # Drop privileges
+    # TODO: id-mapping of scratch spaces, time namespace
+
 
 def start_in_chroot(root, f, *args, **kwargs):
     """
@@ -566,7 +733,7 @@ def start_in_chroot(root, f, *args, **kwargs):
         replace_output_streams()
 
         # Enter namespaces
-        enter_namespaces()
+        enter_namespaces(root)
 
         perform_chroot(root)
         r = f(*args, **kwargs)
