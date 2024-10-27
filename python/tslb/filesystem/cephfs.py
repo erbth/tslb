@@ -18,6 +18,10 @@ class cephfs(Fsbase):
         self.fsid = fsid
         self._dev_desc = '%s@%s.%s=%s' % (self.name, self.fsid, self.fs_name, self.subtree)
 
+        # Format used in /proc/mounts by older kernels
+        self._dev_desc_old = '%s:%s' % (self.monitor, self.subtree)
+
+
     def mount(self):
         if not self.is_mounted():
             cmd = [ 'mount', '-t', 'ceph',
@@ -43,12 +47,17 @@ class cephfs(Fsbase):
                 raise CommandFailed(' '.join(cmd), ret)
 
     def is_mounted(self):
-        # Check if it is mounted
-        cmd = [ 'findmnt', self._dev_desc, self.root ]
+        # Check if it is mounted (older kernels may use a different device
+        # description format)
+        cmds = [
+                [ 'findmnt', self._dev_desc, self.root ],
+                [ 'findmnt', self._dev_desc_old, self.root]
+        ]
 
-        ret = subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if ret == 0:
-            return True
+        for cmd in cmds:
+            ret = subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if ret == 0:
+                return True
 
         # If not, check if something else is mounted
         cmd = [ 'findmnt', self.root ]
