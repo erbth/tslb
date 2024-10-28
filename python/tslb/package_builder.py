@@ -590,8 +590,46 @@ def enter_namespaces(root):
     namespace_utils.mount(b'proc', procfs_path.encode('utf8'),
                           b'proc', 0, None)
 
-    # Here would be the place to setup signal handlers for the new 'init'
-    # process. However I have yet to come up with a real usecase.
+    # Fork off init process, because for systemd's chroot-detection to work
+    # correctly, the init process must have a different root directory than the
+    # chroot environment (and other chroot detections might work similar).
+    signal_r, signal_w = os.pipe()
+
+    pid_first = os.fork()
+
+    if pid_first != 0:
+        os.close(signal_r)
+
+        # Chroot *somewhere* (does not need to be a working rootfs, after all),
+        # s.t. no chroot outbreak through /proc/1/root is possible.
+        namespace_utils.unshare(namespace_utils.CLONE_NEWNS)
+        namespace_utils.mount(b'tmpfs', procfs_path.encode('utf8'),
+                              b'tmpfs', 0, None)
+
+        os.chroot(procfs_path)
+
+        # Here would be the place to setup signal handlers for the new 'init'
+        # process. However I have yet to come up with a real usecase.
+
+        # Signal child
+        os.close(signal_w)
+
+        # Wait for child
+        ret = os.waitid(os.P_PID, pid_first, os.WEXITED)
+        if ret.si_code != os.CLD_EXITED or ret.si_status != 0:
+            raise RuntimeError("first non-init-process of namespaces failed")
+
+        sys.exit(0)
+
+
+    # In the final child - wait for init to finish initializing
+    os.close(signal_w)
+
+    while True:
+        if os.read(signal_r, 1) == b'':
+            break
+
+    os.close(signal_r)
 
 
 def start_in_chroot(root, f, *args, **kwargs):
