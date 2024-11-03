@@ -165,7 +165,12 @@ def find_binary_packages_with_file(session, arch, path, is_absolute=False, only_
 
     if only_newest:
         cand2 = aliased(cte)
-        bpq = bpq.filter(~session.query(cand2)
+        # NOTE: With a specific SQLAlchemy version number (1.4?), the ORM adds
+        # an unnecessary cartesian product with binary_package_files in the
+        # exists clause. This can be avoicded by specifying a field of the cte
+        # in query() rather than just `query(cand2)`. However the SELECT clause
+        # will always just select `1`.
+        bpq = bpq.filter(~session.query(cand2.c['version_number'])
                 .filter(cand2.c['version_number'] > cand1.c['version_number']).exists())
 
     return list(bpq.distinct().all())
