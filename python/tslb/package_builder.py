@@ -545,7 +545,7 @@ def enter_namespaces(root):
 
     if pid != 0:
         # Forward terminal IO
-        namespace_utils.proxy_pty(0, pty_master)
+        namespace_utils.proxy_pty(0, pty_master, 1)
         os.close(pty_master)
 
         # Wait for child (the new init process) to exit
@@ -653,6 +653,15 @@ def start_in_chroot(root, f, *args, **kwargs):
         # Replace stdout and stderr as they may have acquired locks from
         # forking when used in a multi-threaded environment.
         replace_output_streams()
+
+        # Fix up concurrent.futures thread pool accounting (this is a bit
+        # hacky; when calling start_in_chroot from a
+        # concurrent.futures.ThreadPoolExecutor, the process would produce an
+        # exception on exit, because it (incorrectly) tries to join the thread
+        # pool's threads)
+        import concurrent.futures.thread
+        for k in list(concurrent.futures.thread._threads_queues):
+            del concurrent.futures.thread._threads_queues[k]
 
         # Enter namespaces
         enter_namespaces(root)

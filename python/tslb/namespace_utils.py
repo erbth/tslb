@@ -3,6 +3,7 @@ import ctypes
 import os
 import select
 import termios
+import threading
 import tty
 
 
@@ -278,32 +279,84 @@ def ptsname(fd):
     return buf.value.decode('utf8')
 
 
-def proxy_pty(own, ctrl):
+_PTY_LOCKS = set()
+_PTY_LOCKS_LOCK = threading.Lock()
+
+def proxy_pty(own_in, ctrl, own_out=-1):
     """
-    :param own: Own pty
+    :param own_in: Own pty input (fd to read from)
     :param ctrl: The master fd to control
+    :param own_out: Own pty output (fd to write to); -1 means use own_in
     """
-    before = termios.tcgetattr(own)
+    # Only modify terminal settings if this the fd refers to a terminal and no
+    # other threads of this process have modified it already
+    modify_term_in = False
+    modify_term_out = False
+
+    if own_out == -1:
+        own_out = own_in
+
+    if os.isatty(own_in):
+        with _PTY_LOCKS_LOCK:
+            if own_in not in _PTY_LOCKS:
+                modify_term_in = True
+                _PTY_LOCKS.add(own_in)
+
+    if own_out != own_in and os.isatty(own_out):
+        with _PTY_LOCKS_LOCK:
+            if own_out not in _PTY_LOCKS:
+                modify_term_out = True
+                _PTY_LOCKS.add(own_out)
+
+    if modify_term_in:
+        before_in = termios.tcgetattr(own_in)
+
+        # Ensure that the terminal is not in raw-mode already by checking lflag
+        # & ISIG
+        if not (before_in[3] & termios.ISIG):
+            modify_term_in = False
 
     try:
-        tty.setraw(own)
+        if modify_term_out:
+            before_out = termios.tcgetattr(own_out)
 
-        while True:
-            rd, wr, ex = select.select([ctrl, own], [], [])
+            if not (before_out[3] & termios.ISIG):
+                modify_term_out = False
 
-            if ctrl in rd:
-                try:
-                    buf = os.read(ctrl, 65536)
-                except OSError as exc:
-                    if exc.errno == 5:
-                        break
-                    raise
+        try:
+            if modify_term_in:
+                tty.setraw(own_in)
 
-                os.write(1, buf)
+            if modify_term_out:
+                tty.setraw(own_out)
 
-            if own in rd:
-                buf = os.read(own, 65536)
-                os.write(ctrl, buf)
+            while True:
+                rd, wr, ex = select.select([ctrl, own_in], [], [])
+
+                if ctrl in rd:
+                    try:
+                        buf = os.read(ctrl, 65536)
+                    except OSError as exc:
+                        if exc.errno == 5:
+                            break
+                        raise
+
+                    os.write(own_out, buf)
+
+                if own_in in rd:
+                    buf = os.read(own_in, 65536)
+                    os.write(ctrl, buf)
+
+        finally:
+            if modify_term_out:
+                termios.tcsetattr(own_out, termios.TCSAFLUSH, before_out)
+
+                with _PTY_LOCKS_LOCK:
+                    _PTY_LOCKS.remove(own_out)
 
     finally:
-        termios.tcsetattr(own, termios.TCSAFLUSH, before)
+        if modify_term_in:
+            termios.tcsetattr(own_in, termios.TCSAFLUSH, before_in)
+
+            with _PTY_LOCKS_LOCK:
+                _PTY_LOCKS.remove(own_in)
