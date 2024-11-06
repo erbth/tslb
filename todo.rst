@@ -25,9 +25,6 @@ Packages (low priority)
 Low priority
 ---
 
-  * upstream fetching: github tags vs. real releases (see e.g. intel
-    media-driver)
-
   * source package version constraints in binary packages, e.g.
     tsl-graphical -> tsl_graphical_wallpaper = s:built
 

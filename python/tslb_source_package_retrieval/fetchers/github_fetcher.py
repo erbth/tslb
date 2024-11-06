@@ -1,10 +1,13 @@
 """
 Fetch releases from GitHub
 """
+import requests.exceptions
 import os
 import re
 import subprocess
 import tempfile
+from tslb import parse_utils
+from tslb.Console import Color
 from tslb.VersionNumber import VersionNumber
 from .base_fetcher import *
 
@@ -13,14 +16,23 @@ class GitHubFetcher(BaseFetcher):
     name = 'github'
 
     def handles_url(session, package_name, url, out):
+        url, params = parse_querystring(url)
         if url.startswith('https://github.com') and url.endswith('.git'):
             return True
         return False
 
     def fetch_versions(session, package_name, url, out, **kwargs):
+        # Interpret URL
+        url, params = parse_querystring(url)
+
+        tag_pattern = params.get('tag_pattern')
+        if tag_pattern:
+            tag_pattern = re.compile(tag_pattern)
+
+        artifact_file_format = params.get('artifact_file_format')
+
         versions = []
         verbose = kwargs.pop('verbose', False)
-        only_n_newest = kwargs.pop('only_n_newest', 5)
 
         # Get tags in repository
         ret = subprocess.run(['git', 'ls-remote', '--tags', url], stdout=subprocess.PIPE)
@@ -51,6 +63,11 @@ class GitHubFetcher(BaseFetcher):
             if 'rc' in tag.lower() or 'pre' in tag.lower():
                 continue
 
+            # Skip filtered tags if a filter pattern is set
+            if tag_pattern:
+                if not tag_pattern.fullmatch(tag):
+                    continue
+
             v_str = None
 
             # classical v...
@@ -64,6 +81,11 @@ class GitHubFetcher(BaseFetcher):
                 if m:
                     v_str = m[1]
 
+            # Used e.g. by ICU
+            if not v_str:
+                m = re.match(r'^.*[a-zA-Z]-(([0-9]+)(-[0-9]+)+)$', tag)
+                if m:
+                    v_str = m[1].replace('-', '.')
 
             # Used by expat
             if not v_str:
@@ -81,24 +103,46 @@ class GitHubFetcher(BaseFetcher):
         annotated_tags.sort()
         annotated_tags.reverse()
 
-        # Find GitHub Releases for tags; only consider n newest releases
-        # releases is a list [(release tag name, version, release url)]
+        # Find GitHub Releases for tags; only consider 5 newest releases
+        # releases is a list [(release tag name, version, release description)]
         releases = []
-        for i, t in enumerate(annotated_tags):
-            v, v_str, tag = t
+        repo_parts = re.fullmatch(r'https://github.com/([^/]+)/([^/]+)\.git', url)
+        if not repo_parts:
+            raise UnknownWebpageFormat(url, "Cannot split github url into owner and repo")
 
-            if only_n_newest and i >= only_n_newest:
+        rel_url = 'https://api.github.com/repos/%s/%s/releases?per_page=10' % (
+                repo_parts[1], repo_parts[2])
+
+        try:
+            rel_descs = download_url(session, rel_url).json()
+        except requests.exceptions.JSONDecodeError as exc:
+            raise LoadError(url, str(exc))
+
+        if not isinstance(rel_descs, list):
+            raise LoadError(url, "Failed to fetch GitHub releases")
+
+        # Make sure only 5 releases are considered
+        rel_descs = rel_descs[:5]
+
+        for v, v_str, tag in annotated_tags:
+            if not rel_descs:
                 break
 
-            release_url = url.replace('.git', '/releases/' + tag)
-
-            if verbose:
-                print("  Probing '%s' ..." % release_url, file=out)
-
-            if probe_url(session, release_url):
-                releases.append((tag, v, v_str, release_url))
+            to_remove = 0
+            for desc in list(rel_descs):
+                to_remove += 1
+                if desc.get('tag_name') == tag:
+                    releases.append((tag, v, v_str, desc))
+                    rel_descs = rel_descs[to_remove:]
+                    break
 
         if not releases:
+            print(Color.YELLOW + "\nWARNING: Package `%s' uses "
+                        "`github'-fetcher but has no releases. Maybe try using "
+                        "`git_tag'-fetcher instead." % package_name +
+                        Color.NORMAL,
+                    file=out)
+
             return []
 
 
@@ -106,26 +150,48 @@ class GitHubFetcher(BaseFetcher):
         latest_sig_found = False
         first = True
 
-        for tag, v, v_str, release_url in releases:
+        for tag, v, v_str, rel_desc in releases:
             # Probe a few filenames
+            asset_urls = [a['browser_download_url']
+                          for a in rel_desc.get('assets', [])
+                          if a.get('browser_download_url')]
+
+            # For format regexes
+            tmpl_ctx = {
+                    'VERSION': re.escape(v_str)
+            }
+
             found = False
             for ext in ['tar.xz', 'tar.bz2', 'tar.gz', 'tgz', 'tar.lz', 'tar.zstd']:
-                download_url = url.replace('.git', '/releases/download/%s/%s-%s.%s' %
-                        (tag, package_name, v_str, ext))
+                if artifact_file_format:
+                    artifact_url = None
+                    for a in asset_urls:
+                        m = re.match(
+                                    re.escape(url.replace('.git', '/releases/download/%s/' % tag)) +
+                                    artifact_file_format % tmpl_ctx,
+                                a)
 
-                if verbose:
-                    print("  Probing '%s' ..." % download_url)
+                        if m:
+                            artifact_url = a
+                            break
 
-                if probe_url(session, download_url):
+                    if not artifact_url:
+                        raise LoadError(url, "Failed to find asset which "
+                                        "matches artifact_file_format")
+
+                else:
+                    artifact_url = url.replace('.git', '/releases/download/%s/%s-%s.%s' %
+                            (tag, package_name, v_str, ext))
+
+                if artifact_url in asset_urls:
                     found = True
 
                     # Try to find signature
                     sig_found = False
                     for sig_ext in ['sig', 'sign', 'asc']:
-                        signature_download_url = download_url + '.' + sig_ext
+                        signature_artifact_url = artifact_url + '.' + sig_ext
 
-                        print("  Probing '%s' ..." % signature_download_url)
-                        if probe_url(session, signature_download_url):
+                        if signature_artifact_url in asset_urls:
                             sig_found = True
                             if first:
                                 latest_sig_found = True
@@ -133,7 +199,7 @@ class GitHubFetcher(BaseFetcher):
                             break
 
                     versions.append((v, {
-                        EXT_COMP_MAP[ext]: (download_url, signature_download_url if sig_found else None)
+                        EXT_COMP_MAP[ext]: (artifact_url, signature_artifact_url if sig_found else None)
                     }))
 
                 if found:
@@ -152,14 +218,17 @@ class GitHubFetcher(BaseFetcher):
         commit_version_signed = False
 
         # Clone repository
-        with tempfile.TemporaryDirectory() as tmpdir:
-            ret = subprocess.run(['git', 'clone', '--bare', url], cwd=tmpdir)
-            if ret.returncode != 0:
-                raise LoadError(url, "git clone --bare failed with code %s." % ret.returncode)
+        for tag, v, v_str, release_url in releases:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                ret = subprocess.run(['git', 'clone', '--bare', url,
+                                      '--single-branch', '--depth=1',
+                                      '--branch=' + tag, 'repo'], cwd=tmpdir)
 
-            repo_dir = os.path.join(tmpdir, os.listdir(tmpdir)[0])
+                if ret.returncode != 0:
+                    raise LoadError(url, "git clone --bare failed with code %s." % ret.returncode)
 
-            for tag, v, v_str, release_url in releases:
+                repo_dir = os.path.join(tmpdir, 'repo')
+
                 # Check if tag or commit of tag is signed, and if yes, add the
                 # release as version.
                 cmd = ['git', 'show', '--stat', '--pretty=%GG', tag]

@@ -11,9 +11,17 @@ class GitTagFetcher(BaseFetcher):
     name = 'git_tag'
 
     def handles_url(session, package_name, url, out):
+        url, params = parse_querystring(url)
         return url.startswith('https://') and url.endswith('.git')
 
     def fetch_versions(session, package_name, url, out, **kwargs):
+        # Interpret URL
+        url, params = parse_querystring(url)
+
+        tag_pattern = params.get('tag_pattern')
+        if tag_pattern:
+            tag_pattern = re.compile(tag_pattern)
+
         versions = []
 
         # Get tags in repository
@@ -46,11 +54,23 @@ class GitTagFetcher(BaseFetcher):
             if 'rc' in tag.lower():
                 continue
 
+            # Skip filtered tags if a filter pattern is set
+            if tag_pattern:
+                if not tag_pattern.fullmatch(tag):
+                    continue
+
             v_str = None
 
+            # classical v...
             m = re.match(r'^v?([0-9]+(\.[0-9a-zA-Z.]+)?)$', tag)
             if m:
                 v_str = m[1]
+
+            # Used by intel and others
+            if not v_str:
+                m = re.match(r'^.*[a-zA-Z]-([0-9]+(\.[0-9]+)*)$', tag)
+                if m:
+                    v_str = m[1]
 
             # Used by expat
             m = re.match(r'^R_([0-9]+(_[0-9]+)*)$', tag)
