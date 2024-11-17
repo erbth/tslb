@@ -57,7 +57,7 @@ def download_url(session, url, required=True, head=False):
                 raise LoadError(resp.url, "HTTP status: %s" % resp.status_code)
 
         except requests.RequestException as e:
-            raise LoadError(release_url, str(e)) from e
+            raise LoadError(url, str(e)) from e
 
         except requests.Timeout:
             cnt += 1

@@ -87,6 +87,12 @@ class GitHubFetcher(BaseFetcher):
                 if m:
                     v_str = m[1].replace('-', '.')
 
+            # Used by e.g. libnl
+            if not v_str:
+                m = re.match(r'^[a-zA-Z]+(([0-9]+)(_[0-9]+)+)$', tag)
+                if m:
+                    v_str = m[1].replace('_', '.')
+
             # Used by expat
             if not v_str:
                 m = re.match(r'^R_([0-9]+(_[0-9]+)*)$', tag)
