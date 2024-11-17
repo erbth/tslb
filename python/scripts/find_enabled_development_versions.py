@@ -40,7 +40,7 @@ def main():
                         break
 
             if UNEVEN_VERSION_COMPONENT:
-                if upstream_source_url and 'gnome' in upstream_source_url:
+                if upstream_source_url and ('gnome' in upstream_source_url or 'cpan.org' in upstream_source_url):
                     for comp in v.components[1:3]:
                         if comp % 2 != 0:
                             is_dev = True
