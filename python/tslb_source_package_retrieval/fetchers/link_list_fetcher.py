@@ -49,6 +49,13 @@ class LinkListFetcher(BaseFetcher):
                 )
             ]
 
+        # Try to find base url
+        head = b.find('head')
+        base_url = re.sub(r'/[^/]+\.html', '', url) + '/'
+        if base_tag:=head.find('base'):
+            if base_tag_href:=base_tag.get('href'):
+                base_url = base_tag_href
+
         for a in b.find_all('a'):
             if not a.get('href'):
                 continue
@@ -58,7 +65,7 @@ class LinkListFetcher(BaseFetcher):
 
             # If a link target filter is given, match the whole target url
             # against it.
-            full_target_url = urljoin(re.sub(r'/[^/]+\.html', '', url) + '/', a['href'])
+            full_target_url = urljoin(base_url, a['href'])
             if link_target_filter:
                 if not link_target_filter.fullmatch(full_target_url):
                     continue
