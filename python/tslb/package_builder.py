@@ -607,6 +607,7 @@ def enter_namespaces(root):
                               b'tmpfs', 0, None)
 
         os.chroot(procfs_path)
+        os.chdir('/')
 
         # Here would be the place to setup signal handlers for the new 'init'
         # process. However I have yet to come up with a real usecase.
