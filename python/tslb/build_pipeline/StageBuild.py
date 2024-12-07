@@ -48,6 +48,10 @@ class StageBuild(object):
                 build_command = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD)"
                 found = True
 
+            if not found and os.path.exists(os.path.join(source_dir, 'pyproject.toml')):
+                build_command = "pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps ."
+                found = True
+
             if not found and os.path.exists(os.path.join(source_dir, 'setup.py')):
                 build_command = "python3 setup.py build -j $(MAX_PARALLEL_THREADS_REDUCED)"
                 found = True

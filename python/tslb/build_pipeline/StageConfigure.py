@@ -42,6 +42,10 @@ class StageConfigure(object):
             elif os.path.exists(os.path.join(src_dir, 'configure')):
                 configure_command = "./configure --prefix=/usr --sysconfdir=/etc"
 
+            elif os.path.exists(os.path.join(src_dir, 'pyproject.toml')):
+                # Python packages do not have an extra configure-step
+                configure_command = None
+
             elif os.path.exists(os.path.join(src_dir, 'setup.py')):
                 # Python packages do not have an extra configure-step
                 configure_command = None

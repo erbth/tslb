@@ -73,6 +73,11 @@ class StageInstallToDestdir(object):
                 if makefile_supports_destdir:
                     cmd = "make -j $(MAX_PARALLEL_THREADS) -l $(MAX_LOAD) DESTDIR=$(DESTDIR) install"
 
+            # Python packages that use pyproject.toml
+            if not cmd:
+                if os.path.exists(os.path.join(source_dir, 'pyproject.toml')):
+                    cmd = "#!/bin/bash -e\nexec pip3 install --no-index --no-deps --prefix=/usr --root=$(DESTDIR) --no-compile --no-user --root-user-action=ignore dist/*.whl\n"
+
             # Python packages that use setuptools
             if not cmd:
                 if os.path.exists(os.path.join(source_dir, 'setup.py')):
