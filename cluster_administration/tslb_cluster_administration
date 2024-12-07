@@ -10,6 +10,7 @@ tools_hosts=(
 #	"node03"
 	"node06"
 	"node07"
+	"node08"
 )
 
 PYTHON_PACKAGE=../python
