@@ -13,6 +13,7 @@ import os
 import rbd
 import re
 import subprocess
+import time
 import tslb.database.rootfs
 
 
@@ -643,11 +644,22 @@ def _unmap_rbd_image(path, raises=True):
     :raises CommonExceptions.CommandFailed: If the command failed to run and
         raises is True.
     """
-    cmd = ['rbd', 'unmap', *settings.get_ceph_cmd_conn_params(), str(path)]
+    attempts = 0
+    while True:
+        cmd = ['rbd', 'unmap', *settings.get_ceph_cmd_conn_params(), str(path)]
 
-    r =  subprocess.call(cmd)
-    if r != 0 and raises:
-        raise CommandFailed(cmd, r)
+        r =  subprocess.call(cmd)
+        if r == 0:
+            return
+        elif r == 16 and attempts < 10:
+            # Device busy; maybe unmount did not finish yet
+            time.sleep(0.1)
+            attempts += 1
+            continue
+
+        if raises:
+            raise CommandFailed(cmd, r)
+        break
 
 
 def _list_rbd_image_snapshots(name):
