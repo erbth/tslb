@@ -651,7 +651,7 @@ def _unmap_rbd_image(path, raises=True):
         r =  subprocess.call(cmd)
         if r == 0:
             return
-        elif r == 16 and attempts < 10:
+        elif r == 16 and attempts < 20:
             # Device busy; maybe unmount did not finish yet
             time.sleep(0.1)
             attempts += 1
