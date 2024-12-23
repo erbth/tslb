@@ -101,6 +101,13 @@ class PackageBuilder(object):
         required_cdeps = [c for c in required_cdeps if c not in order_only_cdeps]
 
 
+        # Packages to avoid being installed at compiletime (that is in the
+        # chosen rootfs). Note that dependencies of required packages cannot be
+        # avoided, anyway, hence it is sufficient to avoid the `-all' packages.
+        avoid_compiletime_pkgs = spkgv.get_attribute_or_default('avoid_compiletime_pkgs', [])
+        avoid_compiletime_pkgs = [(n + '-all') for n in avoid_compiletime_pkgs]
+
+
         # NOTE: The package manager is essential and should be always
         # installed.
         # It must always be added to tools or otherwise provided.
@@ -182,7 +189,7 @@ class PackageBuilder(object):
             cbpdeps.add_constraint(VersionConstraint('=', v), (n,a))
 
         # Finally find the best fitting rootfs image.
-        image = rootfs.find_image(cbpdeps)
+        image = rootfs.find_image(cbpdeps, avoid_compiletime_pkgs)
         if not image:
             raise RuntimeError("No published image available")
 
@@ -302,7 +309,7 @@ class PackageBuilder(object):
                 try:
                     def _f(pkgs):
                         try:
-                            tpm_native.install(pkgs)
+                            tpm_native.install(pkgs, upgrade=True)
                             return 0
 
                         except BaseException as e:

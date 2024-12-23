@@ -694,7 +694,7 @@ def list_images():
         return [t[0] for t in q]
 
 
-def find_image(requirements):
+def find_image(requirements, avoid=[]):
     """
     Find a published rootfs image that fulfills certain criteria. Basically one
     alway wants to find an image with certain installed packages. The question
@@ -714,6 +714,9 @@ def find_image(requirements):
     :type requirements: tslb.Constraint.DependencyList of (str:name, int:arch)
         tuples
 
+    :param avoid: Do not consider images with this package installed
+    :type avoid: List(str)
+
     :returns: The image or None if no image was found (none is published
         yet ...)
 
@@ -731,6 +734,19 @@ def find_image(requirements):
             required_packages = set(requirements.get_required())
 
             for img_id in available_imgs:
+                # Does the image have packets installed that should be avoided?
+                avoid_image = False
+                for n in avoid:
+                    if s.query(db.rootfs.ImageContent).filter(
+                            db.rootfs.ImageContent.id == img_id,
+                            db.rootfs.ImageContent.package == n).count() != 0:
+
+                        avoid_image = True
+                        break
+
+                if avoid_image:
+                    continue
+
                 # Compute the error
                 e = 0
 

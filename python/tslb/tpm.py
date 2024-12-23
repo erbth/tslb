@@ -58,7 +58,7 @@ class Tpm2:
         return self._target
 
 
-    def install(self, pkgs):
+    def install(self, pkgs, upgrade=False):
         """
         Install a set of packages.
 
@@ -66,9 +66,13 @@ class Tpm2:
             like list(tuple(name, architecture, version)) or list(name,
             architecture), even mixed lists are allowed.
 
+        :param upgrade: Use the `upgrade'-action instead of install. This will
+            try to update all packages, giving the specified ones priority.
+
         :raises CommonExceptions.CommandFailed: if installing failes.
         """
-        cmd = [self._tpm2, '--install', '--assume-yes', '--adopt-all']
+        action = '--upgrade' if upgrade else '--install'
+        cmd = [self._tpm2, action, '--assume-yes', '--adopt-all']
 
         if self._target:
             cmd += ['--target', self._target]
