@@ -102,10 +102,8 @@ class PackageBuilder(object):
 
 
         # Packages to avoid being installed at compiletime (that is in the
-        # chosen rootfs). Note that dependencies of required packages cannot be
-        # avoided, anyway, hence it is sufficient to avoid the `-all' packages.
+        # chosen rootfs).
         avoid_compiletime_pkgs = spkgv.get_attribute_or_default('avoid_compiletime_pkgs', [])
-        avoid_compiletime_pkgs = [(n + '-all') for n in avoid_compiletime_pkgs]
 
 
         # NOTE: The package manager is essential and should be always
