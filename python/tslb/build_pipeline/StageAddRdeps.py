@@ -252,12 +252,32 @@ class StageAddRdeps:
                     # package depends.
                     #
                     # `res' is of type list(tuple(name, version))
-                    res = db.BinaryPackage.find_binary_packages_with_file(
-                            db_session,
-                            bp.architecture,
-                            dep.filename if dep.filename.startswith('/') else '/' + dep.filename,
-                            dep.filename.startswith('/'),
-                            only_newest=True)
+                    if (dep.filename.startswith('/bin/') or
+                            dep.filename.startswith('/sbin/') or
+                            dep.filename.startswith('/lib/') or
+                            dep.filename.startswith('/lib64/') or
+                            dep.filename.startswith('/lib32/')):
+
+                        res = []
+                        for prefix in ['', '/usr']:
+                            res += db.BinaryPackage.find_binary_packages_with_file(
+                                    db_session,
+                                    bp.architecture,
+                                    prefix + dep.filename,
+                                    True,
+                                    only_newest=True)
+
+                        # Use newer of two possible options
+                        if res:
+                            res = [max(res, key=lambda t: t[1])]
+
+                    else:
+                        res = db.BinaryPackage.find_binary_packages_with_file(
+                                db_session,
+                                bp.architecture,
+                                dep.filename if dep.filename.startswith('/') else '/' + dep.filename,
+                                dep.filename.startswith('/'),
+                                only_newest=True)
 
                     if not res:
                         if report_not_found:

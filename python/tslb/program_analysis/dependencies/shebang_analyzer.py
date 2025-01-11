@@ -91,12 +91,32 @@ class ShebangAnalyzer(BaseDependencyAnalyzer):
         # Find the package containing the interpreter
         with db.session_scope() as session:
             for i, interpreter in enumerate(interpreters):
-                deps = db.BinaryPackage.find_binary_packages_with_file(
-                        session,
-                        Architecture.to_int(arch),
-                        interpreter,
-                        True,
-                        only_newest=True)
+                if (interpreter.startswith('/bin/') or
+                        interpreter.startswith('/sbin/') or
+                        interpreter.startswith('/lib/') or
+                        interpreter.startswith('/lib64/') or
+                        interpreter.startswith('/lib32/')):
+
+                    deps = []
+                    for prefix in ['', '/usr']:
+                        deps += db.BinaryPackage.find_binary_packages_with_file(
+                                session,
+                                Architecture.to_int(arch),
+                                prefix + interpreter,
+                                True,
+                                only_newest=True)
+
+                    # Use newer of two possible options
+                    if deps:
+                        deps = [max(deps, key=lambda t: t[1])]
+
+                else:
+                    deps = db.BinaryPackage.find_binary_packages_with_file(
+                            session,
+                            Architecture.to_int(arch),
+                            interpreter,
+                            True,
+                            only_newest=True)
 
                 # Try the best to find the interpreter /usr/bin/env would choose
                 # among multiple choices.
