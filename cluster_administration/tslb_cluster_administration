@@ -8,9 +8,10 @@ tools_hosts=(
 #	"Releeshan"
 	"node04"
 #	"node03"
-	"node06"
-	"node07"
+#	"node06"
+#	"node07"
 	"node08"
+	"node09"
 )
 
 PYTHON_PACKAGE=../python
