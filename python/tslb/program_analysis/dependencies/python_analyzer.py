@@ -113,7 +113,7 @@ class PythonAnalyzer(BaseDependencyAnalyzer):
             return set()
 
         # Guess if this could be a python source module
-        m = re.match('^\s*(/usr/bin/python[0-9.]*)(\s+.*)?$', buf.split('\n')[0])
+        m = re.match(r'^\s*(/usr/bin/python[0-9.]*)(\s+.*)?$', buf.split('\n')[0])
         if not m:
             return set()
 

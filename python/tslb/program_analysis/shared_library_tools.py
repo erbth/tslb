@@ -16,7 +16,7 @@ def file_belongs_to_shared_library(filename, out=sys.stdout):
     considered shared libraries on the other hand, because they could be linker
     scripts linking to shared libraries and parts of static libraries.
     """
-    if re.match ('^.*\.so(\.\d+)*$', filename):
+    if re.match (r'^.*\.so(\.\d+)*$', filename):
         with open(filename, 'rb') as f:
             magic = f.read(4)
 
@@ -60,7 +60,7 @@ def guess_library_name(filename, out=sys.stdout):
 
 
     # Fall back to name-based library name guessing
-    match = re.match ('^((.*)/)*([^/]+)\.so(\.\d+)*$', filename)
+    match = re.match (r'^((.*)/)*([^/]+)\.so(\.\d+)*$', filename)
     if match:
         return match.group(3)
     else:
@@ -162,7 +162,7 @@ class SharedLibrary(object):
         self.version_number = None
 
         for f in self.files:
-            match = re.match('^.*\.so\.(\d+(\.\d+)*)$', f)
+            match = re.match(r'^.*\.so\.(\d+(\.\d+)*)$', f)
 
             if match:
                 v = VersionNumber(match.group(1))
