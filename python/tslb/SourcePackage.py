@@ -907,7 +907,7 @@ class SourcePackageVersion:
                     _id = lib.id
 
                     # Insert files
-                    s.execute(dbspkg.SourcePackageSharedLibraryFile.__table__.insert(
+                    s.execute(dbspkg.SourcePackageSharedLibraryFile.__table__.insert().values(
                         [
                             {
                                 'source_package_id': _id,
@@ -996,7 +996,7 @@ class SourcePackageVersion:
                             .where(t.c.version_number == self.version_number))
 
                     s.flush()
-                    s.execute(cp.__table__.insert(
+                    s.execute(cp.__table__.insert().values(
                         [
                             {
                                 'source_package': self.source_package.name,

@@ -181,7 +181,7 @@ class BinaryPackage(object):
 
                     s.flush()
 
-                    s.execute(t.insert(
+                    s.execute(t.insert().values(
                         [
                             {
                                 'binary_package': self.name,
