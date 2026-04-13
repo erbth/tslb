@@ -57,7 +57,7 @@ class PythonAnalyzer(BaseDependencyAnalyzer):
 
             st_buf = os.lstat(p)
             if stat.S_ISREG(st_buf.st_mode):
-                cls.analyze_file(p, arch, out)
+                return cls.analyze_file(p, arch, out)
 
             elif stat.S_ISDIR(st_buf.st_mode):
                 ret = set()

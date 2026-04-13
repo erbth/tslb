@@ -41,6 +41,9 @@ def find_required_modules_in_module_buffer(text: str) -> Set[str]:
             ms.add(m.group(1))
 
     for line in text.split('\n'):
+        # Remove trailing comments
+        line = re.fullmatch(r'(.*?)(#.*)?', line)[1]
+
         # import xxx [as yyy]
         m = re.match(
                 r'^\s*import\s+(([^\s,]+(\s+as\s+[^\s]+)?)(\s*,\s*([^\s]+)(\s+as\s+[^\s]+)?)*)\s*$',
@@ -50,7 +53,7 @@ def find_required_modules_in_module_buffer(text: str) -> Set[str]:
             pms = re.findall(r'[^,]+', m.group(1))
 
             for pm in pms:
-                m2 = re.match(r'\s*([^ ]+)', pm)
+                m2 = re.match(r'\s*(\S+)', pm)
 
                 if m2:
                     add_import_word(m2.group(1))
