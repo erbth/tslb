@@ -45,7 +45,7 @@ def fetch_versions_for_package(sp, out=sys.stdout):
         s.flush()
 
         if versions:
-            s.execute(t.insert([
+            s.execute(t.insert().values([
                 {
                     'name': sp.name,
                     'version_number': v,

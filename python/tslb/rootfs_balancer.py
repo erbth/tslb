@@ -44,7 +44,7 @@ class SimpleBalancer(Balancer):
                 node, e.g. 2 in the following example:
 
                                0 - 1
-                                \- 2 - 3
+                                |- 2 - 3
     """
     def __init__(self, fanout_max, h_max):
         self._fanout_max = fanout_max

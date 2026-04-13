@@ -6,12 +6,14 @@ declare -a tools_hosts
 
 tools_hosts=(
 #	"Releeshan"
-	"node04"
+#	"node04"
 #	"node03"
 #	"node06"
 #	"node07"
-	"node08"
+#	"node08"
 	"node09"
+#	"thost1"
+#	"thost2"
 )
 
 PYTHON_PACKAGE=../python

@@ -9,7 +9,7 @@ from tslb.SourcePackage import SourcePackage
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: %s <arch> <pkg1> [<pkg2> ...]")
+        print("Usage: %s <arch> <pkg1> [<pkg2> ...]" % sys.argv[0])
         exit(1)
 
     arch = sys.argv[1]

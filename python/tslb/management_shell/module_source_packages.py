@@ -1316,19 +1316,19 @@ class SourcePackageVersionBuildStateListAction(Action):
 
         with db.session_scope() as s:
             se = aliased(db.BuildPipeline.BuildPipelineStageEvent)
-            events = s.query(se)\
+            events = list(s.query(se)\
                 .filter(se.source_package == self.build_state_directory.pkg_name,
                         se.architecture == self.build_state_directory.arch,
                         se.version_number == self.build_state_directory.version)\
-                .order_by(se.time)
+                .order_by(se.time.desc()) \
+                .limit(120))
 
-
-        for event in events[-120:]:
-            print("[%s] %-10s %-30s (%s)" % (
-                event.time.strftime(locale.nl_langinfo(locale.D_T_FMT)),
-                db.BuildPipeline.BuildPipelineStageEvent.status_values.str_map[event.status],
-                event.stage,
-                event.snapshot_name))
+            for event in reversed(events):
+                print("[%s] %-10s %-30s (%s)" % (
+                    event.time.strftime(locale.nl_langinfo(locale.D_T_FMT)),
+                    db.BuildPipeline.BuildPipelineStageEvent.status_values.str_map[event.status],
+                    event.stage,
+                    event.snapshot_name))
 
 
 class SourcePackageVersionBuildStateShowEventDetailsAction(Action):
