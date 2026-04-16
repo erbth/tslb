@@ -8,13 +8,16 @@ import tslb.filesystem.FileOperations as fops
 MAN_DIRS = ['/usr/share/man', '/usr/local/share/man']
 MAN_SECTION_DIRS = ['man%d' % s for s in range(1, 9)]
 TEXINFO_DIRS = ['/usr/share/info', '/usr/local/share/info']
+SYSUSERS_DIRS = ['/usr/lib/sysusers.d']
 
 MAN_TRIGGER_ATTR = 'activated_triggers_mandb'
 MAN_CONFIGURE_SCRIPT_ATTR = 'maintainer_script_configure_mandb'
 TEXINFO_TRIGGER_ATTR = 'activated_triggers_texinfo'
+SYSUSERS_TRIGGER_ATTR = 'activated_triggers_sysusers'
 
 MAN_TRIGGER = 'update-mandb'
 TEXINFO_TRIGGER = 'update-texinfo'
+SYSUSERS_TRIGGER = 'update-sysusers'
 
 class StageDetectManInfo(object):
     name = 'detect_man_info'
@@ -68,6 +71,31 @@ class StageDetectManInfo(object):
             # Add db update trigger for man pages
             if not cls._handle_man_pages(bp, out):
                 return False
+
+
+            # Add triggers for sysusers.d files
+            # NOTE: This does not fit this stage's name, but it might be the
+            # correct stage for tasks like these: generalize and package
+            # postinstall procedures such that they can be run on the target
+            # system during installation (this may also mean that the systemd
+            # maintainer script generator may belong here more than to
+            # generate_maintainer_scripts)
+            have_sysusers = False
+
+            for sysusers_dir in SYSUSERS_DIRS:
+                full_path = fops.simplify_path_static(
+                        bp.scratch_space_base + '/destdir/' + sysusers_dir)
+
+                if os.path.isdir(full_path):
+                    for f in os.listdir(full_path):
+                        if f.endswith('.conf'):
+                            have_sysusers = True
+
+            if have_sysusers:
+                print("Adding sysusers update trigger for `%s'." % bp.name, file=out)
+                bp.set_attribute(SYSUSERS_TRIGGER_ATTR, [SYSUSERS_TRIGGER])
+            elif bp.has_attribute(SYSUSERS_TRIGGER_ATTR):
+                bp.unset_attribute(SYSUSERS_TRIGGER_ATTR)
 
         return True
 
