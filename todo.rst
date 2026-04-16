@@ -43,6 +43,11 @@ Low priority
 
   * microcode
 
+  * Technically, systemd service start depends on ldconfig, but the latter is a
+    trigger while the former is a maintainer script. That is a similar situation
+    to sysusers.d / systemd-sysusers being a maintainer script now. However the
+    systemd-unit situation does typically not cause issues.
+
 Ideas
 ---
 

@@ -13,11 +13,12 @@ SYSUSERS_DIRS = ['/usr/lib/sysusers.d']
 MAN_TRIGGER_ATTR = 'activated_triggers_mandb'
 MAN_CONFIGURE_SCRIPT_ATTR = 'maintainer_script_configure_mandb'
 TEXINFO_TRIGGER_ATTR = 'activated_triggers_texinfo'
-SYSUSERS_TRIGGER_ATTR = 'activated_triggers_sysusers'
+SYSUSERS_CONFIGURE_SCRIPT_ATTR = 'maintainer_script_configure_sysusers'
+#SYSUSERS_TRIGGER_ATTR = 'activated_triggers_sysusers'
 
 MAN_TRIGGER = 'update-mandb'
 TEXINFO_TRIGGER = 'update-texinfo'
-SYSUSERS_TRIGGER = 'update-sysusers'
+#SYSUSERS_TRIGGER = 'update-sysusers'
 
 class StageDetectManInfo(object):
     name = 'detect_man_info'
@@ -73,14 +74,17 @@ class StageDetectManInfo(object):
                 return False
 
 
-            # Add triggers for sysusers.d files
+            # Add maintainer scripts for sysusers.d files. These cannot be
+            # triggers, because they need to run before systemd units are
+            # activated, which is done from maintainer scripts.
+            #
             # NOTE: This does not fit this stage's name, but it might be the
             # correct stage for tasks like these: generalize and package
             # postinstall procedures such that they can be run on the target
             # system during installation (this may also mean that the systemd
             # maintainer script generator may belong here more than to
             # generate_maintainer_scripts)
-            have_sysusers = False
+            sysusers_files = []
 
             for sysusers_dir in SYSUSERS_DIRS:
                 full_path = fops.simplify_path_static(
@@ -89,13 +93,26 @@ class StageDetectManInfo(object):
                 if os.path.isdir(full_path):
                     for f in os.listdir(full_path):
                         if f.endswith('.conf'):
-                            have_sysusers = True
+                            sysusers_files.append(
+                                    fops.simplify_path_static(sysusers_dir + '/' + f))
 
-            if have_sysusers:
-                print("Adding sysusers update trigger for `%s'." % bp.name, file=out)
-                bp.set_attribute(SYSUSERS_TRIGGER_ATTR, [SYSUSERS_TRIGGER])
-            elif bp.has_attribute(SYSUSERS_TRIGGER_ATTR):
-                bp.unset_attribute(SYSUSERS_TRIGGER_ATTR)
+            if sysusers_files:
+                print("Adding sysusers update maintainer script for `%s'." % bp.name, file=out)
+
+                script = "#!/bin/bash -e\ntype: configure\nbefore: mgs_%s.service_c\n\n" % bp.name
+                script += "# Automatically added by tslb\n"
+
+                script += 'if [ -z "$1" ]\nthen\n'
+
+                for f in sysusers_files:
+                    script += '\tsystemd-sysusers "%s"\n' % f
+
+                script += 'fi\nexit 0\n'
+
+                bp.set_attribute(SYSUSERS_CONFIGURE_SCRIPT_ATTR, script)
+
+            elif bp.has_attribute(SYSUSERS_CONFIGURE_SCRIPT_ATTR):
+                bp.unset_attribute(SYSUSERS_CONFIGURE_SCRIPT_ATTR)
 
         return True
 
