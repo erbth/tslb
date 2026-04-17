@@ -72,10 +72,11 @@ class GitTagFetcher(BaseFetcher):
                 if m:
                     v_str = m[1]
 
-            # Used by expat
-            m = re.match(r'^R_([0-9]+(_[0-9]+)*)$', tag)
-            if m:
-                v_str = m[1].replace('_', '.')
+            # Used by expat and ipmitool
+            if not v_str:
+                m = re.match(r'^[A-Z]+_([0-9]+(_[0-9]+)*)$', tag)
+                if m:
+                    v_str = m[1].replace('_', '.')
 
             # Try to exclude timestamps
             if v_str and re.match(r'.*[0-9]{5,}.*', v_str):
