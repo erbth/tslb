@@ -115,7 +115,7 @@ class GitHubFetcher(BaseFetcher):
         annotated_tags.sort()
         annotated_tags.reverse()
 
-        # Find GitHub Releases for tags; only consider 5 newest releases
+        # Find GitHub Releases for tags; only consider 10 newest releases
         # releases is a list [(release tag name, version, release description)]
         releases = []
         repo_parts = re.fullmatch(r'https://github.com/([^/]+)/([^/]+)\.git', url)
@@ -133,8 +133,8 @@ class GitHubFetcher(BaseFetcher):
         if not isinstance(rel_descs, list):
             raise LoadError(url, "Failed to fetch GitHub releases")
 
-        # Make sure only 5 releases are considered
-        rel_descs = rel_descs[:5]
+        # Make sure only 10 releases are considered
+        rel_descs = rel_descs[:10]
 
         for v, v_str, tag in annotated_tags:
             if not rel_descs:
